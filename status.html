@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#FF6B35">
+  <meta name="theme-color" content="#F2F2F7">
   <title>注文状況 | QuickOrder</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
@@ -11,7 +11,7 @@
 <body class="status-page">
 
 <div class="status-header">
-  <h1>📋 注文状況</h1>
+  <h1>注文状況</h1>
   <p><span class="table-number">テーブル 1</span></p>
   <div class="order-id-badge" id="orderIdBadge">ORD-XXXXXX</div>
 </div>
@@ -20,15 +20,15 @@
 
   <div id="completeHero" class="status-card hidden">
     <div class="complete-hero">
-      <div class="complete-circle">🎉</div>
+      <div class="complete-circle">✓</div>
       <div class="complete-title">お料理が完成しました！</div>
-      <div class="complete-sub">スタッフがお席までお持ちします。しばらくお待ちください。</div>
+      <div class="complete-sub">スタッフがお席までお持ちします。<br>しばらくお待ちください。</div>
     </div>
   </div>
 
   <div class="eta-card">
     <div>
-      <div class="eta-label">⏱ 目安時間</div>
+      <div class="eta-label">目安時間</div>
       <div class="eta-time" id="etaTime">計算中...</div>
       <div class="eta-sub">混雑状況により変動します</div>
     </div>
@@ -36,35 +36,35 @@
   </div>
 
   <div class="status-card">
-    <div class="status-card-title">注文の進行状況</div>
+    <div class="status-card-title">進行状況</div>
     <div class="timeline" id="orderTimeline">
-      <div style="text-align:center;padding:24px;color:var(--text-muted);">読み込み中...</div>
+      <div style="text-align:center;padding:20px;color:var(--label-secondary);font-size:15px;">読み込み中...</div>
     </div>
   </div>
 
   <div class="status-card">
     <div class="status-card-title">ご注文内容</div>
     <div id="orderSummaryItems"></div>
-    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:14px;font-weight:700;">合計</span>
-      <span style="font-size:18px;font-weight:900;color:var(--primary);" id="orderTotalDisplay">¥0</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;margin-top:4px;border-top:0.5px solid var(--separator);">
+      <span style="font-size:15px;font-weight:600;">合計</span>
+      <span style="font-size:17px;font-weight:700;" id="orderTotalDisplay">¥0</span>
     </div>
   </div>
 
-  <div class="status-card" style="background:linear-gradient(135deg,#F0FFF4,#C6F6D5);border:none;">
-    <div style="font-size:13px;font-weight:700;color:#276749;margin-bottom:8px;">ℹ️ ご案内</div>
-    <ul style="list-style:none;padding:0;font-size:13px;color:#276749;line-height:2;">
-      <li>✓ 追加注文はいつでも可能です</li>
-      <li>✓ お会計はスタッフにお声がけください</li>
-      <li>✓ アレルギーに関するご相談はスタッフまで</li>
+  <div class="status-card" style="background:rgba(52,199,89,0.08);">
+    <div style="font-size:12px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">ご案内</div>
+    <ul style="list-style:none;padding:0;font-size:15px;color:var(--label-secondary);line-height:2.2;">
+      <li>追加注文はいつでも可能です</li>
+      <li>お会計はスタッフにお声がけください</li>
+      <li>アレルギーのご相談はスタッフまで</li>
     </ul>
   </div>
 
 </div>
 
 <div class="status-action-bar">
-  <a href="index.html" id="addMoreLink" class="status-btn secondary">＋ 追加注文</a>
-  <a href="index.html" class="status-btn primary">🏠 トップへ</a>
+  <a href="index.html" id="addMoreLink" class="status-btn secondary">追加注文</a>
+  <a href="index.html" class="status-btn primary">トップへ</a>
 </div>
 
 <script type="module" src="js/status.js"></script>

@@ -59,7 +59,7 @@ const CartPage = {
       return;
     }
 
-    container.innerHTML = this.cart.map(entry => {
+    container.innerHTML = '<div class="cart-items-group">' + this.cart.map(entry => {
       const customLines = [];
       const item = MENU_DATA.items.find(i => i.id === entry.itemId);
       if (item) {
@@ -87,7 +87,7 @@ const CartPage = {
             </div>
           </div>
         </div>`;
-    }).join('');
+    }).join('') + '</div>';
 
     container.querySelectorAll('.cart-qty-btn').forEach(btn => {
       btn.addEventListener('click', () => this.updateQty(parseInt(btn.dataset.id), btn.dataset.action));

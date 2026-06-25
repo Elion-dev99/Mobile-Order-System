@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#FF6B35">
+  <meta name="theme-color" content="#F2F2F7">
   <title>モバイルオーダー</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
@@ -11,21 +11,18 @@
 <body>
 
 <header class="header">
-  <div class="header-top">
-    <div class="header-brand">
-      <div class="brand-logo">🍽️</div>
-      <div class="brand-info">
-        <h1>QuickOrder</h1>
-        <div class="table-badge"><span class="table-number">テーブル 1</span></div>
-      </div>
+  <div class="nav-bar">
+    <div class="nav-title-area">
+      <div class="nav-large-title">QuickOrder</div>
+      <div class="nav-subtitle"><span class="table-number">テーブル 1</span></div>
     </div>
-    <div class="header-actions">
-      <a href="admin.html" style="font-size:13px;color:var(--text-muted);padding:6px 10px;background:var(--bg);border-radius:var(--radius-full);font-weight:600;">🧑‍🍳 厨房</a>
-    </div>
+    <a href="admin.html" class="nav-action">🧑‍🍳 厨房</a>
   </div>
-  <div class="search-wrap">
-    <span class="search-icon">🔍</span>
-    <input type="search" class="search-input" id="searchInput" placeholder="メニューを検索...">
+  <div class="search-bar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="search" class="search-input" id="searchInput" placeholder="メニューを検索...">
+    </div>
   </div>
 </header>
 
@@ -62,7 +59,7 @@
 <div class="cart-bar" id="cartBar">
   <button class="cart-bar-btn" id="cartBarBtn">
     <div class="cart-bar-left">
-      <span>🛒 カートを見る</span>
+      <span>カートを見る</span>
       <span class="cart-count-pill">0点</span>
     </div>
     <span class="cart-bar-total">¥0</span>
