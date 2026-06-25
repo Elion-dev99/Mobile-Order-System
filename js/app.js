@@ -1,4 +1,15 @@
-/* ===== APP STATE ===== */
+import { MENU_DATA } from './data.js';
+
+export function showToast(msg) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
 const App = {
   cart: [],
   selectedCategory: 'all',
@@ -8,37 +19,28 @@ const App = {
   modalQty: 1,
   modalCustomizations: {},
   modalToggles: {},
-  modalNote: '',
   tableNumber: null,
 
   init() {
     this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
-    document.querySelectorAll('.table-badge').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
-
     this.loadCart();
     this.renderMenu();
     this.bindEvents();
     this.updateCartBar();
-
-    setTimeout(() => {
-      document.querySelector('.menu-main')?.classList.add('fade-in');
-    }, 50);
   },
 
-  /* ===== CART PERSISTENCE ===== */
   loadCart() {
     try {
       const saved = localStorage.getItem('mos_cart');
       if (saved) this.cart = JSON.parse(saved);
-    } catch(e) { this.cart = []; }
+    } catch (e) { this.cart = []; }
   },
 
   saveCart() {
     localStorage.setItem('mos_cart', JSON.stringify(this.cart));
   },
 
-  /* ===== RENDER MENU ===== */
   renderMenu() {
     const container = document.getElementById('menuList');
     if (!container) return;
@@ -71,7 +73,7 @@ const App = {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const item = MENU_DATA.items.find(i => i.id === btn.closest('.menu-card').dataset.id);
-        if (item && item.customizable.length === 0 && item.allergens.length === 0) {
+        if (item && item.customizable.length === 0) {
           this.addToCartDirect(item);
           btn.classList.add('bounce-add');
           setTimeout(() => btn.classList.remove('bounce-add'), 300);
@@ -108,38 +110,23 @@ const App = {
   },
 
   addToCartDirect(item) {
-    const entry = {
-      id: Date.now(),
-      itemId: item.id,
-      name: item.name,
-      emoji: item.emoji,
-      price: item.price,
-      qty: 1,
-      customizations: {},
-      toggles: {},
-      note: '',
-    };
-    this.cart.push(entry);
+    this.cart.push({ id: Date.now(), itemId: item.id, name: item.name, emoji: item.emoji, price: item.price, qty: 1, customizations: {}, toggles: {}, note: '' });
     this.saveCart();
     this.updateCartBar();
     showToast(`🛒 ${item.name} を追加しました`);
   },
 
-  /* ===== MODAL ===== */
   openModal(itemId) {
     const item = MENU_DATA.items.find(i => i.id === itemId);
     if (!item) return;
     this.modalItem = item;
     this.modalQty = 1;
-    this.modalNote = '';
     this.modalCustomizations = {};
     this.modalToggles = {};
-
     item.customizable.forEach(opt => {
       if (opt.type === 'select') this.modalCustomizations[opt.id] = opt.default;
       if (opt.type === 'toggle') this.modalToggles[opt.id] = false;
     });
-
     this.renderModal(item);
     document.getElementById('itemModal').classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -173,16 +160,13 @@ const App = {
               <div class="toggle-label">${opt.label}</div>
               ${opt.price ? `<div class="toggle-price">+¥${opt.price}</div>` : ''}
             </div>
-            <div class="toggle-switch" data-toggle="${opt.id}">
-              <div class="toggle-knob"></div>
-            </div>
+            <div class="toggle-switch" data-toggle="${opt.id}"><div class="toggle-knob"></div></div>
           </div>`;
       }
       return '';
     }).join('');
 
-    const modal = document.getElementById('itemModal');
-    modal.querySelector('.modal-sheet').innerHTML = `
+    document.getElementById('itemModal').querySelector('.modal-sheet').innerHTML = `
       <div class="modal-handle"></div>
       <div class="modal-header">
         <span class="modal-item-emoji">${item.emoji}</span>
@@ -206,24 +190,20 @@ const App = {
         🛒 カートに追加 <span id="modalAddPrice">¥${item.price.toLocaleString()}</span>
       </button>
     `;
-
     this.bindModalEvents(item);
   },
 
   bindModalEvents(item) {
     const modal = document.getElementById('itemModal');
-
     modal.querySelectorAll('.option-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const optId = chip.dataset.opt;
-        const val = chip.dataset.val;
-        this.modalCustomizations[optId] = val;
+        this.modalCustomizations[optId] = chip.dataset.val;
         modal.querySelectorAll(`.option-chip[data-opt="${optId}"]`).forEach(c => c.classList.remove('selected'));
         chip.classList.add('selected');
         this.updateModalPrice(item);
       });
     });
-
     modal.querySelectorAll('.toggle-switch').forEach(sw => {
       sw.addEventListener('click', () => {
         const toggleId = sw.dataset.toggle;
@@ -232,28 +212,18 @@ const App = {
         this.updateModalPrice(item);
       });
     });
-
     document.getElementById('qtyMinus').addEventListener('click', () => {
-      if (this.modalQty > 1) {
-        this.modalQty--;
-        document.getElementById('qtyNum').textContent = this.modalQty;
-        this.updateModalPrice(item);
-      }
+      if (this.modalQty > 1) { this.modalQty--; document.getElementById('qtyNum').textContent = this.modalQty; this.updateModalPrice(item); }
     });
-
     document.getElementById('qtyPlus').addEventListener('click', () => {
-      this.modalQty++;
-      document.getElementById('qtyNum').textContent = this.modalQty;
-      this.updateModalPrice(item);
+      this.modalQty++; document.getElementById('qtyNum').textContent = this.modalQty; this.updateModalPrice(item);
     });
-
     document.getElementById('modalAddBtn').addEventListener('click', () => {
-      this.addToCart(item);
-      this.closeModal();
+      this.addToCart(item); this.closeModal();
     });
   },
 
-  updateModalPrice(item) {
+  calcUnitPrice(item) {
     let total = item.price;
     item.customizable.forEach(opt => {
       if (opt.type === 'select') {
@@ -264,44 +234,24 @@ const App = {
         if (val.includes('+80円')) total += 80;
         if (val.includes('+50円')) total += 50;
       }
-      if (opt.type === 'toggle' && this.modalToggles[opt.id]) {
-        total += opt.price || 0;
-      }
+      if (opt.type === 'toggle' && this.modalToggles[opt.id]) total += opt.price || 0;
     });
-    total *= this.modalQty;
-    document.getElementById('modalPrice').textContent = `¥${(total / this.modalQty).toLocaleString()}`;
-    document.getElementById('modalAddPrice').textContent = `¥${total.toLocaleString()}`;
+    return total;
+  },
+
+  updateModalPrice(item) {
+    const unit = this.calcUnitPrice(item);
+    document.getElementById('modalPrice').textContent = `¥${unit.toLocaleString()}`;
+    document.getElementById('modalAddPrice').textContent = `¥${(unit * this.modalQty).toLocaleString()}`;
   },
 
   addToCart(item) {
-    let unitPrice = item.price;
-    item.customizable.forEach(opt => {
-      if (opt.type === 'select') {
-        const val = this.modalCustomizations[opt.id] || '';
-        if (val.includes('+100円')) unitPrice += 100;
-        if (val.includes('+200円')) unitPrice += 200;
-        if (val.includes('+280円')) unitPrice += 280;
-        if (val.includes('+80円')) unitPrice += 80;
-        if (val.includes('+50円')) unitPrice += 50;
-      }
-      if (opt.type === 'toggle' && this.modalToggles[opt.id]) {
-        unitPrice += opt.price || 0;
-      }
+    const note = document.getElementById('itemNote')?.value || '';
+    this.cart.push({
+      id: Date.now(), itemId: item.id, name: item.name, emoji: item.emoji,
+      price: this.calcUnitPrice(item), qty: this.modalQty,
+      customizations: { ...this.modalCustomizations }, toggles: { ...this.modalToggles }, note,
     });
-
-    const noteVal = document.getElementById('itemNote')?.value || '';
-    const entry = {
-      id: Date.now(),
-      itemId: item.id,
-      name: item.name,
-      emoji: item.emoji,
-      price: unitPrice,
-      qty: this.modalQty,
-      customizations: { ...this.modalCustomizations },
-      toggles: { ...this.modalToggles },
-      note: noteVal,
-    };
-    this.cart.push(entry);
     this.saveCart();
     this.updateCartBar();
     showToast(`🛒 ${item.name} をカートに追加しました`);
@@ -313,22 +263,17 @@ const App = {
     this.modalItem = null;
   },
 
-  /* ===== CART BAR ===== */
   updateCartBar() {
     const bar = document.getElementById('cartBar');
     if (!bar) return;
     const total = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
     const count = this.cart.reduce((s, e) => s + e.qty, 0);
-    if (count === 0) {
-      bar.classList.remove('visible');
-    } else {
-      bar.classList.add('visible');
-      bar.querySelector('.cart-count-pill').textContent = `${count}点`;
-      bar.querySelector('.cart-bar-total').textContent = `¥${total.toLocaleString()}`;
-    }
+    if (count === 0) { bar.classList.remove('visible'); return; }
+    bar.classList.add('visible');
+    bar.querySelector('.cart-count-pill').textContent = `${count}点`;
+    bar.querySelector('.cart-bar-total').textContent = `¥${total.toLocaleString()}`;
   },
 
-  /* ===== EVENT BINDINGS ===== */
   bindEvents() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -338,7 +283,6 @@ const App = {
         this.renderMenu();
       });
     });
-
     document.querySelectorAll('.allergen-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const id = chip.dataset.allergen;
@@ -352,7 +296,6 @@ const App = {
         this.renderMenu();
       });
     });
-
     const toggleBtn = document.getElementById('allergenToggleBtn');
     const allergenFilters = document.getElementById('allergenFilters');
     if (toggleBtn && allergenFilters) {
@@ -361,38 +304,21 @@ const App = {
         toggleBtn.classList.toggle('active');
       });
     }
-
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
-      let debounceTimer;
+      let timer;
       searchInput.addEventListener('input', () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          this.searchQuery = searchInput.value.trim();
-          this.renderMenu();
-        }, 200);
+        clearTimeout(timer);
+        timer = setTimeout(() => { this.searchQuery = searchInput.value.trim(); this.renderMenu(); }, 200);
       });
     }
-
     document.getElementById('itemModal')?.addEventListener('click', e => {
       if (e.target === document.getElementById('itemModal')) this.closeModal();
     });
-
     document.getElementById('cartBarBtn')?.addEventListener('click', () => {
       location.href = `cart.html?table=${this.tableNumber}`;
     });
   },
 };
-
-/* ===== TOAST ===== */
-function showToast(msg) {
-  const container = document.getElementById('toastContainer');
-  if (!container) return;
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = msg;
-  container.appendChild(el);
-  setTimeout(() => el.remove(), 2600);
-}
 
 document.addEventListener('DOMContentLoaded', () => App.init());

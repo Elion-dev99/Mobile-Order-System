@@ -1,4 +1,4 @@
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "python-3.11"]
 [agent]
 expertMode = true
 stack = "BEST_EFFORT_FALLBACK"
@@ -22,18 +22,19 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "node server.js"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 -m http.server 5000"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "static"
 run = ["node", "server.js"]
+publicDir = "."
