@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#2D3748">
+  <meta name="theme-color" content="#1C1C1E">
   <title>厨房モニター | QuickOrder</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
@@ -12,28 +12,28 @@
 
 <div class="admin-header">
   <div>
-    <h1>🧑‍🍳 厨房モニター</h1>
-    <div style="font-size:12px;color:#718096;margin-top:2px;" id="adminClock"></div>
+    <h1>厨房モニター</h1>
+    <div style="font-size:12px;color:#8E8E93;margin-top:2px;" id="adminClock"></div>
   </div>
   <div class="admin-badge" id="pendingCount">0件</div>
 </div>
 
 <div class="admin-tabs">
-  <button class="admin-tab active" onclick="AdminPage.setFilter('received',this)">📥 受付済み</button>
-  <button class="admin-tab" onclick="AdminPage.setFilter('cooking',this)">👨‍🍳 調理中</button>
-  <button class="admin-tab" onclick="AdminPage.setFilter('done',this)">✅ 完了</button>
-  <button class="admin-tab" onclick="AdminPage.setFilter('all',this)">📋 すべて</button>
+  <button class="admin-tab active" onclick="AdminPage.setFilter('received',this)">受付済み</button>
+  <button class="admin-tab" onclick="AdminPage.setFilter('cooking',this)">調理中</button>
+  <button class="admin-tab" onclick="AdminPage.setFilter('done',this)">完了</button>
+  <button class="admin-tab" onclick="AdminPage.setFilter('all',this)">すべて</button>
 </div>
 
 <div class="admin-content" id="adminContent">
-  <div style="text-align:center;padding:60px 20px;color:#718096;">
-    <div style="font-size:32px;margin-bottom:12px;">⏳</div>
-    <div>Firestoreに接続中...</div>
+  <div style="text-align:center;padding:60px 20px;color:#8E8E93;">
+    <div style="font-size:36px;margin-bottom:12px;">⏳</div>
+    <div style="font-size:15px;">Firestoreに接続中...</div>
   </div>
 </div>
 
 <div style="padding:20px;text-align:center;">
-  <button onclick="AdminPage.clearAll()" style="color:#FC8181;font-size:12px;font-weight:600;text-decoration:underline;background:none;border:none;cursor:pointer;">注文履歴をリセット</button>
+  <button onclick="AdminPage.clearAll()" style="color:#FF453A;font-size:14px;font-weight:500;background:none;border:none;cursor:pointer;">注文履歴をリセット</button>
 </div>
 
 <script type="module" src="js/admin.js"></script>
