@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FF6B35">
+  <title>モバイルオーダー</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-top">
+    <div class="header-brand">
+      <div class="brand-logo">🍽️</div>
+      <div class="brand-info">
+        <h1>QuickOrder</h1>
+        <div class="table-badge"><span class="table-number">テーブル 1</span></div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a href="admin.html" style="font-size:13px;color:var(--text-muted);padding:6px 10px;background:var(--bg);border-radius:var(--radius-full);font-weight:600;">🧑‍🍳 厨房</a>
+    </div>
+  </div>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="search" class="search-input" id="searchInput" placeholder="メニューを検索...">
+  </div>
+</header>
+
+<!-- ALLERGEN FILTER -->
+<div class="allergen-section">
+  <button class="allergen-toggle-btn" id="allergenToggleBtn">
+    <span class="left">⚠️ アレルギーフィルター</span>
+    <span class="arrow">▼</span>
+  </button>
+  <div class="allergen-filters" id="allergenFilters">
+    <button class="allergen-chip" data-allergen="gluten">🌾 小麦</button>
+    <button class="allergen-chip" data-allergen="egg">🥚 卵</button>
+    <button class="allergen-chip" data-allergen="dairy">🥛 乳製品</button>
+    <button class="allergen-chip" data-allergen="shrimp">🦐 えび</button>
+    <button class="allergen-chip" data-allergen="peanut">🥜 ピーナッツ</button>
+    <button class="allergen-chip" data-allergen="soy">🫘 大豆</button>
+  </div>
+</div>
+
+<!-- CATEGORY TABS -->
+<nav class="category-tabs">
+  <div class="tabs-inner">
+    <button class="tab-btn active" data-cat="all">🍽️ すべて</button>
+    <button class="tab-btn" data-cat="rice">🍚 ご飯もの</button>
+    <button class="tab-btn" data-cat="noodle">🍜 めん類</button>
+    <button class="tab-btn" data-cat="side">🥗 サイド</button>
+    <button class="tab-btn" data-cat="drink">🥤 ドリンク</button>
+    <button class="tab-btn" data-cat="dessert">🍮 デザート</button>
+  </div>
+</nav>
+
+<!-- MENU -->
+<main class="menu-main">
+  <div class="menu-list" id="menuList">
+    <!-- Rendered by JS -->
+  </div>
+</main>
+
+<!-- CART BAR -->
+<div class="cart-bar" id="cartBar">
+  <button class="cart-bar-btn" id="cartBarBtn">
+    <div class="cart-bar-left">
+      <span>🛒 カートを見る</span>
+      <span class="cart-count-pill">0点</span>
+    </div>
+    <span class="cart-bar-total">¥0</span>
+  </button>
+</div>
+
+<!-- ITEM MODAL -->
+<div class="modal-overlay" id="itemModal">
+  <div class="modal-sheet">
+    <!-- Rendered by JS -->
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

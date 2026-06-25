@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FF6B35">
+  <title>注文状況 | QuickOrder</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="status-page">
+
+<!-- STATUS HEADER -->
+<div class="status-header">
+  <h1>📋 注文状況</h1>
+  <p><span class="table-number">テーブル 1</span></p>
+  <div class="order-id-badge" id="orderIdBadge">ORD-XXXXXX</div>
+</div>
+
+<div class="status-content">
+
+  <!-- COMPLETE HERO (hidden until done) -->
+  <div id="completeHero" class="status-card hidden">
+    <div class="complete-hero">
+      <div class="complete-circle">🎉</div>
+      <div class="complete-title">お料理が完成しました！</div>
+      <div class="complete-sub">スタッフがお席までお持ちします。しばらくお待ちください。</div>
+    </div>
+  </div>
+
+  <!-- ETA CARD -->
+  <div class="eta-card">
+    <div>
+      <div class="eta-label">⏱ 目安時間</div>
+      <div class="eta-time" id="etaTime">計算中...</div>
+      <div class="eta-sub">混雑状況により変動します</div>
+    </div>
+    <div class="eta-icon">🍳</div>
+  </div>
+
+  <!-- PROGRESS TIMELINE -->
+  <div class="status-card">
+    <div class="status-card-title">注文の進行状況</div>
+    <div class="timeline" id="orderTimeline">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+
+  <!-- ORDER SUMMARY -->
+  <div class="status-card">
+    <div class="status-card-title">ご注文内容</div>
+    <div id="orderSummaryItems">
+      <!-- Rendered by JS -->
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:14px;font-weight:700;">合計</span>
+      <span style="font-size:18px;font-weight:900;color:var(--primary);" id="orderTotalDisplay">¥0</span>
+    </div>
+  </div>
+
+  <!-- INFO CARD -->
+  <div class="status-card" style="background:linear-gradient(135deg,#F0FFF4,#C6F6D5);border:none;">
+    <div style="font-size:13px;font-weight:700;color:#276749;margin-bottom:8px;">ℹ️ ご案内</div>
+    <ul style="list-style:none;padding:0;font-size:13px;color:#276749;line-height:2;">
+      <li>✓ 追加注文はいつでも可能です</li>
+      <li>✓ お会計はスタッフにお声がけください</li>
+      <li>✓ アレルギーに関するご相談はスタッフまで</li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- ACTION BAR -->
+<div class="status-action-bar">
+  <a href="index.html?table=1" id="addMoreLink" class="status-btn secondary">＋ 追加注文</a>
+  <button class="status-btn primary" onclick="location.href='index.html?table=1'">🏠 トップへ</button>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/status.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const table = new URLSearchParams(location.search).get('table') || '1';
+    document.querySelectorAll('#addMoreLink').forEach(el => el.href = `index.html?table=${table}`);
+    document.querySelectorAll('.status-btn.primary').forEach(btn => btn.onclick = () => location.href = `index.html?table=${table}`);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#2D3748">
+  <title>厨房モニター | QuickOrder</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="admin-page">
+
+<div class="admin-header">
+  <div>
+    <h1>🧑‍🍳 厨房モニター</h1>
+    <div style="font-size:12px;color:#718096;margin-top:2px;" id="adminClock"></div>
+  </div>
+  <div class="admin-badge" id="pendingCount">0件</div>
+</div>
+
+<div class="admin-tabs">
+  <button class="admin-tab active" data-filter="received" onclick="AdminPage.setFilter('received',this)">📥 受付済み</button>
+  <button class="admin-tab" data-filter="cooking" onclick="AdminPage.setFilter('cooking',this)">👨‍🍳 調理中</button>
+  <button class="admin-tab" data-filter="done" onclick="AdminPage.setFilter('done',this)">✅ 完了</button>
+  <button class="admin-tab" data-filter="all" onclick="AdminPage.setFilter('all',this)">📋 すべて</button>
+</div>
+
+<div class="admin-content" id="adminContent">
+  <!-- Rendered by JS -->
+</div>
+
+<div style="padding:20px;text-align:center;color:#4A5568;font-size:13px;">
+  <button onclick="AdminPage.clearAll()" style="color:#FC8181;font-size:12px;font-weight:600;text-decoration:underline;background:none;border:none;cursor:pointer;">注文履歴をリセット</button>
+</div>
+
+<script src="js/data.js"></script>
+<script>
+const AdminPage = {
+  filter: 'received',
+  orders: [],
+
+  init() {
+    this.loadOrders();
+    this.render();
+    this.updateClock();
+    setInterval(() => { this.updateClock(); this.loadOrders(); this.render(); }, 5000);
+  },
+
+  updateClock() {
+    const now = new Date();
+    const el = document.getElementById('adminClock');
+    if (el) el.textContent = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  },
+
+  loadOrders() {
+    try {
+      this.orders = JSON.parse(localStorage.getItem('mos_all_orders') || '[]');
+    } catch(e) { this.orders = []; }
+  },
+
+  saveOrders() {
+    localStorage.setItem('mos_all_orders', JSON.stringify(this.orders));
+  },
+
+  setFilter(filter, btn) {
+    this.filter = filter;
+    document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    this.render();
+  },
+
+  render() {
+    const filtered = this.orders.filter(o => {
+      if (this.filter === 'all') return true;
+      return (o.status || 'received') === this.filter;
+    });
+
+    const pending = this.orders.filter(o => (o.status || 'received') !== 'done').length;
+    document.getElementById('pendingCount').textContent = `${pending}件`;
+
+    const container = document.getElementById('adminContent');
+    if (!container) return;
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:60px 20px;color:#718096;">
+          <div style="font-size:48px;margin-bottom:12px;">📭</div>
+          <div style="font-size:16px;font-weight:700;color:#A0AEC0;">注文はありません</div>
+        </div>`;
+      return;
+    }
+
+    const sorted = [...filtered].reverse();
+    container.innerHTML = sorted.map(order => {
+      const status = order.status || 'received';
+      const cardClass = status === 'cooking' ? 'cooking' : status === 'done' ? 'done' : '';
+      const statusLabel = status === 'received' ? '📥 受付済み' : status === 'cooking' ? '🔥 調理中' : '✅ 完了';
+      const elapsed = Math.floor((Date.now() - order.timestamp) / 60000);
+
+      const actionBtns = status === 'received' ? `
+        <button class="admin-action-btn start" onclick="AdminPage.updateStatus('${order.id}','cooking')">🔥 調理開始</button>
+        <button class="admin-action-btn complete" onclick="AdminPage.updateStatus('${order.id}','done')">✅ 完了</button>
+      ` : status === 'cooking' ? `
+        <button class="admin-action-btn complete" style="flex:1;" onclick="AdminPage.updateStatus('${order.id}','done')">✅ 完了にする</button>
+      ` : `
+        <div style="font-size:13px;color:#4A5568;text-align:center;padding:8px;">配膳完了</div>
+      `;
+
+      return `
+        <div class="admin-order-card ${cardClass}">
+          <div class="admin-order-top">
+            <div>
+              <div class="admin-order-id">${order.id}</div>
+              <div class="admin-order-time">${elapsed === 0 ? 'たった今' : elapsed + '分前'} — ${statusLabel}</div>
+            </div>
+            <div class="admin-table-badge">テーブル ${order.tableNumber}</div>
+          </div>
+          <div class="admin-items">
+            ${order.items.map(item => {
+              const customParts = [];
+              const menuItem = MENU_DATA.items.find(i => i.id === item.itemId);
+              if (menuItem) {
+                menuItem.customizable.forEach(opt => {
+                  if (opt.type === 'select' && item.customizations[opt.id]) customParts.push(item.customizations[opt.id]);
+                  if (opt.type === 'toggle' && item.toggles[opt.id]) customParts.push(opt.label + 'あり');
+                });
+              }
+              return `
+                <div class="admin-item-row">
+                  <span>${item.emoji}</span>
+                  <span class="admin-item-qty">×${item.qty}</span>
+                  <span>${item.name}</span>
+                  ${customParts.length ? `<span class="admin-item-custom">(${customParts.join('/')})</span>` : ''}
+                  ${item.note ? `<span class="admin-item-custom">📝${item.note}</span>` : ''}
+                </div>`;
+            }).join('')}
+          </div>
+          <div style="font-size:13px;font-weight:700;color:#A0AEC0;margin-bottom:10px;">
+            合計: ¥${order.total.toLocaleString()}
+          </div>
+          <div class="admin-action-row">${actionBtns}</div>
+        </div>`;
+    }).join('');
+  },
+
+  updateStatus(orderId, status) {
+    const idx = this.orders.findIndex(o => o.id === orderId);
+    if (idx !== -1) {
+      this.orders[idx].status = status;
+      this.saveOrders();
+      this.render();
+    }
+  },
+
+  clearAll() {
+    if (confirm('すべての注文履歴をリセットしますか？')) {
+      localStorage.removeItem('mos_all_orders');
+      this.orders = [];
+      this.render();
+    }
+  },
+};
+
+document.addEventListener('DOMContentLoaded', () => AdminPage.init());
+</script>
+</body>
+</html>

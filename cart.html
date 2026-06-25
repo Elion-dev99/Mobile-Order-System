@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#FF6B35">
+  <title>カート | QuickOrder</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="page-header">
+  <button class="back-btn" id="backBtn">←</button>
+  <div class="page-title">🛒 カート</div>
+  <div style="width:36px;"></div>
+</header>
+
+<main class="cart-content">
+
+  <!-- CART ITEMS -->
+  <div class="cart-section-title">注文内容</div>
+  <div id="cartItems">
+    <!-- Rendered by JS -->
+  </div>
+
+  <!-- REORDER SECTION -->
+  <div id="reorderSection" class="hidden">
+    <div class="cart-section-title">🔄 前回の注文から再注文</div>
+    <div id="reorderList"></div>
+  </div>
+
+  <!-- ORDER SUMMARY -->
+  <div class="cart-section-title">お会計</div>
+  <div class="order-summary">
+    <div class="summary-row">
+      <span>小計</span>
+      <span id="subtotalAmount">¥0</span>
+    </div>
+    <div class="summary-row">
+      <span>消費税（10%）</span>
+      <span id="taxAmount">¥0</span>
+    </div>
+    <div class="summary-row total">
+      <span>合計</span>
+      <span class="amount" id="totalAmount">¥0</span>
+    </div>
+  </div>
+
+  <!-- SPLIT BILL -->
+  <div class="cart-section-title" style="margin-top:20px;">割り勘計算</div>
+  <div class="split-section">
+    <div class="split-title">👥 人数で割り勘</div>
+    <div class="split-controls">
+      <button class="split-btn" id="splitMinus">−</button>
+      <div class="split-num" id="splitNum">1</div>
+      <button class="split-btn" id="splitPlus">＋</button>
+      <div class="split-result">人</div>
+    </div>
+    <div id="splitResult" class="hidden">
+      <div class="split-result">
+        <span class="split-amount" id="splitAmount"></span>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:12px;"></div>
+</main>
+
+<!-- PLACE ORDER BAR -->
+<div class="place-order-bar">
+  <button class="place-order-btn" id="placeOrderBtn" disabled>
+    ✅ 注文を確定する
+  </button>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="js/data.js"></script>
+<script src="js/cart.js"></script>
+</body>
+</html>
