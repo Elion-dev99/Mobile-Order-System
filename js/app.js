@@ -1,4 +1,5 @@
 import { MENU_DATA } from './data.js';
+import { TablePin } from './pin.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -24,10 +25,71 @@ const App = {
   init() {
     this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
+    this.renderPinControl();
+    if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.renderMenu();
     this.bindEvents();
     this.updateCartBar();
+  },
+
+  renderPinControl() {
+    const area = document.getElementById('pinControlArea');
+    if (!area) return;
+    const protectedState = TablePin.isProtected(this.tableNumber);
+    area.innerHTML = `
+      <button class="nav-action pin-action" id="pinSetupBtn">
+        ${protectedState ? '🔒 PIN設定' : '🔓 PIN設定'}
+      </button>`;
+    document.getElementById('pinSetupBtn')?.addEventListener('click', () => this.promptPinSettings());
+  },
+
+  ensurePinAccess() {
+    if (!TablePin.isProtected(this.tableNumber) || TablePin.isAuthenticated(this.tableNumber)) return true;
+    while (true) {
+      const pin = prompt(`テーブル${this.tableNumber}の暗証番号を入力してください`);
+      if (pin === null) {
+        const list = document.getElementById('menuList');
+        if (list) list.innerHTML = '<div class="locked-state">このテーブルは暗証番号で保護されています。PINを入力するとメニューを表示できます。</div>';
+        return false;
+      }
+      if (TablePin.validatePin(this.tableNumber, pin)) {
+        TablePin.setAuthenticated(this.tableNumber);
+        return true;
+      }
+      alert('暗証番号が違います。もう一度入力してください。');
+    }
+  },
+
+  promptPinSettings() {
+    const protectedState = TablePin.isProtected(this.tableNumber);
+    if (protectedState) {
+      const currentPin = prompt(`テーブル${this.tableNumber}の現在の暗証番号を入力してください。`);
+      if (currentPin === null) return;
+      if (!TablePin.validatePin(this.tableNumber, currentPin)) {
+        alert('暗証番号が違います');
+        return;
+      }
+    }
+    const newPin = prompt(`テーブル${this.tableNumber}の暗証番号を${protectedState ? '変更 / 解除' : '設定'}してください。\n空のままOKを押すと解除されます。`);
+    if (newPin === null) return;
+    if (newPin.trim() === '') {
+      TablePin.clearPin(this.tableNumber);
+      TablePin.clearAuthenticated(this.tableNumber);
+      alert(`テーブル${this.tableNumber}のPINを解除しました`);
+      this.renderPinControl();
+      return;
+    }
+    const confirmPin = prompt('暗証番号をもう一度入力してください。');
+    if (confirmPin === null) return;
+    if (newPin !== confirmPin) {
+      alert('暗証番号が一致しません');
+      return;
+    }
+    TablePin.setPin(this.tableNumber, newPin);
+    TablePin.clearAuthenticated(this.tableNumber);
+    alert(`テーブル${this.tableNumber}のPINを設定しました`);
+    this.renderPinControl();
   },
 
   loadCart() {

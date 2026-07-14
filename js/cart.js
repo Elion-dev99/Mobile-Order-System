@@ -1,4 +1,5 @@
 import { MENU_DATA } from './data.js';
+import { TablePin } from './pin.js';
 import { db } from './firebase.js';
 import {
   collection, doc, setDoc, getDocs, query, where, orderBy, limit
@@ -22,10 +23,28 @@ const CartPage = {
   init() {
     this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
+    if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.render();
     this.bindEvents();
     this.loadReorderHistory();
+  },
+
+  ensurePinAccess() {
+    if (!TablePin.isProtected(this.tableNumber) || TablePin.isAuthenticated(this.tableNumber)) return true;
+    while (true) {
+      const pin = prompt(`テーブル${this.tableNumber}の暗証番号を入力してください`);
+      if (pin === null) {
+        this.cart = [];
+        this.render();
+        return false;
+      }
+      if (TablePin.validatePin(this.tableNumber, pin)) {
+        TablePin.setAuthenticated(this.tableNumber);
+        return true;
+      }
+      alert('暗証番号が違います。もう一度入力してください。');
+    }
   },
 
   loadCart() {

@@ -1,4 +1,5 @@
 import { db } from './firebase.js';
+import { TablePin } from './pin.js';
 import { doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 const StatusPage = {
@@ -25,9 +26,27 @@ const StatusPage = {
     document.getElementById('orderIdBadge').textContent = this.orderId;
     document.getElementById('addMoreLink').href = `index.html?table=${this.tableNumber}`;
 
+    if (!this.ensurePinAccess()) return;
     if (!this.orderId) return;
     this.subscribeToOrder();
     this.startETA();
+  },
+
+  ensurePinAccess() {
+    if (!TablePin.isProtected(this.tableNumber) || TablePin.isAuthenticated(this.tableNumber)) return true;
+    while (true) {
+      const pin = prompt(`テーブル${this.tableNumber}の暗証番号を入力してください`);
+      if (pin === null) {
+        const badge = document.getElementById('orderIdBadge');
+        if (badge) badge.textContent = '保護された注文';
+        return false;
+      }
+      if (TablePin.validatePin(this.tableNumber, pin)) {
+        TablePin.setAuthenticated(this.tableNumber);
+        return true;
+      }
+      alert('暗証番号が違います。もう一度入力してください。');
+    }
   },
 
   subscribeToOrder() {

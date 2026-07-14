@@ -113,20 +113,18 @@ img { max-width: 100%; }
 
 .nav-action:active { opacity: 0.5; }
 
-/* ===== SEARCH BAR ===== */
-.search-bar {
-  padding: 8px 16px 10px;
-}
+.pin-action { margin-right: 8px; }
 
-.search-wrap {
-  position: relative;
+.locked-state {
+  padding: 24px 18px;
+  border-radius: var(--radius-lg);
+  background: rgba(255,255,255,0.92);
+  border: 1px solid var(--separator);
+  color: var(--label-secondary);
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.8;
 }
-
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
   font-size: 15px;
   color: var(--label-tertiary);
   pointer-events: none;
