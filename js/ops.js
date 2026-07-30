@@ -674,17 +674,17 @@ const OpsPage = {
           · ${escapeHtml(r.shopId || '')} · 席${escapeHtml(String(r.tableNumber))}
           <div class="ops-muted">${new Date(r.timestamp || 0).toLocaleString('ja-JP')}</div>
         </div>
-        <button type="button" data-resolve="${r.id}">対応済</button>
+        <button type="button" data-resolve="${r.id}" data-table="${escapeHtml(String(r.tableNumber))}">対応済</button>
       </div>
     `).join('') || '<p class="ops-muted">オープンな呼出はありません</p>';
 
     el.querySelectorAll('[data-resolve]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        try {
-          await resolveServiceRequest(btn.dataset.resolve);
-        } catch (e) {
-          console.error(e);
-        }
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.resolve;
+        const table = btn.dataset.table;
+        this.requests = this.requests.map(r => r.id === id ? { ...r, status: 'done' } : r);
+        this.renderRequests();
+        resolveServiceRequest(id, { tableNumber: table }).catch((e) => console.error(e));
       });
     });
   },
