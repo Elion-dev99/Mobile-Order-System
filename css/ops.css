@@ -375,3 +375,93 @@ body.ops-body {
   background: var(--ops-panel);
 }
 .ops-health-playbook h2 { margin-top: 0; }
+
+/* ——— Ops power-up ——— */
+.ops-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+.ops-toolbar-wrap label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ops-muted);
+}
+.ops-toolbar input[type="search"],
+.ops-toolbar select,
+.ops-toolbar input:not([type="checkbox"]) {
+  background: #0d1815;
+  border: 1px solid var(--ops-line);
+  color: var(--ops-text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+.ops-code {
+  white-space: pre-wrap;
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--ops-line);
+  border-radius: 10px;
+  font-family: var(--ops-mono);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ops-tag {
+  display: inline-block;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(61, 207, 154, 0.16);
+  color: var(--ops-accent);
+}
+.ops-lead-list {
+  display: grid;
+  gap: 10px;
+}
+.ops-lead-card {
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-line);
+  border-radius: 14px;
+  padding: 14px;
+}
+.ops-lead-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.ops-dialog {
+  border: 1px solid var(--ops-line);
+  border-radius: 16px;
+  background: #13241f;
+  color: var(--ops-text);
+  padding: 20px;
+  width: min(520px, 94vw);
+}
+.ops-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.ops-dialog-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ops-tabs {
+  flex-wrap: wrap;
+}
+.ops-table-wrap table td code {
+  font-family: var(--ops-mono);
+  font-size: 12px;
+}

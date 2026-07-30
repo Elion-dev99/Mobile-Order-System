@@ -4,11 +4,11 @@ import {
 import {
   listShops, upsertShop, deleteShop, ensureSeedShops
 } from './shop.js';
-import { guestEntryUrl, DEFAULT_SHOP_ID } from './tenant.js';
-import { db } from './firebase.js';
-import { yen, getPlan, estimateMrr } from './plans.js';
+import { guestEntryUrl, DEFAULT_SHOP_ID, listSeedShops } from './tenant.js';
+import { db, firebaseConfig } from './firebase.js';
+import { yen, getPlan, estimateMrr, planComparisonRows, PLANS, PRODUCT } from './plans.js';
 import {
-  collection, onSnapshot, query, orderBy
+  collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc, setDoc,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { resolveServiceRequest } from './guest-features.js';
 import {
@@ -21,6 +21,7 @@ import {
   getNotifySettings,
   getDiscordWebhook,
   isLikelyDiscordWebhook,
+  notifyLeadWon,
   NOTIFY_EVENTS,
 } from './notify.js';
 import { maybeNotifySystemLoad, notifySystemLoadNow, assessSystemLoad } from './load-monitor.js';
@@ -28,6 +29,7 @@ import {
   runHealthCheckAndNotify,
   playbookFor,
   listPendingOrders,
+  flushPendingOrders,
 } from './health.js';
 import { runFullLoadTest, ensureWebhookReady, cleanupLoadTestShops } from './load-test.js';
 import {
@@ -38,6 +40,7 @@ import {
   cardinalApi,
 } from './cardinal.js';
 import { escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
+import { ordersToCsv, downloadCsv } from './guest-extras.js';
 
 const OpsPage = {
   shops: [],
@@ -88,8 +91,9 @@ const OpsPage = {
     await this.refreshCardinal();
     this.startCardinalPolling();
     const params = new URLSearchParams(location.search);
-    if (params.get('tab') === 'notify') this.switchTab('notify');
-    else if (params.get('tab') === 'cardinal') this.switchTab('cardinal');
+    const tab = params.get('tab');
+    const knownTabs = ['hq', 'shops', 'orders', 'leads', 'fees', 'notify', 'requests', 'surveys', 'lab', 'tools', 'cardinal', 'security'];
+    if (tab && knownTabs.includes(tab)) this.switchTab(tab);
     else {
       const status = await getSetupStatus().catch(() => null);
       if (status?.needsSetup) this.switchTab('notify');
@@ -702,6 +706,124 @@ const OpsPage = {
       await this.refreshNotifySetup();
     });
 
+    this.bindPowerTools();
+  },
+
+  bindPowerTools() {
+    document.getElementById('shopsFilter')?.addEventListener('input', () => this.renderShops());
+    document.getElementById('shopsRefresh')?.addEventListener('click', () => this.refreshShops());
+    document.getElementById('shopsReseed')?.addEventListener('click', async () => {
+      const st = document.getElementById('createShopStatus');
+      if (st) { st.hidden = false; st.textContent = 'シード投入中...'; }
+      try {
+        await ensureSeedShops();
+        await this.refreshShops();
+        if (st) st.textContent = `シード完了（${listSeedShops().length}件）`;
+      } catch (e) {
+        if (st) st.textContent = '失敗: ' + (e?.message || e);
+      }
+    });
+
+    document.getElementById('shopEditForm')?.addEventListener('submit', async (e) => {
+      const submitter = e.submitter;
+      if (submitter?.value === 'cancel') return;
+      e.preventDefault();
+      const id = document.getElementById('shopEditId')?.textContent?.trim();
+      const st = document.getElementById('shopEditStatus');
+      if (!id) return;
+      if (st) { st.hidden = false; st.textContent = '保存中...'; }
+      try {
+        const subscribed = !!document.getElementById('editShopSubscribed')?.checked;
+        await upsertShop(id, {
+          name: document.getElementById('editShopName')?.value?.trim() || id,
+          planId: document.getElementById('editShopPlan')?.value || 'growth',
+          billingCycle: document.getElementById('editShopCycle')?.value || 'annual',
+          tableCount: Number(document.getElementById('editShopTables')?.value) || 12,
+          stores: Number(document.getElementById('editShopStores')?.value) || 1,
+          isOpen: !!document.getElementById('editShopOpen')?.checked,
+          subscribed,
+          subscribedAt: subscribed ? (Date.now()) : null,
+        });
+        if (st) st.textContent = '保存しました';
+        document.getElementById('shopEditDialog')?.close();
+        await this.refreshShops();
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+    });
+
+    ['ordersShopFilter', 'ordersStatusFilter', 'ordersHideDemo', 'ordersOnlyLoad', 'ordersSearch'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => this.renderOrders());
+      document.getElementById(id)?.addEventListener('input', () => this.renderOrders());
+    });
+    document.getElementById('ordersSelectAll')?.addEventListener('change', (e) => {
+      document.querySelectorAll('#ordersRows [data-order-check]').forEach((cb) => {
+        cb.checked = !!e.target.checked;
+      });
+    });
+    document.getElementById('ordersExportCsv')?.addEventListener('click', () => {
+      const rows = this.filteredOrders();
+      downloadCsv(`ops-orders-${new Date().toISOString().slice(0, 10)}.csv`, ordersToCsv(rows));
+    });
+    document.getElementById('ordersDeleteSelected')?.addEventListener('click', () => this.deleteSelectedOrders());
+    document.getElementById('ordersPurgeLoad')?.addEventListener('click', () => this.purgeLoadOrders());
+
+    document.getElementById('leadsStatusFilter')?.addEventListener('change', () => this.renderOpsLeads());
+    document.getElementById('leadsRefresh')?.addEventListener('click', () => this.renderOpsLeads());
+
+    document.getElementById('feesViewFilter')?.addEventListener('change', () => this.renderFees());
+    document.getElementById('feesSelectAll')?.addEventListener('change', (e) => {
+      document.querySelectorAll('#feesRows [data-fee-check]').forEach((cb) => {
+        cb.checked = !!e.target.checked;
+      });
+    });
+    document.getElementById('feesMarkSelected')?.addEventListener('click', () => this.markFeesBilled(false));
+    document.getElementById('feesMarkAllUnbilled')?.addEventListener('click', () => this.markFeesBilled(true));
+    document.getElementById('feesExportCsv')?.addEventListener('click', () => {
+      const rows = this.feeOrders();
+      downloadCsv(`ops-fees-${new Date().toISOString().slice(0, 10)}.csv`, ordersToCsv(rows));
+    });
+
+    document.getElementById('toolsFlushPending')?.addEventListener('click', () => this.flushPendingQueue());
+    document.getElementById('toolsClearPending')?.addEventListener('click', () => {
+      if (!confirm('保留注文キューを空にしますか？（再送されません）')) return;
+      try { localStorage.removeItem('mos_pending_orders'); } catch (_) {}
+      this.renderTools();
+      this.setToolsStatus('キューを空にしました');
+    });
+    document.getElementById('toolsRefreshPending')?.addEventListener('click', () => this.renderTools());
+    document.getElementById('toolsDumpEnv')?.addEventListener('click', () => this.dumpEnv());
+    document.getElementById('toolsCopyEnv')?.addEventListener('click', async () => {
+      const text = document.getElementById('toolsEnvDump')?.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        this.setToolsStatus('環境ダンプをコピーしました');
+      } catch {
+        this.setToolsStatus('コピー失敗 — 手動で選択してください');
+      }
+    });
+    document.getElementById('toolsListStorage')?.addEventListener('click', () => this.listMosStorage());
+    document.getElementById('toolsClearMosStorage')?.addEventListener('click', () => {
+      if (!confirm('mos_* の localStorage を削除します（Opsログインも切れます）。続行？')) return;
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('mos_')) keys.push(k);
+      }
+      keys.forEach((k) => localStorage.removeItem(k));
+      this.setToolsStatus(`${keys.length} キーを削除しました。再ログインしてください。`);
+      setTimeout(() => { location.href = 'ops.html'; }, 800);
+    });
+    document.getElementById('toolsClearLoadLevels')?.addEventListener('click', () => {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && /load|health|cardinal|auto.?heal/i.test(k)) keys.push(k);
+      }
+      keys.forEach((k) => localStorage.removeItem(k));
+      this.setToolsStatus(`負荷/ヘルス系 ${keys.length} キーを削除`);
+      this.listMosStorage();
+    });
   },
 
   readEventToggles() {
@@ -789,10 +911,15 @@ const OpsPage = {
     });
     if (id === 'shops') this.renderShops();
     if (id === 'hq') this.renderHq();
+    if (id === 'orders') this.renderOrders();
+    if (id === 'leads') this.renderOpsLeads();
+    if (id === 'fees') this.renderFees();
     if (id === 'requests') this.renderRequests();
     if (id === 'surveys') this.renderSurveys();
     if (id === 'lab') this.renderLabs();
+    if (id === 'tools') this.renderTools();
     if (id === 'notify') this.refreshNotifySetup();
+    if (id === 'cardinal') this.refreshCardinal();
   },
 
   async refreshShops() {
@@ -805,11 +932,18 @@ const OpsPage = {
   renderShops() {
     const el = document.getElementById('shopsList');
     if (!el) return;
-    el.innerHTML = this.shops.map(s => {
+    const q = (document.getElementById('shopsFilter')?.value || '').trim().toLowerCase();
+    const shops = this.shops.filter((s) => {
+      if (!q) return true;
+      return `${s.id} ${s.name || ''} ${s.subtitle || ''}`.toLowerCase().includes(q);
+    });
+    el.innerHTML = shops.map(s => {
       const guest = guestEntryUrl(s.id, 1);
       const demo = guestEntryUrl(s.id, 1, { demo: 1 });
       const admin = `admin.html?shop=${encodeURIComponent(s.id)}`;
       const store = `store.html?shop=${encodeURIComponent(s.id)}`;
+      const cycle = s.billingCycle === 'monthly' ? '月' : '年';
+      const sub = s.subscribed ? '課金中' : '未課金';
       return `
         <article class="ops-shop-card">
           <header>
@@ -817,12 +951,13 @@ const OpsPage = {
             <code>${escapeHtml(s.id)}</code>
           </header>
           <p>${escapeHtml(s.subtitle || '')} · ${escapeHtml(s.hoursNote || '')} · 席${s.tableCount || 0}</p>
-          <p class="ops-muted">${s.isOpen === false ? '準備中' : '営業中'} · ${getPlan(s.planId).name}</p>
+          <p class="ops-muted">${s.isOpen === false ? '準備中' : '営業中'} · ${getPlan(s.planId).name} · ${cycle}払い · ${sub}</p>
           <div class="ops-shop-actions">
             <a href="${guest}" target="_blank">客席</a>
             <a href="${demo}" target="_blank">テスト</a>
             <a href="${admin}" target="_blank">厨房</a>
             <a href="${store}" target="_blank">店舗管理</a>
+            <button type="button" data-edit="${s.id}">編集</button>
             ${s.id !== DEFAULT_SHOP_ID ? `<button type="button" data-del="${s.id}">削除</button>` : ''}
           </div>
         </article>`;
@@ -835,6 +970,26 @@ const OpsPage = {
         await this.refreshShops();
       });
     });
+    el.querySelectorAll('[data-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => this.openShopEditor(btn.dataset.edit));
+    });
+  },
+
+  openShopEditor(shopId) {
+    const shop = this.shops.find((s) => s.id === shopId);
+    if (!shop) return;
+    const dlg = document.getElementById('shopEditDialog');
+    document.getElementById('shopEditId').textContent = shop.id;
+    document.getElementById('editShopName').value = shop.name || '';
+    document.getElementById('editShopPlan').value = shop.planId || 'growth';
+    document.getElementById('editShopCycle').value = shop.billingCycle || 'annual';
+    document.getElementById('editShopTables').value = shop.tableCount || 12;
+    document.getElementById('editShopStores').value = shop.stores || 1;
+    document.getElementById('editShopOpen').checked = shop.isOpen !== false;
+    document.getElementById('editShopSubscribed').checked = !!shop.subscribed;
+    const st = document.getElementById('shopEditStatus');
+    if (st) { st.hidden = true; st.textContent = ''; }
+    dlg?.showModal?.();
   },
 
   scheduleLoadNotify() {
@@ -859,12 +1014,15 @@ const OpsPage = {
       this.orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       this.renderHq();
       this.renderLabs();
+      this.renderOrders();
+      this.renderFees();
       this.scheduleLoadNotify();
     }, () => {});
 
     onSnapshot(query(collection(db, 'leads'), orderBy('createdAt', 'desc')), snap => {
       this.leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       this.renderHq();
+      this.renderOpsLeads();
     }, () => {});
 
     onSnapshot(query(collection(db, 'surveys'), orderBy('timestamp', 'desc')), snap => {
@@ -938,6 +1096,25 @@ const OpsPage = {
     const feeOrders = this.orders.filter(o => !o.demo && (o.platformFee || 0) > 0 && (o.platformFeeStatus || 'unbilled') === 'unbilled');
     const unbilledFee = feeOrders.reduce((s, o) => s + (o.platformFee || 0), 0);
     set('hqPlatformFee', `¥${yen(unbilledFee)}`);
+
+    // Make KPI cards jump to relevant Ops tabs
+    const jumps = [
+      ['hqShops', 'shops'],
+      ['hqOrders', 'orders'],
+      ['hqLeads', 'leads'],
+      ['hqPlatformFee', 'fees'],
+      ['hqRequests', 'requests'],
+      ['hqNps', 'surveys'],
+      ['hqHealth', 'tools'],
+    ];
+    jumps.forEach(([id, tab]) => {
+      const el = document.getElementById(id)?.closest('.ops-card');
+      if (!el || el.dataset.jumpBound) return;
+      el.dataset.jumpBound = '1';
+      el.style.cursor = 'pointer';
+      el.title = `${tab} タブを開く`;
+      el.addEventListener('click', () => this.switchTab(tab));
+    });
   },
 
   renderRequests() {
@@ -981,9 +1158,19 @@ const OpsPage = {
   fillLabSelect() {
     const sel = document.getElementById('labShop');
     if (!sel) return;
+    const prev = sel.value;
     sel.innerHTML = this.shops.map(s =>
       `<option value="${s.id}">${escapeHtml(s.name)} (${s.id})</option>`
     ).join('');
+    if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+    const orderSel = document.getElementById('ordersShopFilter');
+    if (orderSel) {
+      const cur = orderSel.value;
+      orderSel.innerHTML = `<option value="">すべて</option>` + this.shops.map((s) =>
+        `<option value="${s.id}">${escapeHtml(s.name || s.id)}</option>`
+      ).join('');
+      if (cur) orderSel.value = cur;
+    }
   },
 
   renderLabs() {
@@ -996,10 +1183,14 @@ const OpsPage = {
         <a class="ops-btn" href="${guestEntryUrl(shopId, 3)}" target="_blank">席3 本番URL</a>
         <a class="ops-btn" href="admin.html?shop=${shopId}" target="_blank">厨房</a>
         <a class="ops-btn" href="store.html?shop=${shopId}" target="_blank">店舗管理</a>
+        <a class="ops-btn" href="ops.html?tab=tools" target="_blank">Devツール</a>
         <a class="ops-btn secondary" href="lp.html" target="_blank">販売LP</a>
       `;
     }
-    sel?.addEventListener('change', () => this.renderLabs());
+    if (sel && !sel.dataset.bound) {
+      sel.dataset.bound = '1';
+      sel.addEventListener('change', () => this.renderLabs());
+    }
 
     const checklist = document.getElementById('labChecklist');
     if (checklist) {
@@ -1010,21 +1201,353 @@ const OpsPage = {
         <li>品切れ反映が客席に即時出る（店舗管理/厨房）</li>
         <li>完了後アンケートが surveys に残る</li>
         <li>カートにサイド・ドリンクのアップセルが出る</li>
+        <li>クーポン・在庫・KDS・期間CSVが Growth で動く</li>
+        <li>Ops 注文タブで LOAD-* を掃除できる</li>
       `;
     }
 
+    const head = document.getElementById('planMatrixHead');
     const featureMatrix = document.getElementById('featureMatrix');
-    if (featureMatrix) {
-      featureMatrix.innerHTML = `
-        <tr><td>店舗テナント分割</td><td>実装</td><td>URL/Firestore を店舗IDで分離</td></tr>
-        <tr><td>品切れ（Sold out）</td><td>実装</td><td>業界標準の欠品管理</td></tr>
-        <tr><td>店員呼出 / 会計</td><td>実装</td><td>ダイニー等の定番UX</td></tr>
-        <tr><td>厨房混雑ETA</td><td>実装</td><td>待ち時間予測</td></tr>
-        <tr><td>来店後アンケート</td><td>実装</td><td>QSC改善ループ</td></tr>
-        <tr><td>カートアップセル</td><td>実装</td><td>客単価向上</td></tr>
-        <tr><td>HQ横断ダッシュボード</td><td>実装</td><td>Chain向け本部視点</td></tr>
+    if (head && featureMatrix) {
+      head.innerHTML = `<tr><th>機能</th>${PLANS.map((p) => `<th>${escapeHtml(p.name)}</th>`).join('')}</tr>`;
+      featureMatrix.innerHTML = planComparisonRows().map((row) => `
+        <tr>
+          <td>${escapeHtml(row.label)}</td>
+          ${row.values.map((v) => `<td>${escapeHtml(v)}</td>`).join('')}
+        </tr>
+      `).join('');
+    }
+  },
+
+  filteredOrders() {
+    const shop = document.getElementById('ordersShopFilter')?.value || '';
+    const status = document.getElementById('ordersStatusFilter')?.value || '';
+    const hideDemo = document.getElementById('ordersHideDemo')?.checked !== false;
+    const onlyLoad = !!document.getElementById('ordersOnlyLoad')?.checked;
+    const q = (document.getElementById('ordersSearch')?.value || '').trim().toLowerCase();
+    return (this.orders || []).filter((o) => {
+      if (shop && (o.shopId || DEFAULT_SHOP_ID) !== shop) return false;
+      if (status && (o.status || 'received') !== status) return false;
+      if (hideDemo && o.demo) return false;
+      if (onlyLoad && !String(o.id || '').toUpperCase().startsWith('LOAD')) return false;
+      if (q) {
+        const hay = `${o.id || ''} ${o.tableNumber || ''} ${o.shopId || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    }).slice(0, 300);
+  },
+
+  renderOrders() {
+    const tbody = document.getElementById('ordersRows');
+    if (!tbody) return;
+    const rows = this.filteredOrders();
+    tbody.innerHTML = rows.map((o) => `
+      <tr>
+        <td><input type="checkbox" data-order-check value="${escapeHtml(o.id)}"></td>
+        <td><code>${escapeHtml(o.id)}</code>${o.demo ? ' <em class="ops-tag">demo</em>' : ''}</td>
+        <td>${escapeHtml(o.shopId || '')}</td>
+        <td>${escapeHtml(String(o.tableNumber ?? ''))}</td>
+        <td>${escapeHtml(o.status || 'received')}</td>
+        <td>¥${yen(o.total || 0)}</td>
+        <td>${(o.platformFee || 0) > 0 ? `¥${yen(o.platformFee)}` : '—'}</td>
+        <td>${o.timestamp ? new Date(o.timestamp).toLocaleString('ja-JP') : '—'}</td>
+        <td><button type="button" class="ops-linkish" data-del-order="${escapeHtml(o.id)}">削除</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="9">該当なし</td></tr>';
+
+    tbody.querySelectorAll('[data-del-order]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm(`${btn.dataset.delOrder} を削除？`)) return;
+        try {
+          await deleteDoc(doc(db, 'orders', btn.dataset.delOrder));
+          this.setOrdersStatus(`削除: ${btn.dataset.delOrder}`);
+        } catch (e) {
+          this.setOrdersStatus('削除失敗: ' + (e?.message || e));
+        }
+      });
+    });
+  },
+
+  setOrdersStatus(msg) {
+    const st = document.getElementById('ordersStatus');
+    if (!st) return;
+    st.hidden = false;
+    st.textContent = msg;
+  },
+
+  selectedOrderIds() {
+    return [...document.querySelectorAll('#ordersRows [data-order-check]:checked')].map((cb) => cb.value);
+  },
+
+  async deleteSelectedOrders() {
+    const ids = this.selectedOrderIds();
+    if (!ids.length) {
+      this.setOrdersStatus('選択がありません');
+      return;
+    }
+    if (!confirm(`${ids.length} 件を削除しますか？`)) return;
+    let ok = 0;
+    let fail = 0;
+    for (const id of ids) {
+      try {
+        await deleteDoc(doc(db, 'orders', id));
+        ok += 1;
+      } catch (_) {
+        fail += 1;
+      }
+    }
+    this.setOrdersStatus(`削除完了: ${ok} / 失敗 ${fail}`);
+  },
+
+  async purgeLoadOrders() {
+    const load = (this.orders || []).filter((o) => String(o.id || '').toUpperCase().startsWith('LOAD'));
+    if (!load.length) {
+      this.setOrdersStatus('LOAD-* 注文はありません');
+      return;
+    }
+    if (!confirm(`LOAD-* 注文 ${load.length} 件を削除しますか？`)) return;
+    let ok = 0;
+    for (const o of load) {
+      try {
+        await deleteDoc(doc(db, 'orders', o.id));
+        ok += 1;
+      } catch (_) {}
+    }
+    this.setOrdersStatus(`LOAD-* 削除: ${ok}/${load.length}`);
+  },
+
+  renderOpsLeads() {
+    const el = document.getElementById('opsLeadsList');
+    if (!el) return;
+    const filter = document.getElementById('leadsStatusFilter')?.value || '';
+    const rows = (this.leads || []).filter((l) => !filter || (l.status || 'new') === filter);
+    el.innerHTML = rows.map((lead) => `
+      <article class="ops-lead-card">
+        <header>
+          <strong>${escapeHtml(lead.shopName || '無題')}</strong>
+          <span class="ops-tag">${escapeHtml(lead.status || 'new')}</span>
+        </header>
+        <p>${escapeHtml(lead.email || '')}${lead.phone ? ` · ${escapeHtml(lead.phone)}` : ''}</p>
+        <p class="ops-muted">
+          ${escapeHtml(lead.planName || lead.planId || '-')}
+          · 見込みMRR ¥${yen(lead.estimatedMrr || lead.planPrice || 0)}
+          · 席 ${escapeHtml(String(lead.tables || '-'))}
+          · ${lead.createdAt ? new Date(lead.createdAt).toLocaleString('ja-JP') : ''}
+        </p>
+        ${lead.message ? `<p>${escapeHtml(lead.message)}</p>` : ''}
+        <div class="ops-shop-actions">
+          <button type="button" data-lead="${lead.id}" data-lead-status="contacted">対応中</button>
+          <button type="button" data-lead="${lead.id}" data-lead-status="won">成約</button>
+          <button type="button" data-lead="${lead.id}" data-lead-status="new">新規に戻す</button>
+        </div>
+      </article>
+    `).join('') || '<p class="ops-muted">リードなし</p>';
+
+    el.querySelectorAll('[data-lead]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const status = btn.dataset.leadStatus;
+        try {
+          await updateDoc(doc(db, 'leads', btn.dataset.lead), { status, updatedAt: Date.now() });
+          if (status === 'won') {
+            const lead = this.leads.find((l) => l.id === btn.dataset.lead);
+            if (lead) notifyLeadWon({ ...lead, status });
+          }
+        } catch (e) {
+          console.error(e);
+          alert('更新失敗: ' + (e?.message || e));
+        }
+      });
+    });
+  },
+
+  feeOrders() {
+    const view = document.getElementById('feesViewFilter')?.value || 'unbilled';
+    return (this.orders || []).filter((o) => {
+      if (o.demo) return false;
+      if (!(o.platformFee > 0)) return false;
+      const st = o.platformFeeStatus || 'unbilled';
+      if (view === 'unbilled') return st === 'unbilled';
+      if (view === 'billed') return st === 'billed';
+      return true;
+    }).slice(0, 400);
+  },
+
+  renderFees() {
+    const tbody = document.getElementById('feesRows');
+    if (!tbody) return;
+    const allFee = (this.orders || []).filter((o) => !o.demo && (o.platformFee || 0) > 0);
+    const unbilled = allFee.filter((o) => (o.platformFeeStatus || 'unbilled') === 'unbilled');
+    const billed = allFee.filter((o) => o.platformFeeStatus === 'billed');
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('feeUnbilledTotal', `¥${yen(unbilled.reduce((s, o) => s + (o.platformFee || 0), 0))}`);
+    set('feeUnbilledCount', String(unbilled.length));
+    set('feeBilledCount', String(billed.length));
+
+    const rows = this.feeOrders();
+    tbody.innerHTML = rows.map((o) => `
+      <tr>
+        <td><input type="checkbox" data-fee-check value="${escapeHtml(o.id)}" ${(o.platformFeeStatus || 'unbilled') === 'billed' ? 'disabled' : ''}></td>
+        <td><code>${escapeHtml(o.id)}</code></td>
+        <td>${escapeHtml(o.shopId || '')}</td>
+        <td>¥${yen(o.total || 0)}</td>
+        <td>¥${yen(o.platformFee || 0)}</td>
+        <td>${escapeHtml(o.platformFeeStatus || 'unbilled')}</td>
+        <td>${o.timestamp ? new Date(o.timestamp).toLocaleString('ja-JP') : '—'}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="7">該当なし</td></tr>';
+  },
+
+  async markFeesBilled(allUnbilled) {
+    const st = document.getElementById('feesStatus');
+    let ids = [];
+    if (allUnbilled) {
+      ids = (this.orders || [])
+        .filter((o) => !o.demo && (o.platformFee || 0) > 0 && (o.platformFeeStatus || 'unbilled') === 'unbilled')
+        .map((o) => o.id);
+      if (!ids.length) {
+        if (st) { st.hidden = false; st.textContent = '未請求はありません'; }
+        return;
+      }
+      if (!confirm(`未請求 ${ids.length} 件を請求済にしますか？`)) return;
+    } else {
+      ids = [...document.querySelectorAll('#feesRows [data-fee-check]:checked')].map((cb) => cb.value);
+      if (!ids.length) {
+        if (st) { st.hidden = false; st.textContent = '選択がありません'; }
+        return;
+      }
+    }
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        await updateDoc(doc(db, 'orders', id), {
+          platformFeeStatus: 'billed',
+          billedAt: Date.now(),
+        });
+        ok += 1;
+      } catch (_) {}
+    }
+    if (st) { st.hidden = false; st.textContent = `請求済に更新: ${ok}/${ids.length}`; }
+  },
+
+  setToolsStatus(msg) {
+    const st = document.getElementById('toolsStatus');
+    if (!st) return;
+    st.hidden = false;
+    st.textContent = msg;
+  },
+
+  renderTools() {
+    const pending = listPendingOrders();
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('toolsPendingCount', String(pending.length));
+    set('toolsFsStatus', this.health?.firestore?.ok ? `OK ${this.health.firestore.latencyMs || ''}ms` : (this.health?.firestore?.soft ? '遅延' : '—'));
+    set('toolsNotifyStatus', this.health?.notifyApi?.functionReady ? 'OK' : '—');
+    set('toolsRole', getOpsRole() || '—');
+
+    const links = document.getElementById('toolsQuickLinks');
+    if (links) {
+      const shopId = this.shops[0]?.id || DEFAULT_SHOP_ID;
+      links.innerHTML = `
+        <a class="ops-btn" href="https://mobile-order-system.pages.dev/" target="_blank" rel="noopener">本番 Pages</a>
+        <a class="ops-btn" href="https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore" target="_blank" rel="noopener">Firebase</a>
+        <a class="ops-btn" href="https://cursor.com/agents" target="_blank" rel="noopener">Cursor Agents</a>
+        <a class="ops-btn" href="https://github.com/Elion-dev99/Mobile-Order-System" target="_blank" rel="noopener">GitHub</a>
+        <a class="ops-btn" href="lp.html" target="_blank">LP</a>
+        <a class="ops-btn" href="${guestEntryUrl(shopId, 1, { demo: 1 })}" target="_blank">デモ客席</a>
+        <a class="ops-btn secondary" href="docs/cardinal.md" target="_blank">cardinal.md</a>
+        <a class="ops-btn secondary" href="docs/revenue.md" target="_blank">revenue.md</a>
       `;
     }
+
+    const log = document.getElementById('toolsPendingLog');
+    if (log) {
+      log.hidden = false;
+      log.textContent = pending.length
+        ? pending.map((o) => `${o.id} shop=${o.shopId} total=${o.total} queuedAt=${o.queuedAt || o.timestamp || ''}`).join('\n')
+        : '（空）';
+    }
+  },
+
+  async flushPendingQueue() {
+    this.setToolsStatus('再送中...');
+    try {
+      const result = await flushPendingOrders(async (order) => {
+        await setDoc(doc(db, 'orders', order.id), order, { merge: true });
+      });
+      this.setToolsStatus(`再送: ${result.sent || 0} / 残り ${result.left || 0}${result.error ? ` · ${result.error}` : ''}`);
+    } catch (e) {
+      this.setToolsStatus('失敗: ' + (e?.message || e));
+    }
+    this.renderTools();
+  },
+
+  async dumpEnv() {
+    const pre = document.getElementById('toolsEnvDump');
+    if (pre) { pre.hidden = false; pre.textContent = '収集中...'; }
+    let cardinal = null;
+    try { cardinal = await cardinalApi('status'); } catch (e) { cardinal = { error: String(e?.message || e) }; }
+    const dump = {
+      at: new Date().toISOString(),
+      href: location.href,
+      role: getOpsRole(),
+      firebase: {
+        projectId: firebaseConfig.projectId,
+        authDomain: firebaseConfig.authDomain,
+      },
+      product: {
+        name: PRODUCT.name,
+        trialDays: PRODUCT.trialDays,
+        defaultBillingCycle: PRODUCT.defaultBillingCycle,
+        introSlotsRemaining: PRODUCT.introSlotsRemaining,
+        stripePaymentLink: PRODUCT.stripePaymentLink ? '(set)' : '',
+      },
+      plans: PLANS.map((p) => ({
+        id: p.id,
+        priceMonthly: p.priceMonthly,
+        maxTables: p.maxTables,
+        maxStores: p.maxStores,
+        orderFeePercent: p.orderFeePercent,
+      })),
+      health: this.health,
+      cardinalClient: getCardinalSnapshot(),
+      cardinalApi: cardinal,
+      notify: {
+        hasWebhook: !!getDiscordWebhook(),
+        events: getNotifyEvents(),
+      },
+      counts: {
+        shops: this.shops.length,
+        orders: this.orders.length,
+        leads: this.leads.length,
+        requestsOpen: this.requests.filter((r) => r.status === 'open').length,
+        pendingOrders: listPendingOrders().length,
+      },
+      seeds: listSeedShops().map((s) => s.id),
+      ua: navigator.userAgent,
+      online: navigator.onLine,
+    };
+    if (pre) pre.textContent = JSON.stringify(dump, null, 2);
+    this.setToolsStatus('環境ダンプを更新しました');
+  },
+
+  listMosStorage() {
+    const pre = document.getElementById('toolsStorageLog');
+    const rows = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (!k.startsWith('mos_') && !/ops|cardinal|health|notify|load/i.test(k)) continue;
+      let len = 0;
+      try { len = (localStorage.getItem(k) || '').length; } catch (_) {}
+      rows.push(`${k} (${len} chars)`);
+    }
+    rows.sort();
+    if (pre) {
+      pre.hidden = false;
+      pre.textContent = rows.join('\n') || '（該当キーなし）';
+    }
+    this.setToolsStatus(`${rows.length} キー`);
   },
 };
 
