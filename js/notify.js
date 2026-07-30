@@ -1,10 +1,11 @@
 /**
  * Discord / Ops notification settings + event dispatch.
- * Settings: localStorage + Firestore ops/settings.
+ * SaaS contract revenue (QuickOrder に入る利益) を含むオペレーション通知。
  */
 
 import { db } from './firebase.js';
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { getPlan, estimateMrr, estimateSetup, estimateArr, planPrice, yen } from './plans.js';
 
 const STORAGE_KEY = 'mos_discord_webhook';
 const ENABLED_KEY = 'mos_discord_notify_enabled';
@@ -23,27 +24,25 @@ const LEGACY = {
 };
 
 export const NOTIFY_EVENTS = [
-  { id: 'order_revenue', label: '注文売上（GMV）', defaultOn: true },
+  { id: 'lead_new', label: '見込み契約利益（問い合わせ）', defaultOn: true },
+  { id: 'lead_won', label: '成約利益（リード成約）', defaultOn: true },
+  { id: 'contract_activated', label: '契約収益（課金開始・MRR）', defaultOn: true },
+  { id: 'plan_changed', label: 'プラン変更によるMRR増減', defaultOn: true },
   { id: 'shop_created', label: '店舗の追加', defaultOn: true },
   { id: 'shop_deleted', label: '店舗の削除', defaultOn: true },
   { id: 'item_added', label: '商品の追加', defaultOn: true },
   { id: 'item_removed', label: '商品の削除', defaultOn: true },
-  { id: 'lead_new', label: '新規契約のお問い合わせ（LP）', defaultOn: true },
-  { id: 'lead_won', label: 'リード成約', defaultOn: true },
-  { id: 'contract_activated', label: '課金・契約の有効化（MRR）', defaultOn: true },
-  { id: 'plan_changed', label: 'プラン変更', defaultOn: true },
 ];
 
 const EVENT_COLORS = {
-  order_revenue: 0xfee75c,
-  shop_created: 0x3dcf9a,
-  shop_deleted: 0xff6b6b,
-  item_added: 0x57f287,
-  item_removed: 0xed4245,
   lead_new: 0x5865f2,
   lead_won: 0xfee75c,
   contract_activated: 0x57f287,
   plan_changed: 0xeb459e,
+  shop_created: 0x3dcf9a,
+  shop_deleted: 0xff6b6b,
+  item_added: 0x57f287,
+  item_removed: 0xed4245,
   test: 0x3dcf9a,
   default: 0x3dcf9a,
 };
@@ -352,16 +351,59 @@ export async function testSlackNotify() {
 
 const ALL_EVENT_SAMPLES = [
   {
-    event: 'order_revenue',
-    title: '注文売上',
+    event: 'lead_new',
+    title: '見込み契約利益（問い合わせ）',
     emoji: '💰',
     fields: {
-      店舗: 'テスト焼肉',
-      注文ID: 'ORD-TEST01',
-      席: 3,
-      売上: '¥2,420',
-      本日累計: '¥18,700',
-      商品: '特選カルビ ×2, ビール ×2',
+      内容: 'QuickOrderに入る見込みの契約収益です',
+      店舗名: 'テスト食堂',
+      プラン: 'Growth',
+      見込みMRR: '¥14,800/月',
+      見込みARR: '¥177,600/年',
+      初期費用: '¥49,800',
+      初回入金目安: '¥64,600',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'lead_won',
+    title: '成約利益',
+    emoji: '🎉',
+    fields: {
+      内容: 'リードが成約しました（契約パイプライン）',
+      店舗名: 'テスト食堂',
+      プラン: 'Growth',
+      確定見込みMRR: '¥14,800/月',
+      確定見込みARR: '¥177,600/年',
+      初期費用: '¥49,800',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'contract_activated',
+    title: '契約収益が発生（課金開始）',
+    emoji: '💵',
+    fields: {
+      内容: 'プラン課金が有効化されました（QuickOrderの売上）',
+      店舗: 'テスト食堂',
+      プラン: 'Growth',
+      月額MRR: '¥14,800',
+      年額ARR: '¥177,600',
+      初期費用: '¥49,800',
+      初回請求目安: '¥64,600',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'plan_changed',
+    title: 'プラン変更によるMRR増減',
+    emoji: '📈',
+    fields: {
+      内容: '契約プラン変更で入ってくる利益が変わりました',
+      店舗: 'テスト食堂',
+      変更前: 'Lite（¥6,980）',
+      変更後: 'Growth（¥14,800）',
+      MRR増減: '+¥7,820/月',
       種別: 'テスト通知',
     },
   },
@@ -388,39 +430,6 @@ const ALL_EVENT_SAMPLES = [
     title: '商品を削除しました',
     emoji: '❌',
     fields: { 店舗: 'テスト焼肉', 店舗ID: 'test-yakiniku', 件数: 1, 商品: '🧊 限定かき氷', 種別: 'テスト通知' },
-  },
-  {
-    event: 'lead_new',
-    title: '新規契約のお問い合わせ',
-    emoji: '📝',
-    fields: {
-      店舗名: 'テスト食堂',
-      メール: 'test@example.com',
-      電話: '03-0000-0000',
-      プラン: 'Growth',
-      見込みMRR: '¥9,800',
-      席数: 24,
-      メッセージ: '導入を検討しています（テスト）',
-      種別: 'テスト通知',
-    },
-  },
-  {
-    event: 'lead_won',
-    title: '成約（リード）',
-    emoji: '🎉',
-    fields: { 店舗名: 'テスト食堂', プラン: 'Growth', 見込みMRR: '¥9,800', メール: 'test@example.com', 種別: 'テスト通知' },
-  },
-  {
-    event: 'contract_activated',
-    title: '新規契約を有効化しました',
-    emoji: '🤝',
-    fields: { 店舗: 'テスト食堂', 店舗ID: 'test-syokudo', プラン: 'growth', 課金: 'monthly', 種別: 'テスト通知' },
-  },
-  {
-    event: 'plan_changed',
-    title: '契約プラン変更',
-    emoji: '🔄',
-    fields: { 店舗: 'テスト食堂', 店舗ID: 'test-syokudo', 変更前: 'lite', 変更後: 'growth', 種別: 'テスト通知' },
   },
 ];
 
@@ -491,88 +500,88 @@ export function notifyMenuItemsRemoved(shopId, shopName, items = []) {
 }
 
 export function notifyLeadSubmitted(lead) {
-  return notifyDiscordEvent('新規契約のお問い合わせ（見込み収益）', {
+  const planId = lead?.planId || 'growth';
+  const plan = getPlan(planId);
+  const stores = Number(lead?.stores) || 1;
+  const cycle = lead?.billingCycle || 'monthly';
+  const mrr = Number(lead?.estimatedMrr) || estimateMrr({ planId, stores, cycle });
+  const setup = estimateSetup(planId);
+  const first = mrr + setup;
+  return notifyDiscordEvent('見込み契約利益（問い合わせ）', {
+    内容: 'QuickOrderに入る見込みの契約収益です',
     店舗名: lead?.shopName,
     メール: lead?.email,
     電話: lead?.phone,
-    プラン: lead?.planName || lead?.planId,
-    見込みMRR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr).toLocaleString('ja-JP')}` : '',
-    見込みARR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr * 12).toLocaleString('ja-JP')}` : '',
+    プラン: lead?.planName || plan.name,
+    課金: cycle === 'annual' ? '年払い' : '月払い',
+    見込みMRR: `¥${yen(mrr)}/月`,
+    見込みARR: `¥${yen(estimateArr(mrr))}/年`,
+    初期費用: `¥${yen(setup)}`,
+    初回入金目安: `¥${yen(first)}`,
     席数: lead?.tables,
     メッセージ: (lead?.message || '').slice(0, 200),
-  }, '📝', 'lead_new');
+  }, '💰', 'lead_new');
 }
 
 export function notifyLeadWon(lead) {
-  return notifyDiscordEvent('成約（SaaS収益）', {
+  const planId = lead?.planId || 'growth';
+  const plan = getPlan(planId);
+  const stores = Number(lead?.stores) || 1;
+  const cycle = lead?.billingCycle || 'monthly';
+  const mrr = Number(lead?.estimatedMrr) || estimateMrr({ planId, stores, cycle });
+  const setup = estimateSetup(planId);
+  return notifyDiscordEvent('成約利益', {
+    内容: 'リードが成約しました（QuickOrderの契約パイプライン）',
     店舗名: lead?.shopName,
-    プラン: lead?.planName || lead?.planId,
-    見込みMRR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr).toLocaleString('ja-JP')}` : '',
-    見込みARR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr * 12).toLocaleString('ja-JP')}` : '',
+    プラン: lead?.planName || plan.name,
+    確定見込みMRR: `¥${yen(mrr)}/月`,
+    確定見込みARR: `¥${yen(estimateArr(mrr))}/年`,
+    初期費用: `¥${yen(setup)}`,
+    初回入金目安: `¥${yen(mrr + setup)}`,
     メール: lead?.email,
   }, '🎉', 'lead_won');
 }
 
 export function notifyContractActivated(shop) {
-  return notifyDiscordEvent('新規契約を有効化しました（MRR）', {
+  const planId = shop?.planId || 'growth';
+  const plan = getPlan(planId);
+  const stores = Number(shop?.stores) || 1;
+  const cycle = shop?.billingCycle || 'monthly';
+  const mrr = estimateMrr({ planId, stores, cycle });
+  const setup = estimateSetup(planId);
+  const price = planPrice(plan, cycle);
+  return notifyDiscordEvent('契約収益が発生（課金開始）', {
+    内容: 'プラン課金が有効化されました — QuickOrderに入る売上です',
     店舗: shop?.name || shop?.id,
     店舗ID: shop?.id || '',
-    プラン: shop?.planId,
-    課金: shop?.billingCycle || 'monthly',
-  }, '🤝', 'contract_activated');
+    プラン: plan.name,
+    課金: cycle === 'annual' ? '年払い' : '月払い',
+    月額MRR: `¥${yen(mrr)}`,
+    年額ARR: `¥${yen(estimateArr(mrr))}`,
+    初期費用: `¥${yen(setup)}`,
+    今回の請求目安: cycle === 'annual'
+      ? `¥${yen(price.chargeNow + setup)}（年額+初期）`
+      : `¥${yen(mrr + setup)}（初月+初期）`,
+  }, '💵', 'contract_activated');
 }
 
 export function notifyPlanChanged(shop, prevPlanId, nextPlanId) {
   if (!prevPlanId || prevPlanId === nextPlanId) return Promise.resolve({ ok: true, skipped: true });
-  return notifyDiscordEvent('契約プラン変更', {
+  const stores = Number(shop?.stores) || 1;
+  const cycle = shop?.billingCycle || 'monthly';
+  const prev = getPlan(prevPlanId);
+  const next = getPlan(nextPlanId);
+  const prevMrr = estimateMrr({ planId: prevPlanId, stores, cycle });
+  const nextMrr = estimateMrr({ planId: nextPlanId, stores, cycle });
+  const delta = nextMrr - prevMrr;
+  const deltaText = `${delta >= 0 ? '+' : ''}¥${yen(delta)}/月`;
+  return notifyDiscordEvent('プラン変更によるMRR増減', {
+    内容: '契約プラン変更で、QuickOrderに入る月額利益が変わりました',
     店舗: shop?.name || shop?.id,
     店舗ID: shop?.id,
-    変更前: prevPlanId,
-    変更後: nextPlanId,
-  }, '🔄', 'plan_changed');
-}
-
-function yenText(n) {
-  return `¥${Number(n || 0).toLocaleString('ja-JP')}`;
-}
-
-function dayKey(shopId) {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `mos_day_gmv_${shopId || 'default'}_${y}${m}${day}`;
-}
-
-function bumpDayGmv(shopId, amount) {
-  const key = dayKey(shopId);
-  let total = 0;
-  try {
-    total = Number(localStorage.getItem(key) || 0) || 0;
-  } catch (_) {}
-  total += Number(amount) || 0;
-  try { localStorage.setItem(key, String(total)); } catch (_) {}
-  return total;
-}
-
-/** Real (non-demo) order GMV → Discord */
-export function notifyOrderRevenue(order, shopName = '') {
-  if (!order || order.demo) return Promise.resolve({ ok: true, skipped: true, reason: 'demo' });
-  const items = Array.isArray(order.items) ? order.items : [];
-  const qty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
-  const itemLine = items
-    .map(i => `${i.name || '商品'}×${i.qty || 1}`)
-    .join(', ')
-    .slice(0, 400);
-  const dayGmv = bumpDayGmv(order.shopId, order.total);
-  return notifyDiscordEvent('注文売上', {
-    店舗: shopName || order.shopId || '',
-    店舗ID: order.shopId || '',
-    注文ID: order.id,
-    席: order.tableNumber,
-    売上: yenText(order.total),
-    点数: qty,
-    本日累計GMV: yenText(dayGmv),
-    商品: itemLine,
-  }, '💰', 'order_revenue');
+    変更前: `${prev.name}（¥${yen(prevMrr)}/月）`,
+    変更後: `${next.name}（¥${yen(nextMrr)}/月）`,
+    MRR増減: deltaText,
+    ARR影響: `${delta >= 0 ? '+' : ''}¥${yen(estimateArr(delta))}/年`,
+  }, delta >= 0 ? '📈' : '📉', 'plan_changed');
 }
