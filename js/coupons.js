@@ -3,7 +3,7 @@
  * Growth+ via feature flag.
  */
 
-import { getShop, patchShopFields, shopCanUse, isNowInWindow } from './shop.js';
+import { getShop, loadShop, patchShopFields, shopCanUse, isNowInWindow } from './shop.js';
 
 const APPLIED_KEY = (shopId) => `mos_coupon_${shopId}`;
 
@@ -41,15 +41,14 @@ export function normalizeCoupon(raw = {}) {
 /** Draft row for editors — unique code so "追加" never collides silently */
 export function createCouponDraft(partial = {}) {
   const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return normalizeCoupon({
-    code: partial.code || `SAVE${suffix}`,
-    type: partial.type || 'percent',
-    value: partial.value != null ? partial.value : 10,
-    label: partial.label || 'クーポン',
-    enabled: partial.enabled !== false,
-    ...partial,
-    id: partial.id || ('c_' + Math.random().toString(36).slice(2, 8)),
-  });
+  const base = { ...partial };
+  if (!String(base.code || '').trim()) base.code = `SAVE${suffix}`;
+  if (base.type !== 'fixed' && base.type !== 'percent') base.type = 'percent';
+  if (base.value == null || base.value === '') base.value = 10;
+  if (!String(base.label || '').trim()) base.label = 'クーポン';
+  if (base.enabled == null) base.enabled = true;
+  if (!base.id) base.id = 'c_' + Math.random().toString(36).slice(2, 8);
+  return normalizeCoupon(base);
 }
 
 function dedupeByCode(coupons) {
@@ -62,12 +61,16 @@ function dedupeByCode(coupons) {
 }
 
 export async function saveCoupons(coupons) {
-  const cleaned = dedupeByCode(
-    (coupons || []).map(normalizeCoupon).filter((c) => c.code)
-  );
-  if ((coupons || []).length && !cleaned.length) {
+  const normalized = (coupons || []).map(normalizeCoupon).filter((c) => c.code);
+  if ((coupons || []).length && !normalized.length) {
     throw new Error('有効なクーポンコードがありません');
   }
+  const codes = normalized.map((c) => c.code);
+  const dupes = codes.filter((c, i) => codes.indexOf(c) !== i);
+  if (dupes.length) {
+    throw new Error(`コードが重複しています: ${[...new Set(dupes)].join(', ')}`);
+  }
+  const cleaned = dedupeByCode(normalized);
   // Narrow patch so Store floor tablets can save without Firebase Auth
   return patchShopFields({ coupons: cleaned });
 }
@@ -134,8 +137,11 @@ export function setAppliedCoupon(shopId, coupon) {
 }
 
 export async function markCouponUsed(code) {
+  // Reload first — merge:true replaces the whole coupons array; stale cache can drop rows
+  try { await loadShop(); } catch (_) {}
   const shop = getShop();
   const key = String(code || '').trim().toUpperCase();
+  if (!key) return shop;
   const list = listCoupons(shop).map((c) => {
     if (c.code === key) {
       return { ...c, usedCount: (Number(c.usedCount) || 0) + 1 };

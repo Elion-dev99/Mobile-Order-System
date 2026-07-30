@@ -15,8 +15,7 @@ import {
 } from './guest-features.js';
 import { mountGuestOrderHistory } from './order-history.js';
 import { placeGuestOrder, computeOrderTotals } from './place-order.js';
-import { validateCoupon, setAppliedCoupon, getAppliedCoupon } from './coupons.js';
-// loadShop already imported — refresh before validate so Store-saved coupons apply
+import { validateCoupon, setAppliedCoupon, getAppliedCoupon, discountForCoupon } from './coupons.js';
 import {
   applyBrandTheme, mountQuickFilters, mountPartySizePrompt, mountShareTableLink,
   loadFavorites, toggleFavorite, isFavorite, itemHasTag, confirmAlcoholAge,
@@ -1423,11 +1422,7 @@ const App = {
         return;
       }
       setAppliedCoupon(getShopId(), v.coupon);
-      const off = Math.floor(
-        v.coupon.type === 'fixed'
-          ? Math.min(subtotal, v.coupon.value)
-          : subtotal * (v.coupon.value / 100)
-      );
+      const off = discountForCoupon(v.coupon, subtotal);
       if (msg) {
         msg.hidden = false;
         msg.classList.remove('is-error');

@@ -313,7 +313,14 @@ const StorePage = {
       panel.hidden = false;
       const list = document.getElementById('storeCouponList');
       if (list) {
-        list.innerHTML = '<p class="store-muted">クーポンは Growth 以上（またはトライアル中）で利用できます。</p>';
+        const access = getShopAccess();
+        const plan = getPlan(getShop()?.planId);
+        const why = !plan?.features?.coupons
+          ? 'Lite プランでは利用できません。Growth 以上へアップグレードしてください。'
+          : access.trialExpired
+            ? 'トライアル終了のためクーポンはロックされています。契約後に利用できます。'
+            : 'クーポンは Growth 以上（またはトライアル中）で利用できます。';
+        list.innerHTML = `<p class="store-muted">${why}</p>`;
       }
       document.getElementById('addStoreCoupon')?.toggleAttribute('hidden', true);
       document.getElementById('saveStoreCoupons')?.toggleAttribute('hidden', true);

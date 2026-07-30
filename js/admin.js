@@ -1452,7 +1452,11 @@ const AdminPage = {
 
     const couponsBlock = document.getElementById('couponsBlock');
     if (couponsBlock) couponsBlock.hidden = !shopCanUse('coupons');
-    this.couponDraft = listCoupons(shop).map((c) => ({ ...c }));
+    // Keep in-progress editor rows across settings re-renders (plan change, unlock, etc.)
+    if (!this._couponsHydrated) {
+      this.couponDraft = listCoupons(shop).map((c) => ({ ...c }));
+      this._couponsHydrated = true;
+    }
     this.renderCouponEditor();
     this.syncOpsChrome();
   },
@@ -1554,6 +1558,7 @@ const AdminPage = {
     try {
       await saveShop(payload);
       if (shopCanUse('coupons')) await saveCoupons(this.couponDraft);
+      this._couponsHydrated = false;
       notifyPlanChanged({ ...getShop(), id: getShopId() }, prevPlan, payload.planId);
       this.applyShopBranding();
       this.renderBilling();
