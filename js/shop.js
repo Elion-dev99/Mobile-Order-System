@@ -111,23 +111,53 @@ export async function loadShop(shopId = resolveShopId()) {
   return shopCache;
 }
 
+function persistShopLocal(shopId) {
+  try {
+    localStorage.setItem(scopedKey('mos_shop_settings'), JSON.stringify(shopCache));
+    const local = JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
+    const idx = local.findIndex(s => s.id === shopId);
+    if (idx >= 0) local[idx] = shopCache;
+    else local.push(shopCache);
+    localStorage.setItem('mos_local_shops', JSON.stringify(local));
+  } catch (_) {}
+}
+
+function isPermissionDenied(e) {
+  const code = e?.code || '';
+  return code === 'permission-denied' || /permission[- ]?denied/i.test(String(e?.message || e || ''));
+}
+
 export async function saveShop(partial, shopId = getShopId()) {
   shopCache = mergeShop({ ...shopCache, ...partial }, shopId);
   try {
+    // Staff Auth required by rules for full document writes
     await setDoc(settingsRef(shopId), shopCache, { merge: true });
   } catch (e) {
     console.warn('saveShop firestore failed, local fallback', e);
-    try {
-      localStorage.setItem(scopedKey('mos_shop_settings'), JSON.stringify(shopCache));
-      const local = JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
-      const idx = local.findIndex(s => s.id === shopId);
-      if (idx >= 0) local[idx] = shopCache;
-      else local.push(shopCache);
-      localStorage.setItem('mos_local_shops', JSON.stringify(local));
-      if (shopId === DEFAULT_SHOP_ID) {
-        try { await setDoc(legacySettingsRef(), shopCache, { merge: true }); } catch (_) {}
-      }
-    } catch (_) {}
+    persistShopLocal(shopId);
+    if (shopId === DEFAULT_SHOP_ID) {
+      try { await setDoc(legacySettingsRef(), shopCache, { merge: true }); } catch (_) {}
+    }
+    // Surface Auth/rules failures so Admin/Store/Ops can prompt login
+    if (isPermissionDenied(e)) throw e;
+  }
+  return shopCache;
+}
+
+/**
+ * Write only selected fields (guest-safe under Firestore rules for stock/coupons).
+ * Prefer this for checkout-side mutations so affectedKeys stay narrow.
+ */
+export async function patchShopFields(partial, shopId = getShopId()) {
+  const updatedAt = Date.now();
+  const payload = { ...partial, updatedAt };
+  shopCache = mergeShop({ ...shopCache, ...payload }, shopId);
+  try {
+    await setDoc(settingsRef(shopId), payload, { merge: true });
+  } catch (e) {
+    console.warn('patchShopFields firestore failed, local fallback', e);
+    persistShopLocal(shopId);
+    if (isPermissionDenied(e)) throw e;
   }
   return shopCache;
 }
@@ -226,6 +256,7 @@ export async function saveMenu(menu, shopId = getShopId()) {
         }, { merge: true });
       } catch (_) {}
     }
+    if (isPermissionDenied(e)) throw e;
   }
   return menuCache;
 }
@@ -268,7 +299,7 @@ export async function setItemStock(itemId, qty) {
   const soldOut = { ...(shopCache.soldOut || {}) };
   if (stock[itemId] === 0) soldOut[itemId] = true;
   else if (stock[itemId] > 0) delete soldOut[itemId];
-  return saveShop({ stock, soldOut });
+  return patchShopFields({ stock, soldOut });
 }
 
 /** Decrement stock for ordered items; auto mark sold out at 0. Growth+ inventory. */
@@ -286,14 +317,14 @@ export async function consumeStockForCart(cart = []) {
     changed = true;
   }
   if (!changed) return shopCache;
-  return saveShop({ stock, soldOut });
+  return patchShopFields({ stock, soldOut });
 }
 
 export async function setItemSoldOut(itemId, soldOut) {
   const map = { ...(shopCache.soldOut || {}) };
   if (soldOut) map[itemId] = true;
   else delete map[itemId];
-  return saveShop({ soldOut: map });
+  return patchShopFields({ soldOut: map });
 }
 
 /* ——— time windows / last order / timed sales ——— */
@@ -414,7 +445,7 @@ export async function ensureTrialStarted() {
   const started = Date.now();
   const ends = started + PRODUCT.trialDays * 86400000;
   try {
-    return await saveShop({ trialStartedAt: started, trialEndsAt: ends });
+    return await patchShopFields({ trialStartedAt: started, trialEndsAt: ends });
   } catch (_) {
     shopCache = mergeShop({ ...shopCache, trialStartedAt: started, trialEndsAt: ends }, getShopId());
     return shopCache;

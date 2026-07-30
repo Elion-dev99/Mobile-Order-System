@@ -1,5 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import {
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBDe3aI2F-W9wSFxHtcaplYs5-U2MdrNI8",
@@ -13,3 +18,7 @@ export const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export const auth = getAuth(app);
+
+// Persist staff sessions across reloads (same browser profile)
+setPersistence(auth, browserLocalPersistence).catch(() => {});

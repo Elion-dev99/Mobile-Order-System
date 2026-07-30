@@ -1,17 +1,42 @@
 # Security notes — QuickOrder
 
-## Current posture (after hardening)
+## Current posture
 
 | Layer | Status |
 |-------|--------|
 | Ops UI password | Client-side SHA-256 gate (session only). **Not** real auth. |
+| Firebase Auth | **Required** for privileged Firestore writes (Ops / Admin / Store) |
 | `OPS_API_SECRET` | Required for Cardinal dispatch/tick, Incident, and client Discord webhooks |
 | Firestore `ops/*` | **Denied** to all clients (no webhook storage) |
-| Shop / menu delete | **Denied** anonymously |
-| Orders | Still open (guest create + kitchen) until Firebase Auth |
+| Shop / menu create·delete·full update | **Signed-in only** |
+| Guest shop patch | Narrow keys only: `stock`, `soldOut`, `coupons`, `updatedAt`, `trialStartedAt`, `trialEndsAt` |
+| Orders | Guest **create** OK; kitchen **status-only** update OK; delete = signed-in |
+| Leads / surveys read | Signed-in only (LP may still **create** leads) |
 | Discord | Prefer Cloudflare `DISCORD_WEBHOOK_URL`; client webhook needs Ops secret |
 
-## Required secrets (set now)
+## Firebase Auth setup (one-shot)
+
+Auth is not enabled on the project until this runs once (`CONFIGURATION_NOT_FOUND` until then).
+
+### Recommended: GitHub Action
+
+1. Locally: `npx firebase-tools@latest login:ci` (Firebase owner Google account) → copy the token
+2. Run workflow: [Configure Firebase Auth + Rules](https://github.com/Elion-dev99/Mobile-Order-System/actions/workflows/configure-firebase-auth.yml)
+3. Paste token + staff email/password → Run  
+   - Enables Email/Password  
+   - Creates the staff user  
+   - Deploys `firestore.rules`
+4. Open Ops / Admin / Store → Firebase login modal (separate from Ops password)
+
+### Manual (Console)
+
+1. [Authentication](https://console.firebase.google.com/project/mobile-order-system-c7c70/authentication/providers) → Get started → Email/Password ON → Add user
+2. Deploy rules: `npx firebase-tools@latest deploy --only firestore:rules --project mobile-order-system-c7c70`  
+   or publish in [Firestore Rules](https://console.firebase.google.com/project/mobile-order-system-c7c70/firestore/rules)
+
+Staff sessions persist in the browser (`browserLocalPersistence`). Ops「鍵」タブから再ログイン / ログアウト可能。
+
+## Required secrets
 
 ### Cloudflare Pages
 
@@ -29,30 +54,22 @@ OPS_API_SECRET=<same as Cloudflare>
 
 ### Ops browser (鍵タブ)
 
-Paste the same `OPS_API_SECRET` after login so Cardinal / AutoHeal / 通知テストが動きます。
+Paste the same `OPS_API_SECRET` after login so Cardinal / AutoHeal / 通知テストが動きます.
 
-## Deploy Firestore rules
+## What guests can still do (anonymous)
 
-```bash
-firebase deploy --only firestore:rules
-```
+- Place orders (`orders` create)
+- Kitchen tablets: update order `status` only
+- Checkout: decrement stock / mark soldOut / mark coupon used / stamp trial window
+- Create leads from LP; create surveys / service requests
 
-Or Firebase Console → Firestore → Rules → publish `firestore.rules`.
+## Remaining gaps
 
-## Rotate after this PR
-
-Assume previous `ops/settings` webhooks and open `/api/cardinal` may have been scraped:
-
-1. Rotate Discord webhook
-2. Rotate `CURSOR_API_KEY` if it was ever exposed
-3. Set a new `OPS_API_SECRET` (CF + GitHub + Ops 鍵タブ)
-
-## Remaining gaps (need infra)
-
-1. **Firebase Auth** (or Cloudflare Access in front of `ops.html`) — only real fix for shops/orders writes
+1. Per-shop Auth claims (today any signed-in user can write any shop)
 2. Hash admin/staff PINs server-side; stop storing plaintext PINs on shop docs
 3. Rate-limit `/api/notify` (env webhook path is still public for guest events)
 4. Broader XSS pass on guest `app.js` / `status.js` / `cart.js`
+5. Optional: Cloudflare Access in front of `ops.html` as a second gate
 
 ## Ops passwords
 

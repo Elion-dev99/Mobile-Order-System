@@ -4,6 +4,9 @@ import {
   isSubscribed, markSubscribed, setItemSoldOut, isItemSoldOut,
   ensureTrialStarted, getShopAccess, shopCanUse, getItemStock, setItemStock,
 } from './shop.js';
+import {
+  ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn,
+} from './staff-firebase-auth.js';
 import { PLANS, PRODUCT } from './config.js';
 import {
   getPlan, yen, estimateMrr, estimateArr, featureEnabled,
@@ -67,6 +70,12 @@ const AdminPage = {
     this.syncOpsChrome();
 
     if (!this.ensureAdminAccess()) return;
+
+    ensureStaffAuthStyles();
+    await ensureStaffFirebase({
+      title: '厨房・管理の Firebase ログイン',
+      hint: 'メニュー保存・設定・注文削除に必要です。ステータス更新だけなら「後で」でも可。',
+    }).catch(() => {});
 
     this.subscribeToOrders();
     this.subscribeToLeads();
@@ -269,10 +278,11 @@ const AdminPage = {
     document.getElementById('exportCsvBtn')?.addEventListener('click', () => this.exportRangeCsv());
     document.getElementById('printKitchenBtn')?.addEventListener('click', () => this.printKitchenTickets());
     document.getElementById('kdsModeBar')?.querySelectorAll('[data-kds]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         if (!shopCanUse('kdsModes')) return;
+        if (!(await this.requireFirebaseForWrite('KDSモード変更'))) return;
         this.kdsMode = btn.dataset.kds || 'timeline';
-        saveShop({ kdsMode: this.kdsMode }).catch(() => {});
+        try { await saveShop({ kdsMode: this.kdsMode }); } catch (e) { console.error(e); }
         this.syncOpsChrome();
         this.renderOrders();
       });
@@ -675,11 +685,27 @@ const AdminPage = {
     } catch (e) { console.error(e); }
   },
 
+  async requireFirebaseForWrite(actionLabel = 'この操作') {
+    if (isStaffSignedIn()) return true;
+    ensureStaffAuthStyles();
+    const user = await ensureStaffFirebase({
+      title: 'Firebase ログインが必要です',
+      hint: `${actionLabel}には Firebase Authentication が必要です。`,
+    });
+    return !!user;
+  },
+
   async clearAll() {
     if (!confirm('すべての注文をFirestoreから削除しますか？')) return;
-    for (const order of this.orders) {
-      try { await deleteDoc(doc(db, 'orders', order.id)); } catch (e) {}
+    if (!(await this.requireFirebaseForWrite('注文の一括削除'))) {
+      alert('Firebase ログイン後に削除できます');
+      return;
     }
+    let failed = 0;
+    for (const order of this.orders) {
+      try { await deleteDoc(doc(db, 'orders', order.id)); } catch (e) { failed += 1; }
+    }
+    if (failed) alert(`${failed}件の削除に失敗しました（権限または通信を確認）`);
   },
 
   renderMenuEditor() {
@@ -944,6 +970,10 @@ const AdminPage = {
   },
 
   async persistMenu() {
+    if (!(await this.requireFirebaseForWrite('メニュー保存'))) {
+      alert('Firebase ログイン後に保存できます');
+      return;
+    }
     this.syncMenuDraftFromDom();
     const before = Array.isArray(this._menuSnapshot) ? this._menuSnapshot : [];
     const after = Array.isArray(this.menuDraft?.items) ? this.menuDraft.items : [];
@@ -996,6 +1026,10 @@ const AdminPage = {
 
     list.querySelectorAll('[data-lead]').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (!(await this.requireFirebaseForWrite('リード更新'))) {
+          alert('Firebase ログイン後に更新できます');
+          return;
+        }
         try {
           const status = btn.dataset.leadStatus;
           await updateDoc(doc(db, 'leads', btn.dataset.lead), { status });
@@ -1003,7 +1037,10 @@ const AdminPage = {
             const lead = this.leads.find(l => l.id === btn.dataset.lead);
             if (lead) notifyLeadWon({ ...lead, status });
           }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+          console.error(e);
+          alert('リード更新に失敗しました（権限を確認）');
+        }
       });
     });
   },
@@ -1141,9 +1178,19 @@ const AdminPage = {
       }).join('');
       catalog.querySelectorAll('[data-pick-plan]').forEach((card) => {
         card.addEventListener('click', async () => {
+          if (!(await this.requireFirebaseForWrite('プラン変更'))) {
+            alert('Firebase ログイン後に変更できます');
+            return;
+          }
           const id = card.dataset.pickPlan;
           const prev = getShop()?.planId;
-          await saveShop({ planId: id, billingCycle: 'annual' });
+          try {
+            await saveShop({ planId: id, billingCycle: 'annual' });
+          } catch (e) {
+            console.error(e);
+            alert('プラン変更に失敗しました');
+            return;
+          }
           notifyPlanChanged({ ...getShop(), id: getShopId() }, prev, id);
           this.applyShopBranding();
           this.renderBilling();
@@ -1157,8 +1204,18 @@ const AdminPage = {
   },
 
   async upgradeToGrowthAnnual() {
+    if (!(await this.requireFirebaseForWrite('プラン変更'))) {
+      alert('Firebase ログイン後に変更できます');
+      return;
+    }
     const prev = getShop()?.planId;
-    await saveShop({ planId: 'growth', billingCycle: 'annual' });
+    try {
+      await saveShop({ planId: 'growth', billingCycle: 'annual' });
+    } catch (e) {
+      console.error(e);
+      alert('プラン変更に失敗しました');
+      return;
+    }
     notifyPlanChanged({ ...getShop(), id: getShopId() }, prev, 'growth');
     this.renderBilling();
     this.renderAnalytics();
@@ -1170,7 +1227,17 @@ const AdminPage = {
   },
 
   async activateSubscription() {
-    await markSubscribed();
+    if (!(await this.requireFirebaseForWrite('課金有効化'))) {
+      alert('Firebase ログイン後に有効化できます');
+      return;
+    }
+    try {
+      await markSubscribed();
+    } catch (e) {
+      console.error(e);
+      alert('課金有効化に失敗しました');
+      return;
+    }
     this.renderBilling();
     this.renderRevenueBanner();
     this.renderAnalytics();
@@ -1290,6 +1357,10 @@ const AdminPage = {
   },
 
   async persistSettings() {
+    if (!(await this.requireFirebaseForWrite('設定保存'))) {
+      alert('Firebase ログイン後に保存できます');
+      return;
+    }
     this.syncCouponDraftFromDom();
     const payload = {
       name: document.getElementById('settingName')?.value?.trim() || 'QuickOrder',
@@ -1322,7 +1393,7 @@ const AdminPage = {
       alert('設定を保存しました');
     } catch (e) {
       console.error(e);
-      alert('保存に失敗しました');
+      alert('保存に失敗しました（Firebase ログインと Firestore rules を確認）');
     }
   },
 };

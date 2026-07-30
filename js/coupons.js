@@ -3,8 +3,7 @@
  * Growth+ via feature flag.
  */
 
-import { getShop, saveShop, shopCanUse } from './shop.js';
-import { isNowInWindow } from './shop.js';
+import { getShop, saveShop, patchShopFields, shopCanUse, isNowInWindow } from './shop.js';
 
 const APPLIED_KEY = (shopId) => `mos_coupon_${shopId}`;
 
@@ -91,5 +90,6 @@ export async function markCouponUsed(code) {
     }
     return c;
   });
-  return saveCoupons(list);
+  // Guest checkout path: patch only coupons (Firestore rules allow narrow field updates)
+  return patchShopFields({ coupons: list });
 }

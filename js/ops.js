@@ -3,6 +3,9 @@ import {
 } from './ops-auth.js';
 import { getOpsApiSecret, setOpsApiSecret, clearOpsApiSecret } from './ops-secret.js';
 import {
+  ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn, signOutStaff, getStaffUser,
+} from './staff-firebase-auth.js';
+import {
   listShops, upsertShop, deleteShop, ensureSeedShops
 } from './shop.js';
 import { guestEntryUrl, DEFAULT_SHOP_ID, listSeedShops } from './tenant.js';
@@ -69,6 +72,16 @@ const OpsPage = {
     this.showApp();
     this.renderRole();
     this.bind();
+    ensureStaffAuthStyles();
+    try {
+      const user = await ensureStaffFirebase({
+        title: 'Firebase スタッフログイン',
+        hint: '店舗作成・注文削除・リード閲覧など特権操作に必要です。Firebase Authentication のユーザーで入室してください。',
+      });
+      this.renderFirebaseBadge(user);
+    } catch (e) {
+      console.warn('staff firebase', e);
+    }
     try {
       await ensureSeedShops();
     } catch (e) {
@@ -302,8 +315,35 @@ const OpsPage = {
 
   renderRole() {
     const role = getOpsRole();
+    const fb = isStaffSignedIn() ? ' · FB' : '';
     document.getElementById('opsRoleBadge').textContent =
-      role === 'cursor' ? 'Cursor' : role === 'owner' ? 'Owner' : '—';
+      (role === 'cursor' ? 'Cursor' : role === 'owner' ? 'Owner' : '—') + fb;
+  },
+
+  renderFirebaseBadge(user = getStaffUser()) {
+    this.renderRole();
+    const st = document.getElementById('opsSecretStatus');
+    const el = document.getElementById('opsFirebaseStatus');
+    if (el) {
+      el.hidden = false;
+      el.textContent = user
+        ? `Firebase: ${user.email || user.uid}`
+        : 'Firebase: 未ログイン（特権書き込みは失敗します）';
+    }
+    if (st && user) {
+      // keep quiet unless security panel open
+    }
+  },
+
+  async requireFirebaseForWrite(actionLabel = 'この操作') {
+    if (isStaffSignedIn()) return true;
+    ensureStaffAuthStyles();
+    const user = await ensureStaffFirebase({
+      title: 'Firebase ログインが必要です',
+      hint: `${actionLabel}には Firebase Authentication が必要です。`,
+    });
+    this.renderFirebaseBadge(user);
+    return !!user;
   },
 
   bind() {
@@ -326,6 +366,10 @@ const OpsPage = {
       status.textContent = '作成中...';
       if (!id || id.length < 2) {
         status.textContent = '店舗IDは英小文字・数字・ハイフンで2文字以上にしてください';
+        return;
+      }
+      if (!(await this.requireFirebaseForWrite('店舗作成'))) {
+        status.textContent = 'Firebase ログインが必要です';
         return;
       }
       try {
@@ -390,6 +434,20 @@ const OpsPage = {
     if (secretInput && getOpsApiSecret()) {
       secretInput.placeholder = '（保存済み — 変更する場合のみ入力）';
     }
+
+    document.getElementById('opsFirebaseLogin')?.addEventListener('click', async () => {
+      ensureStaffAuthStyles();
+      const user = await ensureStaffFirebase({
+        title: 'Firebase スタッフログイン',
+        hint: 'Firestore 特権書き込み用。Authentication で作成したユーザーを入力。',
+      });
+      this.renderFirebaseBadge(user);
+    });
+    document.getElementById('opsFirebaseLogout')?.addEventListener('click', async () => {
+      await signOutStaff();
+      this.renderFirebaseBadge(null);
+    });
+    this.renderFirebaseBadge();
 
     document.getElementById('opsNotifyForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -753,6 +811,10 @@ const OpsPage = {
       const id = document.getElementById('shopEditId')?.textContent?.trim();
       const st = document.getElementById('shopEditStatus');
       if (!id) return;
+      if (!(await this.requireFirebaseForWrite('店舗編集'))) {
+        if (st) { st.hidden = false; st.textContent = 'Firebase ログインが必要です'; }
+        return;
+      }
       if (st) { st.hidden = false; st.textContent = '保存中...'; }
       try {
         const subscribed = !!document.getElementById('editShopSubscribed')?.checked;
@@ -988,6 +1050,7 @@ const OpsPage = {
     el.querySelectorAll('[data-del]').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm(`${btn.dataset.del} を削除しますか？`)) return;
+        if (!(await this.requireFirebaseForWrite('店舗削除'))) return;
         await deleteShop(btn.dataset.del);
         await this.refreshShops();
       });
@@ -1303,6 +1366,10 @@ const OpsPage = {
   },
 
   async deleteSelectedOrders() {
+    if (!(await this.requireFirebaseForWrite('注文削除'))) {
+      this.setOrdersStatus('Firebase ログインが必要です');
+      return;
+    }
     const ids = this.selectedOrderIds();
     if (!ids.length) {
       this.setOrdersStatus('選択がありません');
@@ -1323,6 +1390,10 @@ const OpsPage = {
   },
 
   async purgeLoadOrders() {
+    if (!(await this.requireFirebaseForWrite('LOAD-* 削除'))) {
+      this.setOrdersStatus('Firebase ログインが必要です');
+      return;
+    }
     const load = (this.orders || []).filter((o) => String(o.id || '').toUpperCase().startsWith('LOAD'));
     if (!load.length) {
       this.setOrdersStatus('LOAD-* 注文はありません');
@@ -1368,6 +1439,10 @@ const OpsPage = {
 
     el.querySelectorAll('[data-lead]').forEach((btn) => {
       btn.addEventListener('click', async () => {
+        if (!(await this.requireFirebaseForWrite('リード更新'))) {
+          alert('Firebase ログイン後に更新できます');
+          return;
+        }
         const status = btn.dataset.leadStatus;
         try {
           await updateDoc(doc(db, 'leads', btn.dataset.lead), { status, updatedAt: Date.now() });
@@ -1421,6 +1496,11 @@ const OpsPage = {
   },
 
   async markFeesBilled(allUnbilled) {
+    if (!(await this.requireFirebaseForWrite('手数料更新'))) {
+      const st0 = document.getElementById('feesStatus');
+      if (st0) { st0.hidden = false; st0.textContent = 'Firebase ログインが必要です'; }
+      return;
+    }
     const st = document.getElementById('feesStatus');
     let ids = [];
     if (allUnbilled) {

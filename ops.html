@@ -428,6 +428,14 @@
     </section>
 
     <section data-ops-panel="security" hidden>
+      <h2>Firebase Auth（特権書き込み）</h2>
+      <p class="ops-muted">店舗・メニュー・注文削除・リード閲覧は Firebase ログイン必須です。厨房のステータス更新だけは従来どおり匿名でも可。</p>
+      <p id="opsFirebaseStatus" class="ops-status" hidden></p>
+      <div class="ops-toolbar">
+        <button type="button" id="opsFirebaseLogin" class="ops-btn">Firebase ログイン</button>
+        <button type="button" id="opsFirebaseLogout" class="ops-btn-secondary">ログアウト</button>
+      </div>
+
       <h2>Ops API シークレット</h2>
       <p class="ops-muted">Cloudflare の <code>OPS_API_SECRET</code> と同じ値。Cardinal / Incident / クライアントWebhook通知に必要です。既定ではこのタブのセッションにのみ保持します。</p>
       <form id="opsSecretForm" class="ops-form-grid">
