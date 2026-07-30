@@ -35,6 +35,10 @@ export const NOTIFY_EVENTS = [
   { id: 'item_added', label: '商品の追加', defaultOn: true },
   { id: 'item_removed', label: '商品の削除', defaultOn: true },
   { id: 'bill_request', label: '客席からの会計リクエスト', defaultOn: true },
+  { id: 'order_new', label: '新規注文', defaultOn: true },
+  { id: 'order_status', label: '注文ステータス更新', defaultOn: true },
+  { id: 'staff_call', label: '店員・お水などの呼出', defaultOn: true },
+  { id: 'load_test', label: '負荷テスト進捗', defaultOn: true },
 ];
 
 const EVENT_COLORS = {
@@ -49,6 +53,10 @@ const EVENT_COLORS = {
   item_added: 0x57f287,
   item_removed: 0xed4245,
   bill_request: 0xfaa61a,
+  order_new: 0x5865f2,
+  order_status: 0x57f287,
+  staff_call: 0x3dcf9a,
+  load_test: 0x9b59b6,
   test: 0x3dcf9a,
   default: 0x3dcf9a,
 };
@@ -483,6 +491,55 @@ const ALL_EVENT_SAMPLES = [
       店舗ID: 'test-yakiniku',
       席番号: '5',
       案内: 'お客様はレジへ向かいます。追加注文はロック済みです',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'order_new',
+    title: '新規注文',
+    emoji: '🧾',
+    fields: {
+      店舗: 'テスト焼肉',
+      店舗ID: 'test-yakiniku',
+      注文ID: 'ORD-TEST01',
+      席: '3',
+      合計: '¥2,420',
+      明細: '🍛 特製チキンカレー×1, 🍟 フライドポテト×1',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'order_status',
+    title: '注文ステータス: 完了',
+    emoji: '✅',
+    fields: {
+      店舗: 'テスト焼肉',
+      注文ID: 'ORD-TEST01',
+      席: '3',
+      ステータス: '完了',
+      合計: '¥2,420',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'staff_call',
+    title: '店員呼出',
+    emoji: '🙋',
+    fields: {
+      店舗: 'テスト焼肉',
+      席番号: '3',
+      内容: 'お水ください',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'load_test',
+    title: '負荷テスト',
+    emoji: '🧪',
+    fields: {
+      phase: 'sample',
+      shopCount: 20,
+      ordersPerShop: 8,
       種別: 'テスト通知',
     },
   },

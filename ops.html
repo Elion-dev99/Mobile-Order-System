@@ -178,6 +178,24 @@
         <select id="labShop"></select>
       </label>
       <div id="labLinks" class="ops-lab-links"></div>
+      <h3>負荷テスト（店舗大量追加・注文・会計・Discord）</h3>
+      <p class="ops-muted">店舗を一括作成し、注文→調理→完了、店員呼出、会計、全イベント通知を Discord に送ります。先に通知タブで Webhook を保存してください。</p>
+      <div class="ops-form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0;">
+        <label>店舗数
+          <input id="loadTestShops" type="number" min="1" max="80" value="25">
+        </label>
+        <label>店舗あたり注文
+          <input id="loadTestOrders" type="number" min="1" max="40" value="10">
+        </label>
+        <label>Webhook（空なら通知設定を使用）
+          <input id="loadTestWebhook" type="url" placeholder="https://discord.com/api/webhooks/...">
+        </label>
+      </div>
+      <button type="button" id="opsLoadTestRun" class="ops-btn-secondary">負荷テスト実行</button>
+      <button type="button" id="opsLoadTestStop" class="ops-btn-secondary" disabled>停止</button>
+      <pre id="opsLoadTestLog" class="ops-muted" style="white-space:pre-wrap;max-height:240px;overflow:auto;margin-top:12px;padding:12px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
+      <p id="opsLoadTestStatus" class="ops-status" hidden></p>
+
       <h3>チェックリスト</h3>
       <ul id="labChecklist" class="ops-checklist"></ul>
       <h3>業界機能マトリクス</h3>

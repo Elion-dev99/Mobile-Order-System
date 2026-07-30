@@ -18,6 +18,7 @@ import {
 } from './notify.js';
 import { maybeNotifySystemLoad } from './load-monitor.js';
 import { ordersToCsv, downloadCsv, applyBrandTheme } from './guest-extras.js';
+import { notifyOrderStatus } from './notify-orders.js';
 
 const AdminPage = {
   filter: 'received',
@@ -397,6 +398,14 @@ const AdminPage = {
     if (hit) {
       hit.status = status;
       this.renderOrders();
+      notifyOrderStatus({
+        shopId: getShopId(),
+        shopName: getShop()?.name,
+        orderId,
+        tableNumber: hit.tableNumber,
+        status,
+        total: hit.total,
+      }).catch(() => {});
     }
     try {
       await updateDoc(doc(db, 'orders', orderId), { status });

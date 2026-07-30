@@ -63,13 +63,28 @@ export async function onRequestPost(context) {
 
   const endpoint = webhook.includes('?') ? `${webhook}&wait=true` : `${webhook}?wait=true`;
 
-  try {
+  async function sendOnce() {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const raw = await res.text();
+    return { res, raw };
+  }
+
+  try {
+    let { res, raw } = await sendOnce();
+    // Discord rate limit → brief retry
+    if (res.status === 429) {
+      let retry = 1.2;
+      try {
+        const j = JSON.parse(raw);
+        if (j.retry_after) retry = Number(j.retry_after) + 0.2;
+      } catch (_) {}
+      await new Promise((r) => setTimeout(r, Math.min(5000, retry * 1000)));
+      ({ res, raw } = await sendOnce());
+    }
     if (!res.ok) {
       return json({ ok: false, error: 'discord_error', status: res.status, raw: raw.slice(0, 300) }, 502);
     }
