@@ -1,0 +1,222 @@
+/* Store management console */
+.store-page {
+  padding-bottom: 48px;
+}
+
+.store-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 16px 12px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.store-kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--g-accent);
+  margin-bottom: 4px;
+}
+
+.store-header h1 {
+  font-family: var(--g-display);
+  font-size: clamp(1.8rem, 6vw, 2.4rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.store-sub {
+  margin-top: 6px;
+  color: var(--g-muted);
+  font-size: 0.88rem;
+}
+
+.store-open-toggle {
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  background: rgba(13, 92, 77, 0.14);
+  color: var(--g-accent);
+  border: 1px solid rgba(13, 92, 77, 0.25);
+  white-space: nowrap;
+}
+.store-open-toggle.is-closed {
+  background: rgba(196, 94, 42, 0.12);
+  color: var(--g-warm);
+  border-color: rgba(196, 94, 42, 0.28);
+}
+
+.store-quick {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 16px 14px;
+  max-width: 860px;
+  margin: 0 auto;
+  scrollbar-width: none;
+}
+.store-quick::-webkit-scrollbar { display: none; }
+.store-quick a {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(23, 32, 28, 0.06);
+  color: var(--g-ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid var(--g-line);
+}
+
+.store-main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.store-card {
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.store-card h2 {
+  font-family: var(--g-display);
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+}
+
+.store-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.store-card-head h2 { margin-bottom: 0; }
+.store-card-head span { color: var(--g-muted); font-size: 0.8rem; }
+
+.store-help {
+  color: var(--g-muted);
+  font-size: 0.84rem;
+  margin-bottom: 12px;
+}
+
+.store-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.store-stats div {
+  background: rgba(23, 32, 28, 0.04);
+  border-radius: 14px;
+  padding: 12px;
+}
+.store-stats span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--g-muted);
+  margin-bottom: 6px;
+}
+.store-stats strong {
+  font-family: var(--g-display);
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.store-mini-btn {
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(13, 92, 77, 0.12);
+  color: var(--g-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.store-table-list {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.store-table-row {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(23, 32, 28, 0.04);
+}
+.store-table-row strong { font-size: 0.9rem; }
+.store-table-row code {
+  font-size: 0.68rem;
+  color: var(--g-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.store-table-row button,
+.store-table-row a {
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--g-ink);
+  color: #F4F7F6;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.store-form {
+  display: grid;
+  gap: 10px;
+}
+.store-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--g-muted);
+  font-weight: 600;
+}
+.store-form input,
+.store-form select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--g-line);
+  background: rgba(255,255,255,0.75);
+  color: var(--g-ink);
+  font: inherit;
+}
+.store-save {
+  margin-top: 6px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--g-accent);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+.store-status {
+  font-size: 0.86rem;
+  color: var(--g-accent);
+}
+.store-status.error { color: var(--g-warm); }
+
+@media (max-width: 560px) {
+  .store-stats { grid-template-columns: 1fr; }
+  .store-table-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

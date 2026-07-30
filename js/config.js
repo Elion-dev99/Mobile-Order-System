@@ -194,6 +194,9 @@ export const DEFAULT_SHOP = {
   ownerPhone: '',
   stores: 1,
   locale: 'ja',
+  isOpen: true,
+  hoursNote: '11:00–22:00',
+  address: '',
 };
 
 /** @deprecated 互換用。Growth 月額を返す */

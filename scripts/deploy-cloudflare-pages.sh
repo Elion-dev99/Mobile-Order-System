@@ -22,7 +22,7 @@ rm -rf "$PUBLISH"
 mkdir -p "$PUBLISH"
 
 # Prefer portable copy (no rsync dependency in CI/cloud agents)
-for item in admin.html cart.html index.html status.html lp.html favicon.svg css js .nojekyll; do
+for item in admin.html cart.html index.html status.html lp.html store.html favicon.svg css js .nojekyll; do
   if [[ -e "$ROOT/$item" ]]; then
     cp -a "$ROOT/$item" "$PUBLISH/"
   fi

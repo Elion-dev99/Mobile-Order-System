@@ -25,7 +25,14 @@ export async function loadShop() {
   try {
     const snap = await getDoc(SETTINGS_REF());
     if (snap.exists()) {
-      shopCache = { ...DEFAULT_SHOP, ...snap.data() };
+      const data = snap.data() || {};
+      shopCache = { ...DEFAULT_SHOP, ...data };
+      // empty strings from Firestore should not wipe defaults
+      Object.keys(DEFAULT_SHOP).forEach((key) => {
+        if (shopCache[key] === '' || shopCache[key] == null) {
+          shopCache[key] = DEFAULT_SHOP[key];
+        }
+      });
     }
   } catch (e) {
     console.warn('shop settings load failed', e);

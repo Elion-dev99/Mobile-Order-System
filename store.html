@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0D5C4D">
+  <title>店舗管理 | QuickOrder</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/guest.css">
+  <link rel="stylesheet" href="css/store.css">
+</head>
+<body class="guest store-page">
+
+<header class="store-header">
+  <div>
+    <p class="store-kicker">店舗管理</p>
+    <h1 id="storeTitle">QuickOrder</h1>
+    <p class="store-sub" id="storePlanLine">Growth · —</p>
+  </div>
+  <button type="button" class="store-open-toggle" id="openToggle">営業中</button>
+</header>
+
+<nav class="store-quick">
+  <a href="admin.html">厨房</a>
+  <a href="admin.html?view=menu">メニュー</a>
+  <a href="admin.html?view=analytics">分析</a>
+  <a href="index.html?table=1">客席</a>
+  <a href="lp.html">販売LP</a>
+</nav>
+
+<main class="store-main">
+  <section class="store-card">
+    <div class="store-card-head">
+      <h2>本日の状況</h2>
+      <span id="storeClock"></span>
+    </div>
+    <div class="store-stats">
+      <div><span>受付中</span><strong id="statPending">0</strong></div>
+      <div><span>本日注文</span><strong id="statToday">0</strong></div>
+      <div><span>本日売上</span><strong id="statGmv">¥0</strong></div>
+    </div>
+  </section>
+
+  <section class="store-card">
+    <div class="store-card-head">
+      <h2>テーブルQR</h2>
+      <button type="button" class="store-mini-btn" id="regenTables">再生成</button>
+    </div>
+    <p class="store-help">席番号ごとの注文URL。印刷してテーブルに設置できます。</p>
+    <div id="tableList" class="store-table-list"></div>
+  </section>
+
+  <section class="store-card">
+    <h2>店舗プロフィール</h2>
+    <form id="storeForm" class="store-form">
+      <label>店舗名<input id="storeName" name="name" required></label>
+      <label>サブタイトル<input id="storeSubtitle" name="subtitle"></label>
+      <label>営業時間メモ<input id="storeHours" name="hoursNote" placeholder="11:00–22:00"></label>
+      <label>住所・案内<input id="storeAddress" name="address" placeholder="任意"></label>
+      <label>テーブル数<input id="storeTables" name="tableCount" type="number" min="1" max="300"></label>
+      <label>担当メール<input id="storeEmail" name="ownerEmail" type="email"></label>
+      <label>担当電話<input id="storePhone" name="ownerPhone" type="tel"></label>
+      <label>客席デフォルト言語
+        <select id="storeLocale" name="locale">
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <button type="submit" class="store-save">保存する</button>
+      <p class="store-status" id="storeStatus" hidden></p>
+    </form>
+  </section>
+</main>
+
+<script type="module" src="js/store.js"></script>
+</body>
+</html>

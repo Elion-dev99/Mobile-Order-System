@@ -3,3 +3,4 @@
 .cf-publish/
 .env
 .env.*
+.qa/
