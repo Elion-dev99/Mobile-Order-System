@@ -168,6 +168,29 @@ body {
   animation: lpRise 0.7s ease 0.24s both;
 }
 
+.lp-scarcity {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(250, 166, 26, 0.14);
+  color: #f0c674;
+  font-size: 0.85rem;
+  font-weight: 600;
+  animation: lpRise 0.7s ease 0.2s both;
+}
+
+.lp-quote-preview {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(47, 230, 166, 0.08);
+  border: 1px solid rgba(47, 230, 166, 0.25);
+  color: var(--text, #e8fff6);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
 .lp-section {
   max-width: 1120px;
   margin: 0 auto;

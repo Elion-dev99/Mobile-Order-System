@@ -23,6 +23,8 @@
   </div>
 </div>
 
+<div id="adminRevenueBanner" class="admin-revenue-banner" hidden></div>
+
 <div class="admin-tabs" id="adminViewTabs">
   <button class="admin-tab active" data-view="orders">注文</button>
   <button class="admin-tab" data-view="analytics">分析</button>
@@ -129,8 +131,13 @@
         <li>年払いでキャッシュ回収（実質2ヶ月無料）</li>
         <li>Business/Chainは初期費用も同時クローズ</li>
       </ol>
-      <button class="admin-save-btn" id="activateSubBtn">この店舗の課金を有効化</button>
+      <div class="billing-cta-row" id="billingCtaRow">
+        <a class="admin-save-btn" id="billingPayLink" href="lp.html#contact">見積もり・導入相談</a>
+        <button class="admin-secondary-btn" id="billingUpgradeBtn" type="button">Growth年払いに切替（推奨）</button>
+      </div>
+      <button class="admin-secondary-btn" id="activateSubBtn" type="button">この店舗の課金を有効化（手動）</button>
       <p class="admin-muted" id="subStatus"></p>
+      <p class="admin-muted" id="trialStatus"></p>
     </div>
   </div>
 </div>

@@ -929,10 +929,15 @@ const OpsPage = {
 
     const mrr = this.shops.reduce((s, shop) => s + estimateMrr({
       planId: shop.planId,
-      cycle: shop.billingCycle || 'monthly',
-      stores: 1,
+      cycle: shop.billingCycle || 'annual',
+      stores: shop.stores || 1,
     }), 0);
     set('hqMrr', `¥${yen(mrr)}`);
+
+    // Chain 0.8% platform fee ledger (unbilled)
+    const feeOrders = this.orders.filter(o => !o.demo && (o.platformFee || 0) > 0 && (o.platformFeeStatus || 'unbilled') === 'unbilled');
+    const unbilledFee = feeOrders.reduce((s, o) => s + (o.platformFee || 0), 0);
+    set('hqPlatformFee', `¥${yen(unbilledFee)}`);
   },
 
   renderRequests() {

@@ -1,7 +1,7 @@
 import { TablePin } from './pin.js';
 import {
   loadShop, loadMenu, getShop, getMenu, getShopId, isItemSoldOut,
-  getItemUnitPrice, isSaleActive, getOrderingBlockReason,
+  getItemUnitPrice, isSaleActive, getOrderingBlockReason, shopCanUse,
 } from './shop.js';
 import { ITEM_I18N, CAT_I18N, ALLERGEN_I18N, UI_I18N } from './i18n-menu.js';
 import { activateDemoFromUrl, cartStorageKey, ensureDemoBanner, isDemoMode } from './demo.js';
@@ -304,10 +304,20 @@ const App = {
   setupLangToggle() {
     const wrap = document.getElementById('langToggle');
     if (!wrap) return;
+    // multiLang is Growth+ (and requires active trial / subscription)
+    if (!shopCanUse('multiLang')) {
+      wrap.classList.add('hidden');
+      this.locale = 'ja';
+      return;
+    }
     wrap.classList.remove('hidden');
     wrap.querySelectorAll('button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.lang === this.locale);
       btn.onclick = () => {
+        if (btn.dataset.lang === 'en' && !shopCanUse('multiLang')) {
+          showToast('日英メニューは Growth 以上の機能です');
+          return;
+        }
         this.locale = btn.dataset.lang;
         try { localStorage.setItem('mos_locale', this.locale); } catch (_) {}
         wrap.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));

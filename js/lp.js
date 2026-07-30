@@ -1,14 +1,81 @@
-import { PLANS, PRODUCT, ADDONS, getPlan, yen, planPrice, planComparisonRows, estimateMrr } from './plans.js';
+import {
+  PLANS, PRODUCT, ADDONS, getPlan, yen, planPrice, planComparisonRows,
+  estimateMrr, annualSavings, paymentCta, estimateSetup,
+} from './plans.js';
 import { submitLead } from './leads.js';
 
-let billingCycle = 'monthly';
+let billingCycle = PRODUCT.defaultBillingCycle || 'annual';
 let selectedPlanId = 'growth';
+
+function renderScarcity() {
+  const el = document.getElementById('lpScarcity');
+  if (!el) return;
+  const n = Number(PRODUCT.introSlotsRemaining || 0);
+  if (n <= 0) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  el.textContent = `${PRODUCT.introSlotsLabel} 残り ${n} 店 · 14日トライアル付き`;
+}
+
+function updateHeroCta() {
+  const growth = getPlan('growth');
+  const ap = planPrice(growth, 'annual');
+  const btn = document.getElementById('heroAnnualCta');
+  if (btn) {
+    btn.textContent = `Growth年払い 実質¥${yen(ap.perMonthEffective)}/月で相談`;
+    btn.addEventListener('click', () => {
+      selectedPlanId = 'growth';
+      billingCycle = 'annual';
+      document.querySelectorAll('.lp-cycle').forEach(b => b.classList.toggle('active', b.dataset.cycle === 'annual'));
+      const sel = document.getElementById('leadPlan');
+      const cycle = document.getElementById('leadCycle');
+      if (sel) sel.value = 'growth';
+      if (cycle) cycle.value = 'annual';
+      updateQuotePreview();
+      renderPlans();
+    }, { once: false });
+  }
+}
+
+function renderPayCta() {
+  const a = document.getElementById('lpPayCta');
+  if (!a) return;
+  const pay = paymentCta();
+  if (pay.mode === 'stripe') {
+    a.hidden = false;
+    a.href = pay.href;
+    a.textContent = pay.label;
+    a.target = '_blank';
+    a.rel = 'noopener';
+  } else {
+    a.hidden = true;
+  }
+}
+
+function updateQuotePreview() {
+  const el = document.getElementById('leadQuotePreview');
+  if (!el) return;
+  const plan = getPlan(selectedPlanId || document.getElementById('leadPlan')?.value || 'growth');
+  const cycle = document.getElementById('leadCycle')?.value || billingCycle;
+  const stores = Number(document.getElementById('leadForm')?.stores?.value || 1);
+  const mrr = estimateMrr({ planId: plan.id, stores, cycle });
+  const setup = estimateSetup(plan.id);
+  const ap = planPrice(plan, cycle);
+  if (cycle === 'annual') {
+    el.textContent = `見積プレビュー: ${plan.name} 年額 ¥${yen(ap.chargeNow)}（実質 ¥${yen(ap.perMonthEffective)}/月・¥${yen(annualSavings(plan))}お得）+ 初期 ¥${yen(setup)} ≒ 初回 ¥${yen(ap.chargeNow + setup)}`;
+  } else {
+    el.textContent = `見積プレビュー: ${plan.name} 月額 ¥${yen(mrr)} + 初期 ¥${yen(setup)} · 年払いなら実質 ¥${yen(planPrice(plan, 'annual').perMonthEffective)}/月`;
+  }
+}
 
 function renderPlans() {
   const grid = document.getElementById('planGrid');
   grid.innerHTML = PLANS.map(plan => {
     const price = planPrice(plan, billingCycle);
     const setup = yen(plan.priceSetup);
+    const save = annualSavings(plan);
     return `
       <article class="lp-plan ${plan.recommended ? 'is-rec' : ''}" data-plan="${plan.id}">
         ${plan.badge ? `<div class="lp-plan-badge">${plan.badge}</div>` : ''}
@@ -18,7 +85,9 @@ function renderPlans() {
           <span>¥</span><strong>${yen(price.perMonthEffective)}</strong><em>/月</em>
         </div>
         <div class="lp-plan-sub">
-          ${billingCycle === 'annual' ? `年額 ¥${yen(price.chargeNow)}（一括）` : '税別・月額課金'}
+          ${billingCycle === 'annual'
+            ? `年額 ¥${yen(price.chargeNow)}（一括）· ¥${yen(save)}お得`
+            : '税別・月額課金'}
           · 初期 ¥${setup}
         </div>
         <ul>${plan.highlights.map(h => `<li>${h}</li>`).join('')}</ul>
@@ -31,11 +100,12 @@ function renderPlans() {
       selectedPlanId = btn.dataset.plan;
       const sel = document.getElementById('leadPlan');
       if (sel) sel.value = selectedPlanId;
+      updateQuotePreview();
     });
   });
 
   document.getElementById('planFootnote').textContent =
-    `${PRODUCT.competitorNote} 追加店舗は ¥${yen(PRODUCT.extraStoreMonthly)}/月（Growth以上・Chainは店舗無制限）。`;
+    `${PRODUCT.competitorNote} 追加店舗は ¥${yen(PRODUCT.extraStoreMonthly)}/月（Growth以上・Chainは店舗無制限）。${PRODUCT.trialDays}日トライアルあり。`;
 }
 
 function renderCompare() {
@@ -110,12 +180,20 @@ document.querySelectorAll('.lp-cycle').forEach(btn => {
     document.getElementById('leadCycle').value = billingCycle;
     renderPlans();
     updateRoi();
+    updateQuotePreview();
   });
 });
 
 ['roiTables', 'roiSeats', 'roiTurns', 'roiDays', 'roiTicket', 'roiAttach', 'roiStores'].forEach(id => {
   document.getElementById(id).addEventListener('input', updateRoi);
 });
+
+document.getElementById('leadPlan')?.addEventListener('change', (e) => {
+  selectedPlanId = e.target.value;
+  updateQuotePreview();
+});
+document.getElementById('leadCycle')?.addEventListener('change', updateQuotePreview);
+document.querySelector('#leadForm [name=stores]')?.addEventListener('input', updateQuotePreview);
 
 const form = document.getElementById('leadForm');
 const status = document.getElementById('leadStatus');
@@ -130,10 +208,11 @@ form.addEventListener('submit', async (e) => {
 
   const fd = new FormData(form);
   const planId = String(fd.get('planId') || 'growth');
-  const cycle = String(fd.get('billingCycle') || 'monthly');
+  const cycle = String(fd.get('billingCycle') || 'annual');
   const stores = Number(fd.get('stores') || 1);
   const plan = getPlan(planId);
   const mrr = estimateMrr({ planId, stores, cycle });
+  const ap = planPrice(plan, cycle);
 
   const payload = {
     shopName: String(fd.get('shopName') || '').trim(),
@@ -148,13 +227,20 @@ form.addEventListener('submit', async (e) => {
     planPrice: plan.priceMonthly,
     estimatedMrr: mrr,
     setupFee: plan.priceSetup,
+    chargeNow: cycle === 'annual' ? ap.chargeNow + plan.priceSetup : plan.priceMonthly + plan.priceSetup,
+    annualSavings: cycle === 'annual' ? annualSavings(plan) : 0,
+    source: 'lp_revenue_max',
   };
 
   try {
     await submitLead(payload);
-    status.textContent = `送信しました。${plan.name}（見込み月額 ¥${yen(mrr)}）で折り返します。`;
+    status.textContent = cycle === 'annual'
+      ? `送信しました。${plan.name}年払い（初回目安 ¥${yen(payload.chargeNow)}）で折り返します。`
+      : `送信しました。${plan.name}（見込み月額 ¥${yen(mrr)}）で折り返します。`;
     form.reset();
     fillLeadPlanSelect();
+    document.getElementById('leadCycle').value = PRODUCT.defaultBillingCycle || 'annual';
+    updateQuotePreview();
   } catch (err) {
     console.error(err);
     status.classList.add('error');
@@ -164,8 +250,13 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
+renderScarcity();
+updateHeroCta();
+renderPayCta();
 renderPlans();
 renderCompare();
 renderAddons();
 fillLeadPlanSelect();
+document.getElementById('leadCycle').value = billingCycle;
 updateRoi();
+updateQuotePreview();

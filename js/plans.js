@@ -52,6 +52,90 @@ export function featureEnabled(shop, featureKey) {
   return !!plan.features[featureKey];
 }
 
+/** Recommend next higher plan for upsell copy */
+export function nextPlanId(planId) {
+  const order = ['lite', 'growth', 'business', 'chain'];
+  const i = order.indexOf(planId);
+  if (i < 0 || i >= order.length - 1) return null;
+  return order[i + 1];
+}
+
+export function annualSavings(plan) {
+  const full = plan.priceMonthly * 12;
+  const annual = plan.priceMonthly * PRODUCT.annualMultiplier;
+  return Math.max(0, full - annual);
+}
+
+/**
+ * Access state for paywall / trial.
+ * @returns {{ subscribed: boolean, trialActive: boolean, trialExpired: boolean, daysLeft: number|null, premiumUnlocked: boolean, reason: string }}
+ */
+export function getAccessState(shop, { subscribed = false } = {}) {
+  if (subscribed || shop?.subscribed) {
+    return {
+      subscribed: true,
+      trialActive: false,
+      trialExpired: false,
+      daysLeft: null,
+      premiumUnlocked: true,
+      reason: 'subscribed',
+    };
+  }
+  const ends = Number(shop?.trialEndsAt || 0);
+  if (!ends) {
+    return {
+      subscribed: false,
+      trialActive: false,
+      trialExpired: false,
+      daysLeft: PRODUCT.trialDays,
+      premiumUnlocked: true, // until trial is stamped, allow then stamp
+      reason: 'trial_pending',
+    };
+  }
+  const msLeft = ends - Date.now();
+  const daysLeft = Math.max(0, Math.ceil(msLeft / 86400000));
+  if (msLeft > 0) {
+    return {
+      subscribed: false,
+      trialActive: true,
+      trialExpired: false,
+      daysLeft,
+      premiumUnlocked: true,
+      reason: 'trial',
+    };
+  }
+  return {
+    subscribed: false,
+    trialActive: false,
+    trialExpired: true,
+    daysLeft: 0,
+    premiumUnlocked: false,
+    reason: 'trial_expired',
+  };
+}
+
+/** Premium features require plan flag AND (subscribed or active trial) */
+export function canUseFeature(shop, featureKey, { subscribed = false } = {}) {
+  if (!featureEnabled(shop, featureKey)) return false;
+  const access = getAccessState(shop, { subscribed });
+  return access.premiumUnlocked;
+}
+
+export function paymentCta() {
+  const link = (PRODUCT.stripePaymentLink || '').trim();
+  if (link) {
+    return { mode: 'stripe', href: link, label: 'カードで契約する' };
+  }
+  return { mode: 'lead', href: 'lp.html#contact', label: '見積もり・導入相談' };
+}
+
+export function platformFeeForOrder(shop, orderTotal) {
+  const plan = getPlan(shop?.planId || 'lite');
+  const pct = Number(plan.orderFeePercent || 0);
+  if (!pct || !orderTotal) return 0;
+  return Math.floor(Number(orderTotal) * (pct / 100));
+}
+
 export function planComparisonRows() {
   const keys = [
     { key: 'maxTables', label: 'テーブル数', format: v => (v == null ? '無制限' : `${v}席まで`) },
