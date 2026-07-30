@@ -20,6 +20,7 @@ export const MENU_DATA = {
       id: 'item_001', category: 'rice', name: '特製チキンカレー',
       description: '秘伝スパイスで仕上げた本格カレー。辛さ調整可能',
       price: 980, emoji: '🍛', popular: true, allergens: ['gluten', 'dairy'],
+      tags: ['spicy'], calories: 780,
       customizable: [
         { id: 'spice', label: '辛さ', type: 'select', options: ['甘口', '中辛', '辛口', '激辛'], default: '中辛' },
         { id: 'rice_size', label: 'ライスの量', type: 'select', options: ['少なめ', '普通', '大盛り(+100円)'], default: '普通' },
@@ -29,6 +30,7 @@ export const MENU_DATA = {
       id: 'item_002', category: 'rice', name: '海鮮丼',
       description: '新鮮な海の幸を贅沢に盛り付けた一品',
       price: 1480, emoji: '🐟', popular: true, allergens: ['shrimp', 'soy'],
+      tags: [], calories: 620,
       customizable: [
         { id: 'rice_size', label: 'ライスの量', type: 'select', options: ['少なめ', '普通', '大盛り(+100円)'], default: '普通' },
       ],
@@ -37,6 +39,7 @@ export const MENU_DATA = {
       id: 'item_003', category: 'rice', name: '唐揚げ定食',
       description: 'ジューシーな唐揚げにご飯・味噌汁・小鉢付き',
       price: 1050, emoji: '🍗', popular: false, allergens: ['gluten', 'egg', 'soy'],
+      tags: ['set'], calories: 890,
       customizable: [
         { id: 'rice_size', label: 'ライスの量', type: 'select', options: ['少なめ', '普通', '大盛り(+100円)'], default: '普通' },
       ],
@@ -45,6 +48,7 @@ export const MENU_DATA = {
       id: 'item_004', category: 'noodle', name: '濃厚醤油ラーメン',
       description: '豚骨と鶏がらのWスープに醤油を合わせた一杯',
       price: 850, emoji: '🍜', popular: true, allergens: ['gluten', 'soy', 'egg'],
+      tags: [], calories: 710,
       customizable: [
         { id: 'hardness', label: '麺の硬さ', type: 'select', options: ['やわらかめ', '普通', '硬め', 'バリ硬'], default: '普通' },
         { id: 'richness', label: '濃さ', type: 'select', options: ['薄め', '普通', '濃いめ'], default: '普通' },
@@ -55,6 +59,7 @@ export const MENU_DATA = {
       id: 'item_005', category: 'noodle', name: 'もちもちうどん',
       description: '讃岐直送の麺を使用。だしの旨味が染みる一杯',
       price: 750, emoji: '🍢', popular: false, allergens: ['gluten', 'soy'],
+      tags: ['kids'], calories: 540,
       customizable: [
         { id: 'topping', label: 'トッピング', type: 'select', options: ['なし', '温玉(+100円)', '天ぷら(+200円)', '両方(+280円)'], default: 'なし' },
         { id: 'temp', label: '温度', type: 'select', options: ['温かい', '冷たい'], default: '温かい' },
@@ -64,6 +69,7 @@ export const MENU_DATA = {
       id: 'item_006', category: 'noodle', name: 'パッタイ',
       description: '本場タイ風の甘辛焼きそば。えびとピーナッツ入り',
       price: 920, emoji: '🥘', popular: false, allergens: ['gluten', 'egg', 'shrimp', 'peanut', 'soy'],
+      tags: ['spicy'], calories: 680,
       customizable: [
         { id: 'spice', label: '辛さ', type: 'select', options: ['なし', '少し辛め', '辛口'], default: 'なし' },
       ],
@@ -72,12 +78,13 @@ export const MENU_DATA = {
       id: 'item_007', category: 'side', name: 'シーザーサラダ',
       description: 'クリスピーベーコンとパルメザンチーズをたっぷり',
       price: 580, emoji: '🥗', popular: false, allergens: ['gluten', 'egg', 'dairy'],
-      customizable: [],
+      tags: [], calories: 320, customizable: [],
     },
     {
       id: 'item_008', category: 'side', name: 'フライドポテト',
       description: 'サクサクに揚げた黄金ポテト。塩またはハーブ塩',
       price: 380, emoji: '🍟', popular: true, allergens: [],
+      tags: ['kids'], calories: 410,
       customizable: [
         { id: 'salt', label: 'シーズニング', type: 'select', options: ['塩', 'ハーブ塩', 'チーズ(+50円)'], default: '塩' },
       ],
@@ -86,12 +93,13 @@ export const MENU_DATA = {
       id: 'item_009', category: 'side', name: '枝豆',
       description: '国産枝豆を塩茹で。ビールのお供に',
       price: 280, emoji: '🫛', popular: false, allergens: ['soy'],
-      customizable: [],
+      tags: ['veg'], calories: 150, customizable: [],
     },
     {
       id: 'item_010', category: 'drink', name: 'クラフトコーラ',
       description: 'スパイスを独自配合した自家製クラフトコーラ',
       price: 480, emoji: '🥤', popular: true, allergens: [],
+      tags: [], calories: 180,
       customizable: [
         { id: 'ice', label: '氷', type: 'select', options: ['氷あり', '氷なし', '氷少なめ'], default: '氷あり' },
       ],
@@ -100,6 +108,7 @@ export const MENU_DATA = {
       id: 'item_011', category: 'drink', name: '自家製レモネード',
       description: '国産レモンをその場で搾る生レモネード',
       price: 520, emoji: '🍋', popular: false, allergens: [],
+      tags: ['veg'], calories: 140,
       customizable: [
         { id: 'sweet', label: '甘さ', type: 'select', options: ['甘め', '普通', '甘さ控えめ'], default: '普通' },
         { id: 'sparkling', label: '炭酸', type: 'select', options: ['なし', '炭酸あり'], default: 'なし' },
@@ -109,6 +118,7 @@ export const MENU_DATA = {
       id: 'item_012', category: 'drink', name: '本日のコーヒー',
       description: '毎日変わるシングルオリジンのドリップコーヒー',
       price: 420, emoji: '☕', popular: false, allergens: ['dairy'],
+      tags: [], calories: 5,
       customizable: [
         { id: 'milk', label: 'ミルク', type: 'select', options: ['ブラック', 'ミルクあり', 'オーツミルク(+80円)'], default: 'ブラック' },
       ],
@@ -117,19 +127,40 @@ export const MENU_DATA = {
       id: 'item_013', category: 'dessert', name: '濃厚プリン',
       description: '卵黄たっぷりの昔ながらのかためプリン',
       price: 380, emoji: '🍮', popular: true, allergens: ['egg', 'dairy'],
-      customizable: [],
+      tags: ['kids'], calories: 290, customizable: [],
     },
     {
       id: 'item_014', category: 'dessert', name: 'バスクチーズケーキ',
       description: 'とろける食感のバスク風チーズケーキ',
       price: 480, emoji: '🍰', popular: false, allergens: ['gluten', 'egg', 'dairy'],
-      customizable: [],
+      tags: [], calories: 420, customizable: [],
     },
     {
       id: 'item_015', category: 'dessert', name: 'ソルベ(季節のフルーツ)',
       description: '本日の旬のフルーツを使ったノンデイリーソルベ',
       price: 350, emoji: '🍧', popular: false, allergens: [],
-      customizable: [],
+      tags: ['veg'], calories: 160, customizable: [],
+    },
+    {
+      id: 'item_016', category: 'drink', name: '生ビール（中）',
+      description: 'キンキンに冷えた生ビール。おつまみとどうぞ',
+      price: 590, emoji: '🍺', popular: true, allergens: [],
+      tags: ['alcohol'], alcohol: true, calories: 180,
+      customizable: [
+        { id: 'foam', label: '泡', type: 'select', options: ['普通', '多め', '少なめ'], default: '普通' },
+      ],
+    },
+    {
+      id: 'item_017', category: 'rice', name: 'お子さまプレート',
+      description: '唐揚げ・ポテト・ミニサラダ・ジュース付き',
+      price: 680, emoji: '🧒', popular: false, allergens: ['gluten', 'egg'],
+      tags: ['kids', 'set'], calories: 520, customizable: [],
+    },
+    {
+      id: 'item_018', category: 'side', name: 'アボカドサラダ',
+      description: 'アボカドと旬野菜のヴィーガンサラダ',
+      price: 620, emoji: '🥑', popular: false, allergens: [],
+      tags: ['veg'], calories: 280, customizable: [],
     },
   ],
 };

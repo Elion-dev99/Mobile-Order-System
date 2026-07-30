@@ -8,7 +8,7 @@ import { getShopId } from './shop.js';
 import { cartStorageKey, isDemoMode, withDemo } from './demo.js';
 import { enqueuePendingOrder } from './health.js';
 
-export async function placeGuestOrder({ cart, tableNumber, onProgress } = {}) {
+export async function placeGuestOrder({ cart, tableNumber, partySize = 0, onProgress } = {}) {
   if (!cart?.length) return { ok: false, error: 'empty' };
 
   const orderId = (isDemoMode() ? 'DEMO-' : 'ORD-') + Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -18,6 +18,7 @@ export async function placeGuestOrder({ cart, tableNumber, onProgress } = {}) {
     id: orderId,
     shopId: getShopId(),
     tableNumber,
+    partySize: Number(partySize) > 0 ? Number(partySize) : undefined,
     items: cart,
     subtotal,
     tax,

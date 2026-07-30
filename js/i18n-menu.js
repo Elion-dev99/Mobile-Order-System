@@ -15,6 +15,9 @@ export const ITEM_I18N = {
   item_013: { name: 'Rich Pudding', description: 'Classic firm custard pudding.' },
   item_014: { name: 'Basque Cheesecake', description: 'Creamy burnt Basque-style cake.' },
   item_015: { name: 'Seasonal Sorbet', description: 'Dairy-free sorbet with seasonal fruit.' },
+  item_016: { name: 'Draft Beer (M)', description: 'Ice-cold draft beer.' },
+  item_017: { name: 'Kids Plate', description: 'Karaage, fries, mini salad, and juice.' },
+  item_018: { name: 'Avocado Salad', description: 'Vegan salad with avocado and seasonal greens.' },
 };
 
 export const CAT_I18N = {
@@ -50,9 +53,13 @@ export const UI_I18N = {
     allergen: 'アレルギーで絞り込む',
     emptyTitle: 'メニューがありません',
     emptyBody: '条件を変えて再検索してください',
-    customize: 'カスタム',
+    customize: 'オプションあり',
+    choose: '選ぶ',
     points: '点',
     added: 'を追加しました',
+    fav: 'お気に入り',
+    minOrder: '最低注文金額に達していません',
+    reorder: 'もう一度注文',
   },
   en: {
     search: 'Search menu',
@@ -68,8 +75,12 @@ export const UI_I18N = {
     allergen: 'Filter by allergen',
     emptyTitle: 'No matching items',
     emptyBody: 'Try different filters or search',
-    customize: 'Customize',
+    customize: 'Options',
+    choose: 'Choose',
     points: 'items',
     added: 'added',
+    fav: 'Favorite',
+    minOrder: 'Below minimum order amount',
+    reorder: 'Order again',
   },
 };

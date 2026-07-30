@@ -199,6 +199,12 @@ export const DEFAULT_SHOP = {
   address: '',
   lastOrderEnabled: false,
   lastOrderTime: '21:30',
+  /** Guest UX / industry features */
+  accentColor: '#0D5C4D',
+  minOrderAmount: 0,
+  partySizeRequired: false,
+  ageGateEnabled: true,
+  quickServiceEnabled: true,
 };
 
 /** @deprecated 互換用。Growth 月額を返す */

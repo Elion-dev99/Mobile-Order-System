@@ -65,6 +65,11 @@ const StorePage = {
           locale: document.getElementById('storeLocale').value || 'ja',
           lastOrderEnabled: !!document.getElementById('storeLastOrderEnabled')?.checked,
           lastOrderTime: document.getElementById('storeLastOrderTime')?.value || '21:30',
+          accentColor: document.getElementById('storeAccent')?.value || '#0D5C4D',
+          minOrderAmount: Number(document.getElementById('storeMinOrder')?.value) || 0,
+          partySizeRequired: !!document.getElementById('storePartyRequired')?.checked,
+          ageGateEnabled: !!document.getElementById('storeAgeGate')?.checked,
+          quickServiceEnabled: !!document.getElementById('storeQuickService')?.checked,
         });
         this.renderProfile();
         this.renderMeta();
@@ -118,6 +123,16 @@ const StorePage = {
     const loTime = document.getElementById('storeLastOrderTime');
     if (loEn) loEn.checked = !!shop.lastOrderEnabled;
     if (loTime) loTime.value = shop.lastOrderTime || '21:30';
+    const accent = document.getElementById('storeAccent');
+    if (accent) accent.value = shop.accentColor || '#0D5C4D';
+    const minOrder = document.getElementById('storeMinOrder');
+    if (minOrder) minOrder.value = Number(shop.minOrderAmount) || 0;
+    const partyReq = document.getElementById('storePartyRequired');
+    if (partyReq) partyReq.checked = !!shop.partySizeRequired;
+    const ageGate = document.getElementById('storeAgeGate');
+    if (ageGate) ageGate.checked = shop.ageGateEnabled !== false;
+    const quick = document.getElementById('storeQuickService');
+    if (quick) quick.checked = shop.quickServiceEnabled !== false;
   },
 
   tableUrl(n) {
@@ -243,16 +258,25 @@ const StorePage = {
       document.querySelector('main')?.prepend(host);
     }
     const list = document.getElementById('storeRequestList');
-    list.innerHTML = this.requests.map(r => `
+    list.innerHTML = this.requests.map(r => {
+      const note = (r.note || '').toLowerCase();
+      let label = r.type === 'bill' ? '会計' : '店員呼出';
+      if (r.type !== 'bill') {
+        if (/water|お水/.test(note)) label = 'お水';
+        else if (/towel|おしぼり/.test(note)) label = 'おしぼり';
+        else if (/cutlery|カトラリー/.test(note)) label = 'カトラリー';
+      }
+      return `
       <div class="store-req-row ${r.type === 'bill' ? 'is-bill' : ''}">
         <div class="store-req-main">
-          <strong>${r.type === 'bill' ? '会計' : '店員呼出'}</strong>
+          <strong>${label}</strong>
           <span class="store-req-seat">席 ${r.tableNumber}</span>
           ${r.type === 'bill' ? '<span class="store-req-hint">お客様はレジへ向かいます</span>' : ''}
+          ${r.note && r.type !== 'bill' ? `<span class="store-req-hint">${r.note}</span>` : ''}
         </div>
         <button type="button" data-resolve="${r.id}" data-table="${r.tableNumber}">対応済</button>
-      </div>
-    `).join('') || '<p class="store-muted">現在なし</p>';
+      </div>`;
+    }).join('') || '<p class="store-muted">現在なし</p>';
     list.querySelectorAll('[data-resolve]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.dataset.resolve;

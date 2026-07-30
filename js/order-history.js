@@ -55,10 +55,16 @@ export function orderLineHtml(item) {
     </div>`;
 }
 
-export function orderDetailHtml(order, { showTable = false } = {}) {
+export function orderDetailHtml(order, { showTable = false, reorder = false, locale = 'ja' } = {}) {
   const status = ORDER_STATUS_LABEL[order.status] || order.status || '受付';
   const items = (order.items || []).map(orderLineHtml).join('') || '<p class="oh-empty">明細なし</p>';
   const table = showTable ? `<span class="oh-pill">席 ${escapeHtml(String(order.tableNumber ?? ''))}</span>` : '';
+  const party = order.partySize
+    ? `<span class="oh-pill">${escapeHtml(String(order.partySize))}${locale === 'en' ? ' guests' : '名'}</span>`
+    : '';
+  const reorderBtn = reorder
+    ? `<button type="button" class="oh-reorder" data-oh-reorder="${escapeHtml(order.id || '')}">${locale === 'en' ? 'Order again' : 'もう一度注文'}</button>`
+    : '';
   return `
     <article class="oh-card" data-order-id="${escapeHtml(order.id || '')}">
       <button type="button" class="oh-card-head" data-oh-toggle>
@@ -66,6 +72,7 @@ export function orderDetailHtml(order, { showTable = false } = {}) {
           <strong>${escapeHtml(order.id || 'ORDER')}</strong>
           <span class="oh-pill">${escapeHtml(status)}</span>
           ${table}
+          ${party}
         </div>
         <div class="oh-card-meta">
           <span>${formatOrderTime(order.timestamp)}</span>
@@ -79,6 +86,7 @@ export function orderDetailHtml(order, { showTable = false } = {}) {
           <div><span>税</span><span>¥${Number(order.tax || 0).toLocaleString()}</span></div>
           <div class="oh-total"><span>合計</span><span>¥${Number(order.total || 0).toLocaleString()}</span></div>
         </div>
+        ${reorderBtn}
       </div>
     </article>`;
 }
@@ -154,17 +162,28 @@ export async function loadTableOrderHistory(tableNumber, { max = 20 } = {}) {
 }
 
 /** Mount expandable history block into a host element. */
-export async function mountGuestOrderHistory({ host, tableNumber, locale = 'ja' }) {
+export async function mountGuestOrderHistory({ host, tableNumber, locale = 'ja', onReorder } = {}) {
   if (!host) return;
   host.innerHTML = `<p class="oh-loading">${locale === 'en' ? 'Loading…' : '履歴を読み込み中…'}</p>`;
   const orders = await loadTableOrderHistory(tableNumber);
   if (!orders.length) {
     host.innerHTML = `<p class="oh-empty">${locale === 'en' ? 'No orders yet' : 'まだ注文履歴はありません'}</p>`;
-    return;
+    return orders;
   }
   host.innerHTML = `
     <div class="oh-list">
-      ${orders.map(o => orderDetailHtml(o)).join('')}
+      ${orders.map(o => orderDetailHtml(o, { reorder: !!onReorder, locale })).join('')}
     </div>`;
   bindOrderHistoryToggles(host);
+  if (onReorder) {
+    host.querySelectorAll('[data-oh-reorder]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.ohReorder;
+        const order = orders.find((o) => o.id === id);
+        if (order) onReorder(order);
+      });
+    });
+  }
+  return orders;
 }
