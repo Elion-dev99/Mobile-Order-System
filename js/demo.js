@@ -2,9 +2,7 @@ const DEMO_FLAG = 'mos_demo';
 const DEMO_CART = 'mos_cart_demo';
 const PROD_CART = 'mos_cart';
 
-export function isDemoMode() {
-  const q = new URLSearchParams(location.search);
-  if (q.get('demo') === '1' || q.get('mode') === 'demo') return true;
+function readDemoFlag() {
   try {
     return sessionStorage.getItem(DEMO_FLAG) === '1';
   } catch {
@@ -12,10 +10,32 @@ export function isDemoMode() {
   }
 }
 
+function writeDemoFlag(on) {
+  try {
+    if (on) sessionStorage.setItem(DEMO_FLAG, '1');
+    else sessionStorage.removeItem(DEMO_FLAG);
+  } catch (_) {}
+}
+
+export function isDemoMode() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('demo') === '0') return false;
+  if (q.get('demo') === '1' || q.get('mode') === 'demo') return true;
+  return readDemoFlag();
+}
+
+export function clearDemoMode() {
+  writeDemoFlag(false);
+}
+
 export function activateDemoFromUrl() {
   const q = new URLSearchParams(location.search);
+  if (q.get('demo') === '0') {
+    writeDemoFlag(false);
+    return false;
+  }
   if (q.get('demo') === '1' || q.get('mode') === 'demo') {
-    try { sessionStorage.setItem(DEMO_FLAG, '1'); } catch (_) {}
+    writeDemoFlag(true);
     return true;
   }
   return isDemoMode();
@@ -43,7 +63,8 @@ export function ensureDemoBanner() {
     <div class="demo-banner-inner">
       <strong>テストモード</strong>
       <span>注文は本番に入りません。体験用の動作です。</span>
-      <a href="lp.html">LPへ戻る</a>
+      <a href="lp.html" id="demoExitLink">LPへ戻る</a>
     </div>`;
   document.body.prepend(bar);
+  bar.querySelector('#demoExitLink')?.addEventListener('click', () => clearDemoMode());
 }
