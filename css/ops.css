@@ -206,6 +206,7 @@ body.ops-body {
   margin-bottom: 16px;
   align-items: end;
 }
+.ops-form-grid .ops-span-2 { grid-column: 1 / -1; }
 .ops-form-grid label { display: grid; gap: 6px; font-size: 12px; color: var(--ops-muted); }
 .ops-form-grid input, .ops-form-grid select, .ops-inline select {
   border: 1px solid var(--ops-line);
@@ -214,6 +215,16 @@ body.ops-body {
   border-radius: 10px;
   padding: 10px 12px;
   font: inherit;
+}
+.ops-btn-secondary {
+  border: 1px solid var(--ops-line);
+  background: transparent;
+  color: var(--ops-text);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .ops-shop-grid {

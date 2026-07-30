@@ -5,6 +5,7 @@ import { resolveShopId, seedShopMeta, listSeedShops, DEFAULT_SHOP_ID, scopedKey 
 import {
   doc, getDoc, setDoc, collection, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { notifyShopCreated, notifyShopDeleted, notifyContractActivated } from './notify.js';
 
 let shopCache = { ...DEFAULT_SHOP, id: DEFAULT_SHOP_ID };
 let menuCache = null;
@@ -258,8 +259,13 @@ export function isSubscribed() {
 }
 
 export async function markSubscribed() {
+  const was = isSubscribed();
   try { localStorage.setItem(scopedKey('mos_subscribed'), '1'); } catch (_) {}
-  return saveShop({ subscribed: true, subscribedAt: Date.now() });
+  const shop = await saveShop({ subscribed: true, subscribedAt: Date.now() });
+  if (!was) {
+    notifyContractActivated({ ...shopCache, ...shop, id: getShopId() });
+  }
+  return shop;
 }
 
 function withTimeout(promise, ms, label = 'timeout') {
@@ -312,6 +318,14 @@ export async function upsertShop(shopId, partial = {}) {
   if (!id) throw new Error('invalid shop id');
 
   const existingLocal = readLocalShops().find(s => s.id === id) || seedShopMeta(id) || {};
+  let existed = !!readLocalShops().find(s => s.id === id) || !!seedShopMeta(id);
+  if (!existed) {
+    try {
+      const snap = await withTimeout(getDoc(settingsRef(id)), 1500, 'upsert exists check');
+      existed = snap.exists();
+    } catch (_) {}
+  }
+
   const next = mergeShop({ ...existingLocal, ...partial, id, slug: id, updatedAt: Date.now() }, id);
 
   // Always persist locally first so Ops UI never hangs on Firestore rules
@@ -331,11 +345,14 @@ export async function upsertShop(shopId, partial = {}) {
   } catch (e) {
     console.warn('upsertShop firestore failed, kept local copy', e);
   }
+
+  if (!existed) notifyShopCreated(next);
   return next;
 }
 
 export async function deleteShop(shopId) {
   if (!shopId || shopId === DEFAULT_SHOP_ID) throw new Error('default shop cannot be deleted');
+  const prev = readLocalShops().find(s => s.id === shopId);
   try {
     const local = readLocalShops().filter(s => s.id !== shopId);
     localStorage.setItem('mos_local_shops', JSON.stringify(local));
@@ -345,6 +362,7 @@ export async function deleteShop(shopId) {
     await withTimeout(deleteDoc(settingsRef(shopId)), 2500, 'deleteShop timeout');
   } catch (_) {}
   try { await deleteDoc(menuRef(shopId)); } catch (_) {}
+  notifyShopDeleted(shopId, prev?.name);
 }
 
 export async function ensureSeedShops() {

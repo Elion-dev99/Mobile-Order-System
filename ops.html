@@ -137,6 +137,18 @@
         <button type="submit">更新</button>
       </form>
       <p id="opsPwStatus" class="ops-status" hidden></p>
+
+      <h2 style="margin-top:28px">Slack 通知</h2>
+      <p class="ops-muted">店舗追加・削除、商品追加・削除、新規契約・リードなどを Slack に送ります。Incoming Webhook URL を保存するか、Cloudflare の環境変数 <code>SLACK_WEBHOOK_URL</code> を設定してください。</p>
+      <form id="opsSlackForm" class="ops-form-grid">
+        <label class="ops-span-2">Incoming Webhook URL
+          <input id="opsSlackWebhook" type="url" placeholder="https://hooks.slack.com/services/..." autocomplete="off">
+        </label>
+        <label class="ops-inline ops-span-2"><input type="checkbox" id="opsSlackEnabled" checked> 通知を有効にする</label>
+        <button type="submit">保存</button>
+        <button type="button" id="opsSlackTest" class="ops-btn-secondary">テスト送信</button>
+      </form>
+      <p id="opsSlackStatus" class="ops-status" hidden></p>
     </section>
   </main>
 </div>

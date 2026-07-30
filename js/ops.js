@@ -11,6 +11,13 @@ import {
   collection, onSnapshot, query, orderBy
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { resolveServiceRequest, estimateWaitMinutes } from './guest-features.js';
+import {
+  getSlackWebhook,
+  setSlackWebhook,
+  isSlackNotifyEnabled,
+  setSlackNotifyEnabled,
+  testSlackNotify,
+} from './notify.js';
 
 const OpsPage = {
   shops: [],
@@ -48,6 +55,7 @@ const OpsPage = {
       console.warn('subscribeGlobal', e);
     }
     this.renderLabs();
+    this.renderSlackForm();
     window.scrollTo(0, 0);
   },
 
@@ -209,6 +217,45 @@ const OpsPage = {
         st.textContent = String(err.message || err);
       }
     });
+    document.getElementById('opsSlackForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const url = document.getElementById('opsSlackWebhook')?.value?.trim() || '';
+      const enabled = !!document.getElementById('opsSlackEnabled')?.checked;
+      const st = document.getElementById('opsSlackStatus');
+      if (url && !url.includes('hooks.slack.com')) {
+        st.hidden = false;
+        st.textContent = 'hooks.slack.com の Incoming Webhook URL を入力してください';
+        return;
+      }
+      setSlackWebhook(url);
+      setSlackNotifyEnabled(enabled);
+      st.hidden = false;
+      st.textContent = enabled
+        ? (url ? 'Slack Webhook を保存し、通知を有効にしました' : '通知ON（Cloudflare の SLACK_WEBHOOK_URL を利用）')
+        : '通知を無効にしました';
+    });
+    document.getElementById('opsSlackTest')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsSlackStatus');
+      st.hidden = false;
+      st.textContent = '送信中...';
+      const url = document.getElementById('opsSlackWebhook')?.value?.trim() || '';
+      if (url) setSlackWebhook(url);
+      setSlackNotifyEnabled(!!document.getElementById('opsSlackEnabled')?.checked);
+      const res = await testSlackNotify();
+      if (res.ok) st.textContent = 'テスト通知を送信しました。Slack を確認してください。';
+      else if (res.data?.error === 'webhook_missing') {
+        st.textContent = 'Webhook 未設定です。URL を保存するか Cloudflare に SLACK_WEBHOOK_URL を設定してください。';
+      } else {
+        st.textContent = '送信失敗: ' + (res.data?.error || res.error || res.status || 'unknown');
+      }
+    });
+  },
+
+  renderSlackForm() {
+    const input = document.getElementById('opsSlackWebhook');
+    const enabled = document.getElementById('opsSlackEnabled');
+    if (input) input.value = getSlackWebhook();
+    if (enabled) enabled.checked = isSlackNotifyEnabled();
   },
 
   switchTab(id) {

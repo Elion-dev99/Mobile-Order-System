@@ -32,7 +32,13 @@ jobs:
             --exclude '.firebaserc' \
             --exclude 'firebase.json' \
             --exclude 'firestore.rules' \
+            --exclude 'functions' \
             ./ publish/
+          # Cloudflare Pages Functions (Slack notify proxy, etc.)
+          if [ -d functions ]; then
+            rm -rf publish/functions
+            cp -a functions publish/functions
+          fi
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

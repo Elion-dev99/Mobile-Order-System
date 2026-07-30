@@ -10,6 +10,12 @@ import {
   collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, where
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
+import {
+  notifyMenuItemsAdded,
+  notifyMenuItemsRemoved,
+  notifyLeadWon,
+  notifyPlanChanged,
+} from './notify.js';
 
 const AdminPage = {
   filter: 'received',
@@ -35,6 +41,7 @@ const AdminPage = {
 
     await loadShop();
     this.menuDraft = await ensureMenuSeeded();
+    this._menuSnapshot = JSON.parse(JSON.stringify(this.menuDraft?.items || []));
     this.applyShopBranding();
     this.bindChrome();
     this.patchNavLinks();
@@ -535,8 +542,19 @@ const AdminPage = {
 
   async persistMenu() {
     this.syncMenuDraftFromDom();
+    const before = Array.isArray(this._menuSnapshot) ? this._menuSnapshot : [];
+    const after = Array.isArray(this.menuDraft?.items) ? this.menuDraft.items : [];
+    const beforeIds = new Set(before.map(i => i.id));
+    const afterIds = new Set(after.map(i => i.id));
+    const added = after.filter(i => !beforeIds.has(i.id));
+    const removed = before.filter(i => !afterIds.has(i.id));
     try {
       await saveMenu(this.menuDraft);
+      this._menuSnapshot = JSON.parse(JSON.stringify(after));
+      const shop = getShop();
+      const shopId = getShopId();
+      notifyMenuItemsAdded(shopId, shop?.name, added);
+      notifyMenuItemsRemoved(shopId, shop?.name, removed);
       alert('メニューを保存しました（カスタム項目含む）');
     } catch (e) {
       console.error(e);
@@ -576,7 +594,12 @@ const AdminPage = {
     list.querySelectorAll('[data-lead]').forEach(btn => {
       btn.addEventListener('click', async () => {
         try {
-          await updateDoc(doc(db, 'leads', btn.dataset.lead), { status: btn.dataset.leadStatus });
+          const status = btn.dataset.leadStatus;
+          await updateDoc(doc(db, 'leads', btn.dataset.lead), { status });
+          if (status === 'won') {
+            const lead = this.leads.find(l => l.id === btn.dataset.lead);
+            if (lead) notifyLeadWon({ ...lead, status });
+          }
         } catch (e) { console.error(e); }
       });
     });
@@ -717,8 +740,10 @@ const AdminPage = {
       locale: document.getElementById('settingLocale')?.value || 'ja',
       adminPin: document.getElementById('settingAdminPin')?.value || '',
     };
+    const prevPlan = getShop()?.planId;
     try {
       await saveShop(payload);
+      notifyPlanChanged({ ...getShop(), id: getShopId() }, prevPlan, payload.planId);
       this.applyShopBranding();
       this.renderBilling();
       this.renderAnalytics();
