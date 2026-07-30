@@ -45,8 +45,10 @@ Cursor Automations UI なしでも運用できます。
    - 正常 → エージェント起動なし（Discord があれば心拍のみ）＋**自動メンテナンス解除**（Cardinal が入れた場合のみ）  
    - 異常（Pages / 通知API / Firestore REST）→ **自動メンテナンス ON** ＋ **Executor** 起動  
 4. 客席は `GET /api/maintenance` と Firestore `platform/config` をマージして参照（FS 障害時もエッジ側で止められる）  
-5. **Ops → 鍵** タブに `OPS_API_SECRET` を保存（ブラウザからの dispatch / AutoHeal 用）  
-6. 詳細: `docs/security.md`
+5. **定期スケジュール** — Ops HQ で曜日＋時間帯 / 単発窓を設定。tick でも評価  
+6. **障害メンテテスト** — Ops → Cardinal タブのドリル（`simulateUnhealthy` / `drill_outage`）。エージェントは起動しない  
+7. **Ops → 鍵** タブに `OPS_API_SECRET` を保存（ブラウザからの dispatch / AutoHeal 用）  
+8. 詳細: `docs/security.md`
 
 手動で今すぐ tick:
 

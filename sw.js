@@ -5,8 +5,8 @@ const PRECACHE = [
   './index.html',
   './favicon.svg',
   './manifest.webmanifest',
-  './css/style.css?v=maint2',
-  './css/guest.css?v=maint2',
+  './css/style.css?v=sched1',
+  './css/guest.css?v=sched1',
 ];
 
 self.addEventListener('install', (event) => {

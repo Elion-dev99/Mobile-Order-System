@@ -14,6 +14,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { notifyDiscordEvent } from './notify.js';
 import { opsAuthHeaders } from './ops-secret.js';
+import {
+  defaultSchedule,
+  normalizeSchedule,
+  evaluateSchedule,
+  describeSchedule,
+  SCHEDULE_DEFAULT_MESSAGE,
+} from './maint-schedule.js';
 
 const DOC_PATH = ['platform', 'config'];
 const CACHE_KEY = 'mos_platform_maintenance';
@@ -44,20 +51,24 @@ function defaultState() {
     updatedBy: '',
     source: 'manual',
     auto: false,
+    schedule: defaultSchedule(),
   };
 }
 
 export function normalize(raw = {}) {
   const message = String(raw.message || DEFAULT_MESSAGE).trim().slice(0, 200)
     || DEFAULT_MESSAGE;
-  const source = raw.source === 'cardinal' ? 'cardinal' : 'manual';
+  let source = 'manual';
+  if (raw.source === 'cardinal') source = 'cardinal';
+  else if (raw.source === 'schedule') source = 'schedule';
   return {
     maintenance: raw.maintenance === true || raw.maintenance === 'true' || raw.maintenance === 1,
     message,
     updatedAt: Number(raw.updatedAt) || 0,
     updatedBy: String(raw.updatedBy || '').slice(0, 120),
     source,
-    auto: raw.auto === true || source === 'cardinal',
+    auto: raw.auto === true || source === 'cardinal' || source === 'schedule',
+    schedule: normalizeSchedule(raw.schedule || defaultSchedule()),
   };
 }
 
@@ -89,11 +100,20 @@ export function getMaintenance() {
   return cache;
 }
 
+export function getScheduleEval(nowMs = Date.now()) {
+  return evaluateSchedule(cache.schedule, nowMs);
+}
+
+/** Flag ON or active schedule window */
 export function isMaintenanceMode() {
-  return !!cache.maintenance;
+  if (cache.maintenance) return true;
+  return evaluateSchedule(cache.schedule).active;
 }
 
 export function maintenanceMessage() {
+  if (cache.maintenance) return cache.message || DEFAULT_MESSAGE;
+  const ev = evaluateSchedule(cache.schedule);
+  if (ev.active) return ev.message || SCHEDULE_DEFAULT_MESSAGE;
   return cache.message || DEFAULT_MESSAGE;
 }
 
@@ -188,14 +208,20 @@ export async function setMaintenanceMode({
   updatedBy = '',
   source = 'manual',
   auto = false,
+  schedule,
 } = {}) {
+  let src = 'manual';
+  if (source === 'cardinal' || auto) src = 'cardinal';
+  else if (source === 'schedule') src = 'schedule';
   const next = normalize({
+    ...cache,
     maintenance: !!enabled,
     message: message != null ? message : cache.message,
     updatedAt: Date.now(),
     updatedBy,
-    source: source === 'cardinal' || auto ? 'cardinal' : 'manual',
-    auto: auto || source === 'cardinal',
+    source: src,
+    auto: auto || src === 'cardinal' || src === 'schedule',
+    schedule: schedule != null ? schedule : cache.schedule,
   });
 
   let fsOk = false;
@@ -212,27 +238,162 @@ export async function setMaintenanceMode({
     updatedBy: next.updatedBy,
     source: next.source,
     auto: next.auto,
+    schedule: next.schedule,
   });
 
   if (!fsOk && !api.ok) {
-    // Still apply locally so this Ops session blocks; guests need API or FS
     persistLocal(next);
     throw new Error(api.error || 'メンテナンス状態を保存できませんでした（Firestore / Ops鍵を確認）');
   }
 
   persistLocal(next);
+  const pathLabel = next.source === 'cardinal'
+    ? 'Cardinal自動'
+    : (next.source === 'schedule' ? 'スケジュール' : '手動');
   notifyDiscordEvent(
     next.maintenance ? 'メンテナンス開始' : 'メンテナンス解除',
     {
       状態: next.maintenance ? 'ON' : 'OFF',
       案内: next.message,
       操作: next.updatedBy || 'ops',
-      経路: next.source === 'cardinal' ? 'Cardinal自動' : '手動',
+      経路: pathLabel,
     },
     next.maintenance ? '🛠️' : '✅',
     'system_health'
   ).catch(() => {});
   return next;
+}
+
+/** Persist weekly / one-shot schedule (Ops). */
+export async function saveMaintenanceSchedule(schedulePartial, { updatedBy = 'ops' } = {}) {
+  const schedule = normalizeSchedule({ ...cache.schedule, ...schedulePartial });
+  let fsOk = false;
+  const payload = normalize({
+    ...cache,
+    schedule,
+    updatedAt: Date.now(),
+    updatedBy,
+  });
+  try {
+    await setDoc(configRef(), payload, { merge: true });
+    fsOk = true;
+  } catch (e) {
+    console.warn('saveMaintenanceSchedule firestore', e);
+  }
+  const api = await pushMaintenanceApi({
+    action: 'schedule',
+    schedule,
+    updatedBy,
+  });
+  if (!fsOk && !api.ok) {
+    persistLocal(payload);
+    throw new Error(api.error || 'スケジュール保存に失敗しました（Ops鍵を確認）');
+  }
+  // Prefer API effective state after schedule apply
+  if (api.ok && api.data) {
+    persistLocal(normalize({ ...payload, ...api.data, schedule }));
+  } else {
+    persistLocal(payload);
+  }
+  notifyDiscordEvent(
+    'メンテスケジュール更新',
+    {
+      有効: schedule.enabled ? 'ON' : 'OFF',
+      内容: describeSchedule(schedule),
+    },
+    '🗓️',
+    'system_health'
+  ).catch(() => {});
+  return getMaintenance();
+}
+
+/**
+ * End-to-end drill: Cardinal outage maintenance path (edge + local).
+ * Does not launch Cursor agents.
+ */
+export async function runOutageMaintenanceDrill({ clearAfter = false } = {}) {
+  const before = { ...cache };
+  const steps = [];
+
+  const apiOn = await pushMaintenanceApi({
+    action: 'drill_outage',
+    autoClear: !!clearAfter,
+    updatedBy: 'ops-drill',
+  });
+  steps.push({
+    step: 'edge_drill_outage',
+    ok: !!apiOn.ok,
+    detail: apiOn.data || apiOn.error || apiOn,
+  });
+
+  // Also flip via client Cardinal path (Firestore mirror when possible)
+  let clientSync = null;
+  try {
+    clientSync = await syncAutoMaintenance({
+      shouldMaintain: true,
+      reason: 'drill',
+      streak: 99,
+    });
+    steps.push({ step: 'client_sync_on', ok: !clientSync.skipped || clientSync.reason === 'already_on', detail: clientSync });
+  } catch (e) {
+    steps.push({ step: 'client_sync_on', ok: false, detail: String(e?.message || e) });
+  }
+
+  await loadMaintenance().catch(() => {});
+  const mid = getMaintenance();
+  const guestWouldBlock = isMaintenanceMode();
+  steps.push({
+    step: 'verify_on',
+    ok: guestWouldBlock && (mid.auto || mid.source === 'cardinal'),
+    detail: { maintenance: mid.maintenance, source: mid.source, auto: mid.auto, guestWouldBlock },
+  });
+
+  let cleared = null;
+  if (clearAfter) {
+    try {
+      cleared = await syncAutoMaintenance({ shouldMaintain: false, reason: 'drill-clear' });
+      steps.push({ step: 'client_sync_off', ok: true, detail: cleared });
+    } catch (e) {
+      const apiOff = await pushMaintenanceApi({ action: 'drill_clear' });
+      steps.push({ step: 'edge_drill_clear', ok: !!apiOff.ok, detail: apiOff.data || apiOff.error });
+    }
+    await loadMaintenance().catch(() => {});
+  }
+
+  const after = getMaintenance();
+  const passed = steps.every((s) => s.ok);
+  return {
+    ok: passed,
+    passed,
+    before,
+    after,
+    clearAfter,
+    steps,
+    hint: clearAfter
+      ? '投入→確認→解除まで実行しました。'
+      : '自動メンテ ON を確認しました。客席バナーを見てから「ドリル解除」またはメンテナンス解除を押してください。',
+  };
+}
+
+/** Call Cardinal tick with simulated outage (server path). */
+export async function runCardinalOutageTickDrill() {
+  const { cardinalApi } = await import('./cardinal.js');
+  const tick = await cardinalApi('tick', {
+    simulateUnhealthy: true,
+    dispatchOnDrill: false,
+    source: 'ops-drill',
+  });
+  await loadMaintenance().catch(() => {});
+  const state = getMaintenance();
+  return {
+    ok: !!tick.ok && (tick.data?.shouldMaintain || state.maintenance),
+    tick,
+    maintenance: state,
+    guestWouldBlock: isMaintenanceMode(),
+    hint: tick.ok
+      ? 'サーバー tick（模擬障害）を実行しました。メンテが ON なら成功です。'
+      : 'tick 失敗。Ops鍵（OPS_API_SECRET）と Pages デプロイを確認してください。',
+  };
 }
 
 /**
@@ -249,7 +410,7 @@ export async function syncAutoMaintenance({
     if (cur.maintenance && cur.source === 'manual' && !cur.auto) {
       return { skipped: true, reason: 'manual_lock', state: cur };
     }
-    if (cur.maintenance && cur.auto) {
+    if (cur.maintenance && (cur.auto || cur.source === 'cardinal' || cur.source === 'schedule')) {
       return { skipped: true, reason: 'already_on', state: cur };
     }
     const state = await setMaintenanceMode({
@@ -262,8 +423,14 @@ export async function syncAutoMaintenance({
     return { ok: true, enabled: true, streak, state };
   }
 
-  // Recovery — only clear Cardinal auto locks
+  // Recovery — only clear Cardinal auto locks (never schedule window / manual)
   if (!cur.maintenance) return { skipped: true, reason: 'already_off', state: cur };
+  if (cur.source === 'manual' && !cur.auto) {
+    return { skipped: true, reason: 'manual_lock', state: cur };
+  }
+  if (cur.source === 'schedule' || evaluateSchedule(cur.schedule).active) {
+    return { skipped: true, reason: 'schedule_active', state: cur };
+  }
   if (!(cur.auto || cur.source === 'cardinal')) {
     return { skipped: true, reason: 'manual_lock', state: cur };
   }
@@ -276,11 +443,14 @@ export async function syncAutoMaintenance({
   return { ok: true, enabled: false, streak, state };
 }
 
+export { describeSchedule, normalizeSchedule, evaluateSchedule, defaultSchedule, WEEKDAYS } from './maint-schedule.js';
+
 /** Shared banner UI — idempotent. */
 export function mountMaintenanceBanner({ compact = false } = {}) {
-  const apply = (state) => {
+  const apply = () => {
     let el = document.getElementById('platformMaintenanceBanner');
-    if (!state.maintenance) {
+    const on = isMaintenanceMode();
+    if (!on) {
       if (el) el.hidden = true;
       document.body.classList.remove('platform-maintenance');
       return;
@@ -294,12 +464,17 @@ export function mountMaintenanceBanner({ compact = false } = {}) {
       document.body.prepend(el);
     }
     el.hidden = false;
-    const who = state.auto || state.source === 'cardinal' ? '（自動）' : '';
+    const state = cache;
+    const schedOn = evaluateSchedule(state.schedule).active && !state.maintenance;
+    const who = state.source === 'schedule' || schedOn
+      ? '（定期）'
+      : (state.auto || state.source === 'cardinal' ? '（自動）' : '');
+    const msg = maintenanceMessage();
     el.innerHTML = compact
-      ? `<strong>メンテナンス中${who}</strong> <span>${escapeHtml(state.message)}</span>`
-      : `<strong>メンテナンス中${who}</strong><span>${escapeHtml(state.message)}</span>`;
+      ? `<strong>メンテナンス中${who}</strong> <span>${escapeHtml(msg)}</span>`
+      : `<strong>メンテナンス中${who}</strong><span>${escapeHtml(msg)}</span>`;
   };
-  apply(cache);
+  apply();
   return onMaintenanceChange(apply);
 }
 

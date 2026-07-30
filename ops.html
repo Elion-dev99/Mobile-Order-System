@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/ops.css?v=maint2">
+  <link rel="stylesheet" href="css/ops.css?v=sched1">
 </head>
 <body class="ops-body">
 
@@ -94,6 +94,25 @@
           <button type="button" id="opsMaintenanceRefresh" class="ops-btn-secondary">再読込</button>
         </div>
         <p id="opsMaintenanceStatus" class="ops-status" hidden></p>
+
+        <h3 class="admin-subhead" style="margin-top:18px;">定期スケジュール</h3>
+        <p class="ops-muted">毎週の時間帯、または単発の開始〜終了。タイムゾーンは Asia/Tokyo。Cardinal tick でも評価します。</p>
+        <label class="ops-inline"><input type="checkbox" id="opsSchedEnabled"> スケジュールを有効にする</label>
+        <div id="opsSchedDays" class="ops-toolbar" style="flex-wrap:wrap;gap:8px;margin:8px 0;"></div>
+        <div class="ops-form-grid">
+          <label>開始（毎週）<input id="opsSchedStart" type="time" value="03:00"></label>
+          <label>終了（毎週）<input id="opsSchedEnd" type="time" value="04:00"></label>
+          <label class="ops-span-2">スケジュール案内文
+            <input id="opsSchedMessage" type="text" maxlength="200" placeholder="定期メンテナンス中です。ご注文はレジにてお願いいたします。">
+          </label>
+          <label>単発開始（任意）<input id="opsSchedOnceStart" type="datetime-local"></label>
+          <label>単発終了（任意）<input id="opsSchedOnceEnd" type="datetime-local"></label>
+        </div>
+        <p id="opsSchedSummary" class="ops-muted" style="margin-top:8px;"></p>
+        <div class="ops-toolbar" style="margin-top:8px;">
+          <button type="button" id="opsSchedSave" class="ops-btn">スケジュール保存</button>
+        </div>
+        <p id="opsSchedStatus" class="ops-status" hidden></p>
       </div>
 
       <h2>店舗別きょう</h2>
@@ -438,6 +457,23 @@
         <pre id="opsCardinalLog" class="ops-muted" style="white-space:pre-wrap;max-height:220px;overflow:auto;margin-top:12px;padding:12px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
       </div>
 
+      <div class="ops-health-playbook">
+        <h2>通信障害 → 自動メンテ テスト</h2>
+        <p class="ops-muted">本番を壊さず、Cardinal がメンテを入れる経路を確認します。Cursor エージェントは起動しません（クレジット消費なし）。Ops鍵が必要です。</p>
+        <ol class="ops-steps">
+          <li><strong>エッジドリル</strong> — <code>/api/maintenance</code> に模擬障害メンテを書き込み、客席ブロックを確認</li>
+          <li><strong>tickドリル</strong> — Cardinal <code>tick</code> に <code>simulateUnhealthy</code> を付けてサーバー経路を確認</li>
+          <li>確認後は「ドリル解除」で自動メンテだけ戻す（手動メンテは触らない）</li>
+        </ol>
+        <div class="ops-toolbar" style="flex-wrap:wrap;">
+          <button type="button" id="opsMaintDrillOn" class="ops-btn">1. 障害メンテドリル（ONのまま）</button>
+          <button type="button" id="opsMaintDrillTick" class="ops-btn-secondary">2. Cardinal tick 模擬障害</button>
+          <button type="button" id="opsMaintDrillClear" class="ops-btn-secondary">ドリル解除</button>
+        </div>
+        <p id="opsMaintDrillStatus" class="ops-status" hidden></p>
+        <pre id="opsMaintDrillLog" class="ops-muted" style="white-space:pre-wrap;max-height:240px;overflow:auto;margin-top:12px;padding:12px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
+      </div>
+
       <div class="ops-health-playbook" id="opsCardinalSetup">
         <h2>運用ステータス</h2>
         <ol class="ops-steps">
@@ -489,7 +525,7 @@
   </main>
 </div>
 
-<script type="module" src="js/ops.js?v=maint2"></script>
+<script type="module" src="js/ops.js?v=sched1"></script>
 <script>
   // モジュール読み込み失敗時のフォールバック表示
   setTimeout(() => {
