@@ -250,6 +250,72 @@ export async function onRequestPost(context) {
     });
   }
 
+  // Hourly/ cron tick: probe site, only wake agents when unhealthy (or force)
+  if (action === 'tick') {
+    const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
+    const force = !!body.force;
+    const probes = {};
+    for (const path of ['/', '/api/cardinal', '/api/notify', '/ops.html']) {
+      const started = Date.now();
+      try {
+        const res = await fetch(`${base}${path}`, {
+          method: 'GET',
+          redirect: 'follow',
+          headers: { 'user-agent': 'QuickOrder-Cardinal-Tick/1.0' },
+        });
+        probes[path] = { ok: res.ok || res.status < 500, status: res.status, ms: Date.now() - started };
+      } catch (e) {
+        probes[path] = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
+      }
+    }
+    const unhealthy = Object.values(probes).some((p) => !p.ok);
+    let dispatch = null;
+    if (unhealthy || force) {
+      const role = unhealthy ? 'executor' : 'guardian';
+      dispatch = await dispatchRole(env, role, {
+        kind: unhealthy ? 'incident' : 'watchdog',
+        severity: unhealthy ? 'critical' : 'info',
+        title: unhealthy ? 'Cardinal tick: 本番プローブ失敗' : 'Cardinal tick: 定期監視',
+        summary: unhealthy
+          ? '定期監視で本番エンドポイント異常を検知。Executor として調査・修正してください。'
+          : '定期監視（強制）。Guardian として短く健全性を報告してください。',
+        message: [
+          unhealthy
+            ? 'あなたは Cardinal Executor です。プローブ結果を見て原因調査し、直せるなら draft PR を作成。'
+            : 'あなたは Cardinal Guardian です。プローブ結果を確認し短く報告。大きなコード変更は不要。',
+          '',
+          '```json',
+          JSON.stringify({ base, probes }, null, 2).slice(0, 4000),
+          '```',
+        ].join('\n'),
+        acceptance: unhealthy
+          ? ['原因特定', 'draft PR または外部障害の説明', '客席フォールバックを壊さない']
+          : ['健全性の短報', 'コード変更なしで可'],
+      }, body);
+    } else {
+      await postDiscord(env, body, {
+        title: 'Cardinal tick: 正常',
+        color: 0x57f287,
+        fields: Object.entries(probes).map(([path, p]) => ({
+          name: path,
+          value: p.ok ? `OK ${p.status} (${p.ms}ms)` : `NG ${p.error || p.status}`,
+          inline: true,
+        })),
+        timestamp: new Date().toISOString(),
+        footer: { text: 'QuickOrder Cardinal' },
+      }).catch(() => {});
+    }
+
+    return json({
+      ok: true,
+      action: 'tick',
+      unhealthy,
+      probes,
+      dispatched: !!dispatch?.launched,
+      dispatch,
+    });
+  }
+
   return json({
     ok: true,
     action: 'status',
@@ -268,7 +334,7 @@ export async function onRequestGet() {
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    hint: 'POST { action: "heartbeat"|"dispatch"|"status", role, task? }',
+    hint: 'POST { action: "heartbeat"|"dispatch"|"status"|"tick", role, task? }',
   });
 }
 

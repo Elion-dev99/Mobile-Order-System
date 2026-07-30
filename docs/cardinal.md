@@ -35,30 +35,38 @@ SAO のカーディナルシステムに着想した、**監視体（Guardian）
 | `.cursor/rules/cardinal-*.mdc` | 各ロールの行動規範 |
 | Ops → **Cardinal** タブ | 状態表示・ドリル起動・設定チェックリスト |
 
-## Cursor Automations の作り方（ダッシュボード）
+## いま動いている常駐ルート（推奨・設定済み）
 
-1. [cursor.com/automations](https://cursor.com/automations) を開く  
-2. **Guardian** Automation を作成  
-   - Triggers: 毎時 cron ＋ PR opened/pushed ＋ CI failed  
-   - Prompt: 「あなたは Cardinal Guardian…（`.cursor/rules/cardinal-guardian.mdc` に従う）」  
-   - Webhook を有効化し URL / API key を控える  
-3. **Executor** Automation を作成  
-   - Triggers: Issue labeled `cardinal:executor` ＋ webhook  
-   - Prompt: 「あなたは Cardinal Executor…（`.cursor/rules/cardinal-executor.mdc` に従う）」  
-   - Webhook を控える  
-4. Cloudflare Pages secrets に設定:
+Cursor Automations UI なしでも運用できます。
+
+1. **Cloudflare** に `CURSOR_API_KEY` が入っている（本番 `/api/cardinal` の `configured.apiKey=true`）
+2. **GitHub Actions** `Cardinal cron watchdog` が毎時 `:15` UTC に `/api/cardinal` の `tick` を叩く  
+   - 正常 → エージェント起動なし（Discord があれば心拍のみ）  
+   - 異常 → **Executor** を自動起動  
+3. **Ops → Cardinal** タブ / 障害時 AutoHeal からもオンデマンド起動
+
+手動で今すぐ tick:
 
 ```bash
-CURSOR_GUARDIAN_WEBHOOK_URL=...
-CURSOR_GUARDIAN_API_KEY=...
-CURSOR_EXECUTOR_WEBHOOK_URL=...
-CURSOR_EXECUTOR_API_KEY=...
-# または単一キーで Cloud Agents API:
-CURSOR_API_KEY=...
-DISCORD_WEBHOOK_URL=...
+curl -X POST https://mobile-order-system.pages.dev/api/cardinal \
+  -H 'content-type: application/json' \
+  -d '{"action":"tick","force":false}'
 ```
 
-GitHub Actions ワークフロー `configure-cursor-cardinal.yml` でも secrets 投入できます。
+## （任意）Cursor Automations を足す場合
+
+より細かい「PRレビュー専用 Guardian」などが欲しければ:
+
+1. [cursor.com/automations](https://cursor.com/automations) で Guardian / Executor を作成  
+2. Webhook を Cloudflare secrets（`CURSOR_GUARDIAN_*` / `CURSOR_EXECUTOR_*`）へ  
+3. または GitHub Actions「Configure Cursor Cardinal」で投入
+
+```bash
+CURSOR_API_KEY=...                 # 必須級（済）
+DISCORD_WEBHOOK_URL=...            # 任意（通知強化）
+CURSOR_GUARDIAN_WEBHOOK_URL=...    # 任意
+CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
+```
 
 ## ラベル規約
 
