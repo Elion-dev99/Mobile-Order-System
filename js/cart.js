@@ -175,7 +175,7 @@ const CartPage = {
   },
 
   updateQty(entryId, action) {
-    const idx = this.cart.findIndex(e => e.id === entryId);
+    const idx = this.cart.findIndex(e => String(e.id) === String(entryId));
     if (idx === -1) return;
     if (action === 'plus') this.cart[idx].qty++;
     else if (action === 'minus') { this.cart[idx].qty--; if (this.cart[idx].qty <= 0) this.cart.splice(idx, 1); }
