@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#14110F">
+  <title>QuickOrder — 席で注文、厨房で受信</title>
+  <meta name="description" content="飲食店向けモバイルオーダー。月額¥3,980でQR注文・厨房モニター・メニュー編集まで。">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=IBM+Plex+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/lp.css">
+</head>
+<body>
+  <div class="lp-noise" aria-hidden="true"></div>
+
+  <header class="lp-top">
+    <a class="lp-brand" href="lp.html">QuickOrder</a>
+    <nav class="lp-nav">
+      <a href="#pricing">料金</a>
+      <a href="index.html?table=1" class="lp-nav-ghost">デモを見る</a>
+      <a href="#contact" class="lp-nav-cta">導入相談</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="lp-hero">
+      <div class="lp-hero-copy">
+        <p class="lp-kicker">飲食店のモバイルオーダー</p>
+        <h1 class="lp-brand-hero">QuickOrder</h1>
+        <p class="lp-lead">席のQRから注文、厨房に即着信。<br>紙メニューと呼び出しベルを、スマホ1枚に。</p>
+        <div class="lp-cta-row">
+          <a href="#contact" class="lp-btn-primary">14日で試して導入する</a>
+          <a href="index.html?table=1" class="lp-btn-secondary">客席デモを開く</a>
+        </div>
+      </div>
+      <div class="lp-hero-visual" aria-hidden="true">
+        <div class="lp-phone">
+          <div class="lp-phone-bar"></div>
+          <div class="lp-phone-screen">
+            <div class="lp-fake-title">テーブル 3</div>
+            <div class="lp-fake-card"><span>🍛</span><div><b>特製チキンカレー</b><i>¥980</i></div></div>
+            <div class="lp-fake-card"><span>🍜</span><div><b>醤油ラーメン</b><i>¥850</i></div></div>
+            <div class="lp-fake-bar">カートを見る · ¥1,830</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section" id="value">
+      <h2>1店舗・月額¥3,980で回る仕組み</h2>
+      <p class="lp-section-lead">Cursorの月額を、店舗1件の契約でカバーできる価格帯に設定しています。</p>
+      <div class="lp-grid-3">
+        <article>
+          <h3>客席QR注文</h3>
+          <p>テーブル番号付きURL。アレルギー・カスタマイズ・カートまでそのまま。</p>
+        </article>
+        <article>
+          <h3>厨房リアルタイム</h3>
+          <p>Firestoreで注文が即表示。受付→調理→完了をタップで更新。</p>
+        </article>
+        <article>
+          <h3>メニューは店舗で編集</h3>
+          <p>管理画面から商品名・価格・人気フラグを更新。コード不要。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="lp-section lp-pricing" id="pricing">
+      <h2>料金</h2>
+      <p class="lp-section-lead">まずはデモ。契約はStripeの月額リンク、または導入相談から。</p>
+      <div class="lp-price-card">
+        <div class="lp-price-label">スタンダード</div>
+        <div class="lp-price-amount"><span>¥</span><strong id="priceMonthly">3,980</strong><em>/月</em></div>
+        <ul>
+          <li>客席メニュー・カート・注文ステータス</li>
+          <li>厨房モニター（リアルタイム）</li>
+          <li>メニュー編集・店舗名設定</li>
+          <li>テーブルPIN保護</li>
+          <li>14日間トライアル相当のデモ利用可</li>
+        </ul>
+        <a href="#contact" class="lp-btn-primary lp-btn-block" id="startTrialBtn">導入相談・見積もり</a>
+        <a href="#" class="lp-btn-secondary lp-btn-block hidden" id="stripePayBtn">Stripeで月額契約する</a>
+        <p class="lp-price-note">初期導入サポート（任意）¥<span id="priceSetup">19,800</span> — QR設置・メニュー投入・操作説明</p>
+      </div>
+    </section>
+
+    <section class="lp-section" id="contact">
+      <h2>導入相談</h2>
+      <p class="lp-section-lead">店舗名と連絡先を送ると、Firestoreのリード一覧に届きます。返信してクロージングするだけです。</p>
+      <form class="lp-form" id="leadForm">
+        <label>店舗名<input name="shopName" required placeholder="例: 炭火焼鳥 まる"></label>
+        <label>担当者メール<input name="email" type="email" required placeholder="you@example.com"></label>
+        <label>電話（任意）<input name="phone" type="tel" placeholder="090-0000-0000"></label>
+        <label>席数の目安
+          <select name="tables">
+            <option value="1-10">1〜10席</option>
+            <option value="11-30" selected>11〜30席</option>
+            <option value="31-50">31〜50席</option>
+            <option value="51+">51席以上</option>
+          </select>
+        </label>
+        <label>ひとこと<textarea name="message" rows="3" placeholder="既存レジとの併用、導入時期など"></textarea></label>
+        <button type="submit" class="lp-btn-primary lp-btn-block" id="leadSubmit">送信する</button>
+        <p class="lp-form-status" id="leadStatus" hidden></p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="lp-footer">
+    <div>QuickOrder</div>
+    <div class="lp-footer-links">
+      <a href="admin.html">厨房・管理</a>
+      <a href="index.html?table=1">客席デモ</a>
+    </div>
+  </footer>
+
+  <script type="module" src="js/lp.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
-import { MENU_DATA } from './data.js';
 import { TablePin } from './pin.js';
+import { loadMenu, getMenu } from './shop.js';
 import { db } from './firebase.js';
 import {
   collection, doc, setDoc, getDocs, query, where, orderBy, limit
@@ -20,9 +20,10 @@ const CartPage = {
   splitPeople: 1,
   tableNumber: null,
 
-  init() {
+  async init() {
     this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
+    await loadMenu();
     if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.render();
@@ -78,13 +79,14 @@ const CartPage = {
       return;
     }
 
+    const MENU_DATA = getMenu();
     container.innerHTML = '<div class="cart-items-group">' + this.cart.map(entry => {
       const customLines = [];
       const item = MENU_DATA.items.find(i => i.id === entry.itemId);
       if (item) {
-        item.customizable.forEach(opt => {
-          if (opt.type === 'select' && entry.customizations[opt.id]) customLines.push(`${opt.label}: ${entry.customizations[opt.id]}`);
-          if (opt.type === 'toggle' && entry.toggles[opt.id]) customLines.push(`${opt.label}: あり`);
+        (item.customizable || []).forEach(opt => {
+          if (opt.type === 'select' && entry.customizations?.[opt.id]) customLines.push(`${opt.label}: ${entry.customizations[opt.id]}`);
+          if (opt.type === 'toggle' && entry.toggles?.[opt.id]) customLines.push(`${opt.label}: あり`);
         });
       }
       return `

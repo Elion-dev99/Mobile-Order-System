@@ -1,5 +1,5 @@
-import { MENU_DATA } from './data.js';
 import { TablePin } from './pin.js';
+import { loadShop, loadMenu, getShop, getMenu } from './shop.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -22,9 +22,13 @@ const App = {
   modalToggles: {},
   tableNumber: null,
 
-  init() {
+  async init() {
     this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
+    await Promise.all([loadShop(), loadMenu()]);
+    const shop = getShop();
+    document.querySelectorAll('.nav-large-title').forEach(el => { el.textContent = shop.name || 'QuickOrder'; });
+    document.title = `${shop.name || 'モバイルオーダー'}`;
     this.renderPinControl();
     if (!this.ensurePinAccess()) return;
     this.loadCart();
@@ -106,14 +110,15 @@ const App = {
   renderMenu() {
     const container = document.getElementById('menuList');
     if (!container) return;
+    const MENU_DATA = getMenu();
 
     const filtered = MENU_DATA.items.filter(item => {
       const catMatch = this.selectedCategory === 'all' || item.category === this.selectedCategory;
       const allergenMatch = this.activeAllergens.length === 0 ||
-        !this.activeAllergens.some(a => item.allergens.includes(a));
+        !this.activeAllergens.some(a => (item.allergens || []).includes(a));
       const searchMatch = this.searchQuery === '' ||
         item.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(this.searchQuery.toLowerCase());
+        (item.description || '').toLowerCase().includes(this.searchQuery.toLowerCase());
       return catMatch && allergenMatch && searchMatch;
     });
 
@@ -134,8 +139,8 @@ const App = {
     container.querySelectorAll('.add-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        const item = MENU_DATA.items.find(i => i.id === btn.closest('.menu-card').dataset.id);
-        if (item && item.customizable.length === 0) {
+        const item = getMenu().items.find(i => i.id === btn.closest('.menu-card').dataset.id);
+        if (item && (!item.customizable || item.customizable.length === 0)) {
           this.addToCartDirect(item);
           btn.classList.add('bounce-add');
           setTimeout(() => btn.classList.remove('bounce-add'), 300);
@@ -147,7 +152,8 @@ const App = {
   },
 
   renderCard(item) {
-    const allergenHTML = item.allergens.map(a => {
+    const MENU_DATA = getMenu();
+    const allergenHTML = (item.allergens || []).map(a => {
       const al = MENU_DATA.allergens.find(al => al.id === a);
       const matched = this.activeAllergens.includes(a);
       return `<span class="allergen-tag ${matched ? 'matched' : ''}">${al ? al.emoji + al.label : a}</span>`;
@@ -179,13 +185,13 @@ const App = {
   },
 
   openModal(itemId) {
-    const item = MENU_DATA.items.find(i => i.id === itemId);
+    const item = getMenu().items.find(i => i.id === itemId);
     if (!item) return;
     this.modalItem = item;
     this.modalQty = 1;
     this.modalCustomizations = {};
     this.modalToggles = {};
-    item.customizable.forEach(opt => {
+    (item.customizable || []).forEach(opt => {
       if (opt.type === 'select') this.modalCustomizations[opt.id] = opt.default;
       if (opt.type === 'toggle') this.modalToggles[opt.id] = false;
     });
@@ -195,15 +201,17 @@ const App = {
   },
 
   renderModal(item) {
-    const allergenHTML = item.allergens.length ? `
+    const MENU_DATA = getMenu();
+    const allergens = item.allergens || [];
+    const allergenHTML = allergens.length ? `
       <div class="modal-allergen-list">
-        ${item.allergens.map(a => {
+        ${allergens.map(a => {
           const al = MENU_DATA.allergens.find(al => al.id === a);
           return `<span class="modal-allergen-tag">${al ? al.emoji + ' ' + al.label : a}</span>`;
         }).join('')}
       </div>` : '';
 
-    const customizeHTML = item.customizable.map(opt => {
+    const customizeHTML = (item.customizable || []).map(opt => {
       if (opt.type === 'select') {
         return `
           <div class="customize-group" data-opt-id="${opt.id}">
@@ -287,7 +295,7 @@ const App = {
 
   calcUnitPrice(item) {
     let total = item.price;
-    item.customizable.forEach(opt => {
+    (item.customizable || []).forEach(opt => {
       if (opt.type === 'select') {
         const val = this.modalCustomizations[opt.id] || '';
         if (val.includes('+100円')) total += 100;

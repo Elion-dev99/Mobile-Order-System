@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Demo / MVP: open read-write. Tighten before real production.
+    match /orders/{id} {
+      allow read, write: if true;
+    }
+    match /shop/{doc} {
+      allow read, write: if true;
+    }
+    match /leads/{id} {
+      allow read, write: if true;
+    }
+  }
+}
