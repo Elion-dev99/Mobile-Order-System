@@ -75,7 +75,14 @@ body.guest::before {
   z-index: 0;
 }
 
-body.guest > * { position: relative; z-index: 1; }
+/* Keep content above the grain ::before — but NEVER force position on
+   fixed overlays (modal / cart bar / toast / bill lock). That override
+   made #itemModal position:relative, so customize "+" opened a sheet
+   thousands of px below the fold and looked like dead buttons. */
+body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bill-lock-overlay) {
+  position: relative;
+  z-index: 1;
+}
 
 /* Header */
 .guest-header {
@@ -259,10 +266,9 @@ body.guest .menu-card {
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius);
   border-bottom: 1px solid var(--g-line);
-  /* no backdrop-filter / enter animation here — they freeze iOS on every qty update */
+  /* no backdrop-filter / enter animation / content-visibility —
+     they freeze iOS or break hit-testing on qty updates */
   transition: border-color 0.15s ease, background 0.15s ease;
-  content-visibility: auto;
-  contain: layout style;
 }
 body.guest .menu-card.menu-card-enter {
   animation: guestRise 0.35s var(--g-ease) both;
@@ -439,6 +445,8 @@ body.guest .empty-state .emoji { display: none; }
 
 /* Cart bar */
 body.guest .cart-bar {
+  position: fixed;
+  z-index: 200;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
   background: transparent;
 }
@@ -459,9 +467,16 @@ body.guest .cart-count-pill {
   font-weight: 800;
 }
 
-/* Modal */
+/* Modal — re-assert fixed stacking (body.guest > * used to win) */
 body.guest .modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
   background: rgba(23, 32, 28, 0.45);
+}
+body.guest .toast-container {
+  position: fixed;
+  z-index: 9999;
 }
 body.guest .modal-sheet {
   background: #F7FAF8;
