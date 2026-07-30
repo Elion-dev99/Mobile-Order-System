@@ -3,6 +3,30 @@
   padding-bottom: 48px;
 }
 
+/* Store inherits guest tokens but must use DOCUMENT scroll — nested body
+   overflow + inner overflow:auto lists steal upward swipes → Chrome PTR reload. */
+html:has(body.store-page) {
+  overscroll-behavior-y: none;
+  overflow-y: auto;
+  height: auto;
+}
+body.guest.store-page {
+  overflow-x: hidden;
+  overflow-y: visible;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: auto;
+}
+/* Grain SVG filter is expensive on mobile floor tablets */
+body.store-page::before {
+  display: none !important;
+}
+/* Undo guest stacking hack — store has no fixed overlays that need it */
+body.guest.store-page > * {
+  position: static;
+  z-index: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .store-revenue-banner {
   margin: 0 16px 12px;
   padding: 10px 12px;
@@ -67,6 +91,9 @@
   display: flex;
   gap: 8px;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
   padding: 0 16px 14px;
   max-width: 860px;
   margin: 0 auto;
@@ -157,8 +184,9 @@
 .store-table-list {
   display: grid;
   gap: 8px;
-  max-height: 360px;
-  overflow: auto;
+  /* No nested scroll — page scroll only (fixes mobile pull-to-refresh trap) */
+  max-height: none;
+  overflow: visible;
 }
 
 .store-table-row {

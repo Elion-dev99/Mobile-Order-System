@@ -42,7 +42,8 @@ const StorePage = {
     this.subscribeOrders();
     this.subscribeRequests();
     this.subscribeFoh();
-    setInterval(() => this.tickClock(), 1000);
+    // Second-precision clock is pure paint thrash on floor tablets
+    this._clockTimer = setInterval(() => this.tickClock(), 30000);
     this.tickClock();
   },
 
@@ -597,7 +598,21 @@ const StorePage = {
     });
   },
 
-  renderOrderHistory() {
+  ordersFingerprint(limit = 40) {
+    return this.orders
+      .slice(0, limit)
+      .map((o) => `${o.id}:${o.status || ''}:${o.total || 0}:${o.timestamp || 0}`)
+      .join('|');
+  },
+
+  boardFingerprint() {
+    return this.orders
+      .filter((o) => (o.status || 'received') !== 'done')
+      .map((o) => `${o.tableNumber}:${o.status || ''}`)
+      .join('|');
+  },
+
+  renderOrderHistory({ force = false } = {}) {
     let host = document.getElementById('storeOrderHistory');
     if (!host) {
       host = document.createElement('section');
@@ -607,10 +622,15 @@ const StorePage = {
       const soldOut = document.getElementById('soldOutPanel');
       if (soldOut) soldOut.before(host);
       else document.querySelector('main')?.appendChild(host);
-      document.getElementById('storeHistoryRefresh')?.addEventListener('click', () => this.renderOrderHistory());
+      document.getElementById('storeHistoryRefresh')?.addEventListener('click', () => {
+        this.renderOrderHistory({ force: true });
+      });
     }
     const list = document.getElementById('storeHistoryList');
     if (!list) return;
+    const fp = this.ordersFingerprint(40);
+    if (!force && fp === this._historyFp) return;
+    this._historyFp = fp;
     const rows = [...this.orders]
       .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
       .slice(0, 40);
@@ -623,17 +643,28 @@ const StorePage = {
   },
 
   renderStats() {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const today = this.orders.filter(o => (o.timestamp || 0) >= start.getTime());
-    const pending = this.orders.filter(o => (o.status || 'received') !== 'done').length;
-    const gmv = today.reduce((s, o) => s + (o.total || 0), 0);
-    document.getElementById('statPending').textContent = String(pending);
-    document.getElementById('statToday').textContent = String(today.length);
-    document.getElementById('statGmv').textContent = `¥${yen(gmv)}`;
-    this.renderOrderHistory();
-    this.renderTableBoard();
-    this.renderFoh();
+    // Coalesce rapid Firestore snapshots into one paint
+    if (this._statsRaf) return;
+    this._statsRaf = requestAnimationFrame(() => {
+      this._statsRaf = 0;
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const today = this.orders.filter(o => (o.timestamp || 0) >= start.getTime());
+      const pending = this.orders.filter(o => (o.status || 'received') !== 'done').length;
+      const gmv = today.reduce((s, o) => s + (o.total || 0), 0);
+      const pendingEl = document.getElementById('statPending');
+      const todayEl = document.getElementById('statToday');
+      const gmvEl = document.getElementById('statGmv');
+      if (pendingEl) pendingEl.textContent = String(pending);
+      if (todayEl) todayEl.textContent = String(today.length);
+      if (gmvEl) gmvEl.textContent = `¥${yen(gmv)}`;
+      this.renderOrderHistory();
+      const boardFp = this.boardFingerprint();
+      if (boardFp !== this._boardFp) {
+        this._boardFp = boardFp;
+        this.renderTableBoard();
+      }
+    });
   },
 };
 

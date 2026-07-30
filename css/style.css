@@ -56,7 +56,7 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-body { min-height: 100vh; background: var(--bg); overscroll-behavior-y: contain; }
+body { min-height: 100vh; background: var(--bg); overscroll-behavior-y: none; }
 a { color: var(--blue); text-decoration: none; }
 button { cursor: pointer; border: none; background: none; font-family: inherit; }
 img { max-width: 100%; }
@@ -222,6 +222,9 @@ img { max-width: 100%; }
   backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 0.5px solid var(--separator);
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
