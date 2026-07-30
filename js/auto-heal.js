@@ -10,6 +10,7 @@ import {
 } from './health.js';
 import { getDiscordWebhook, isLikelyDiscordWebhook } from './notify.js';
 import { opsAuthHeaders } from './ops-secret.js';
+import { loadMaintenance, syncAutoMaintenance } from './maintenance.js';
 
 const ESCALATE_KEY = 'mos_autoheal_escalated_at';
 const FAIL_STREAK_KEY = 'mos_autoheal_fail_streak';
@@ -79,28 +80,52 @@ export async function runAutoHealCycle({ escalateAfterFails = 2, escalateCooldow
   const prev = getLastHealthState();
   let flush = { sent: 0, left: 0 };
   let escalated = null;
+  let maintenance = null;
 
-  if (health.status === 'ok' || health.firestore?.ok) {
-    flush = await tryFlushOrders();
-    setStreak(0);
+  await loadMaintenance().catch(() => {});
+
+  // Order DB broken or full outage → auto maintenance after streak
+  const orderPathBroken = !health.firestore?.ok && health.status !== 'offline';
+  const fullDown = health.status === 'down';
+
+  if (health.status === 'ok' || (health.firestore?.ok && health.status !== 'down')) {
+    if (health.firestore?.ok) {
+      flush = await tryFlushOrders();
+    }
+    setStreak(health.status === 'ok' ? 0 : getStreak());
+    if (health.status === 'ok') {
+      maintenance = await syncAutoMaintenance({
+        shouldMaintain: false,
+        reason: 'recovery',
+      }).catch((e) => ({ ok: false, error: String(e?.message || e) }));
+      setStreak(0);
+    }
   } else if (health.status === 'offline') {
-    // Browser offline — do not burn Cursor API credits
+    // Browser offline — do not burn Cursor API credits / flip global maintenance
     setStreak(0);
   } else {
     const streak = getStreak() + 1;
     setStreak(streak);
+    if ((orderPathBroken || fullDown) && streak >= escalateAfterFails) {
+      maintenance = await syncAutoMaintenance({
+        shouldMaintain: true,
+        reason: fullDown ? 'down' : 'firestore',
+        streak,
+      }).catch((e) => ({ ok: false, error: String(e?.message || e) }));
+    }
     const cooled = Date.now() - getEscalatedAt() > escalateCooldownMs;
     if (streak >= escalateAfterFails && cooled) {
       escalated = await escalateToCursor({
         status: health.status,
         severity: health.status === 'down' ? 'critical' : 'warning',
         summary: `自動検知: ${health.label}（連続${streak}回）`,
-        message: 'Ops/客席のヘルスチェックが連続失敗したため、Cursor自動対処を依頼します',
+        message: 'Ops/客席のヘルスチェックが連続失敗したため、Cursor自動対処を依頼します。自動メンテナンスを投入済みの場合があります。',
         firestoreOk: !!health.firestore?.ok,
         notifyApiOk: !!health.notifyApi?.functionReady,
         firestoreError: health.firestore?.error || '',
         online: !!health.online,
         prevStatus: prev?.status || null,
+        maintenance: !!maintenance && !maintenance.skipped,
       });
       if (escalated.ok) setEscalatedAt();
     }
@@ -110,9 +135,15 @@ export async function runAutoHealCycle({ escalateAfterFails = 2, escalateCooldow
   if (prev && prev.status !== 'ok' && health.status === 'ok') {
     flush = await tryFlushOrders();
     setStreak(0);
+    if (!maintenance) {
+      maintenance = await syncAutoMaintenance({
+        shouldMaintain: false,
+        reason: 'recovery',
+      }).catch((e) => ({ ok: false, error: String(e?.message || e) }));
+    }
   }
 
-  return { health, flush, escalated, streak: getStreak() };
+  return { health, flush, escalated, maintenance, streak: getStreak() };
 }
 
 /** Start background auto-heal while Ops (or any page) is open. */

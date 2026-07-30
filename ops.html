@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/ops.css?v=maint1">
+  <link rel="stylesheet" href="css/ops.css?v=maint2">
 </head>
 <body class="ops-body">
 
@@ -83,7 +83,7 @@
 
       <div class="ops-health-playbook" id="opsMaintenancePanel">
         <h2>メンテナンスモード</h2>
-        <p class="ops-muted">全店舗の新規注文・呼出・予約・リードを止めます。厨房のステータス更新と Ops 操作は継続できます。店舗の「準備中」とは別です。</p>
+        <p class="ops-muted">全店舗の新規注文・呼出・予約・リードを止めます。厨房のステータス更新と Ops 操作は継続できます。店舗の「準備中」とは別です。Cardinal が Firestore／サイト障害を連続検知すると自動で ON にし、復旧で自動解除します（手動 ON は自動解除しません）。</p>
         <p id="opsMaintenanceState" class="ops-banner" hidden></p>
         <label>案内文
           <input id="opsMaintenanceMessage" type="text" maxlength="200" placeholder="メンテナンス中です。ご注文はレジにてお願いいたします。">
@@ -489,7 +489,7 @@
   </main>
 </div>
 
-<script type="module" src="js/ops.js?v=maint1"></script>
+<script type="module" src="js/ops.js?v=maint2"></script>
 <script>
   // モジュール読み込み失敗時のフォールバック表示
   setTimeout(() => {

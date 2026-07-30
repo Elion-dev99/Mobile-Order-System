@@ -371,17 +371,18 @@ const OpsPage = {
     if (banner) {
       banner.hidden = false;
       if (state.maintenance) {
-        banner.innerHTML = `<strong>現在 ON</strong><span>${escapeHtml(state.message)}</span>`;
+        const auto = state.auto || state.source === 'cardinal';
+        banner.innerHTML = `<strong>現在 ON${auto ? ' · Cardinal自動' : ' · 手動'}</strong><span>${escapeHtml(state.message)}</span>`;
         banner.style.borderColor = 'rgba(237, 66, 69, 0.45)';
         banner.style.background = 'rgba(237, 66, 69, 0.14)';
       } else {
-        banner.innerHTML = `<strong>現在 OFF</strong><span>通常営業（ゲスト新規受付可）</span>`;
+        banner.innerHTML = `<strong>現在 OFF</strong><span>通常営業（ゲスト新規受付可）。障害時は Cardinal が自動で ON にします。</span>`;
         banner.style.borderColor = 'rgba(87, 242, 135, 0.35)';
         banner.style.background = 'rgba(87, 242, 135, 0.1)';
       }
     }
     if (hq && state.maintenance) {
-      hq.textContent = 'メンテ中';
+      hq.textContent = state.auto || state.source === 'cardinal' ? '自動メンテ' : 'メンテ中';
     }
   },
 
@@ -401,6 +402,8 @@ const OpsPage = {
         enabled,
         message,
         updatedBy: user?.email || getOpsRole() || 'ops',
+        source: 'manual',
+        auto: false,
       });
       this.renderMaintenancePanel();
       if (st) st.textContent = enabled ? 'メンテナンスを開始しました' : 'メンテナンスを解除しました';
