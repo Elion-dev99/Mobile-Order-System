@@ -13,6 +13,7 @@ import {
 import { resolveServiceRequest, estimateWaitMinutes } from './guest-features.js';
 import {
   testDiscordNotify,
+  testAllDiscordEvents,
   loadNotifySettings,
   saveNotifySettings,
   getSetupStatus,
@@ -271,6 +272,44 @@ const OpsPage = {
       }
       await this.refreshNotifySetup();
     });
+
+    const runAllEventTests = async (btn) => {
+      const st = document.getElementById('opsNotifyStatus');
+      st.hidden = false;
+      st.textContent = '全イベント送信準備中...';
+      if (btn) btn.disabled = true;
+      try {
+        await saveNotifySettings({
+          webhook: document.getElementById('opsNotifyWebhook')?.value?.trim() || '',
+          channel: document.getElementById('opsNotifyChannel')?.value?.trim() || '',
+          enabled: true,
+          events: this.readEventToggles(),
+        });
+      } catch (err) {
+        st.textContent = String(err.message || err);
+        if (btn) btn.disabled = false;
+        return;
+      }
+      const summary = await testAllDiscordEvents({
+        onProgress: ({ index, total, title }) => {
+          st.textContent = `全イベントテスト中... ${index}/${total}「${title}」`;
+        },
+      });
+      if (summary.failed === 0 && summary.sent > 0) {
+        st.textContent = `全 ${summary.sent} 件のイベント通知を送信しました。Discord を確認してください。`;
+        await saveNotifySettings({ setupDone: true });
+      } else if (summary.sent === 0) {
+        const first = summary.results?.[0];
+        st.textContent = '送信失敗: ' + (first?.data?.error || first?.error || first?.status || 'webhook を確認してください');
+      } else {
+        st.textContent = `送信 ${summary.sent} 件 / 失敗 ${summary.failed} 件。Discord とログを確認してください。`;
+      }
+      if (btn) btn.disabled = false;
+      await this.refreshNotifySetup();
+    };
+
+    document.getElementById('opsNotifyTestAll')?.addEventListener('click', (e) => runAllEventTests(e.currentTarget));
+    document.getElementById('opsNotifyTestAllBottom')?.addEventListener('click', (e) => runAllEventTests(e.currentTarget));
 
     document.getElementById('opsNotifySaveEvents')?.addEventListener('click', async () => {
       const st = document.getElementById('opsNotifyStatus');

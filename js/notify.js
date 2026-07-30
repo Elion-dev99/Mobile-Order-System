@@ -271,8 +271,8 @@ function fieldsToEmbedFields(fields = {}) {
  */
 export async function notifyDiscord(opts = {}) {
   await loadNotifySettings().catch(() => {});
-  if (!isNotifyEnabled()) return { ok: false, skipped: true, reason: 'disabled' };
-  if (opts.event && !isEventEnabled(opts.event)) {
+  if (!opts.force && !isNotifyEnabled()) return { ok: false, skipped: true, reason: 'disabled' };
+  if (!opts.force && opts.event && !isEventEnabled(opts.event)) {
     return { ok: false, skipped: true, reason: 'event_off' };
   }
 
@@ -336,6 +336,7 @@ export async function testDiscordNotify() {
     title: 'Discord通知テスト',
     emoji: '✅',
     event: 'test',
+    force: true,
     fields: {
       結果: '接続OK — QuickOrder のお知らせ設定が完了しています',
       時刻: new Date().toLocaleString('ja-JP'),
@@ -345,6 +346,94 @@ export async function testDiscordNotify() {
 
 export async function testSlackNotify() {
   return testDiscordNotify();
+}
+
+const ALL_EVENT_SAMPLES = [
+  {
+    event: 'shop_created',
+    title: '店舗を追加しました',
+    emoji: '🏪',
+    fields: { 店舗名: 'テスト焼肉', 店舗ID: 'test-yakiniku', プラン: 'growth', 席数: 20, 種別: 'テスト通知' },
+  },
+  {
+    event: 'shop_deleted',
+    title: '店舗を削除しました',
+    emoji: '🗑️',
+    fields: { 店舗名: 'テスト焼肉', 店舗ID: 'test-yakiniku', 種別: 'テスト通知' },
+  },
+  {
+    event: 'item_added',
+    title: '商品を追加しました',
+    emoji: '➕',
+    fields: { 店舗: 'テスト焼肉', 店舗ID: 'test-yakiniku', 件数: 2, 商品: '🥩 特選カルビ（¥1280）, 🥬 サンチュ（¥280）', 種別: 'テスト通知' },
+  },
+  {
+    event: 'item_removed',
+    title: '商品を削除しました',
+    emoji: '❌',
+    fields: { 店舗: 'テスト焼肉', 店舗ID: 'test-yakiniku', 件数: 1, 商品: '🧊 限定かき氷', 種別: 'テスト通知' },
+  },
+  {
+    event: 'lead_new',
+    title: '新規契約のお問い合わせ',
+    emoji: '📝',
+    fields: {
+      店舗名: 'テスト食堂',
+      メール: 'test@example.com',
+      電話: '03-0000-0000',
+      プラン: 'Growth',
+      見込みMRR: '¥9,800',
+      席数: 24,
+      メッセージ: '導入を検討しています（テスト）',
+      種別: 'テスト通知',
+    },
+  },
+  {
+    event: 'lead_won',
+    title: '成約（リード）',
+    emoji: '🎉',
+    fields: { 店舗名: 'テスト食堂', プラン: 'Growth', 見込みMRR: '¥9,800', メール: 'test@example.com', 種別: 'テスト通知' },
+  },
+  {
+    event: 'contract_activated',
+    title: '新規契約を有効化しました',
+    emoji: '🤝',
+    fields: { 店舗: 'テスト食堂', 店舗ID: 'test-syokudo', プラン: 'growth', 課金: 'monthly', 種別: 'テスト通知' },
+  },
+  {
+    event: 'plan_changed',
+    title: '契約プラン変更',
+    emoji: '🔄',
+    fields: { 店舗: 'テスト食堂', 店舗ID: 'test-syokudo', 変更前: 'lite', 変更後: 'growth', 種別: 'テスト通知' },
+  },
+];
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Fire sample notifications for every configured event (ignores per-event toggles). */
+export async function testAllDiscordEvents({ onProgress } = {}) {
+  const results = [];
+  for (let i = 0; i < ALL_EVENT_SAMPLES.length; i++) {
+    const sample = ALL_EVENT_SAMPLES[i];
+    if (typeof onProgress === 'function') {
+      onProgress({ index: i + 1, total: ALL_EVENT_SAMPLES.length, event: sample.event, title: sample.title });
+    }
+    const res = await notifyDiscord({
+      ...sample,
+      force: true,
+      footer: 'QuickOrder Ops · 全イベントテスト',
+    });
+    results.push({ event: sample.event, title: sample.title, ...res });
+    if (i < ALL_EVENT_SAMPLES.length - 1) await sleep(900);
+  }
+  return {
+    ok: results.every(r => r.ok || r.skipped),
+    sent: results.filter(r => r.ok).length,
+    failed: results.filter(r => !r.ok && !r.skipped).length,
+    results,
+  };
 }
 
 /* ——— typed ops events ——— */
