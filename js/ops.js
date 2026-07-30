@@ -12,12 +12,38 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { resolveServiceRequest, estimateWaitMinutes } from './guest-features.js';
 import {
-  getSlackWebhook,
-  setSlackWebhook,
-  isSlackNotifyEnabled,
-  setSlackNotifyEnabled,
   testSlackNotify,
+  loadNotifySettings,
+  saveNotifySettings,
+  getSetupStatus,
+  getNotifyEvents,
+  getNotifySettings,
+  NOTIFY_EVENTS,
 } from './notify.js';
+
+const SLACK_MANIFEST = `{
+  "display_information": {
+    "name": "QuickOrder Notify",
+    "description": "店舗・商品・契約のお知らせを Slack に送ります",
+    "background_color": "#10231f"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "QuickOrder",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["incoming-webhook", "chat:write"]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}`;
 
 const OpsPage = {
   shops: [],
@@ -55,7 +81,13 @@ const OpsPage = {
       console.warn('subscribeGlobal', e);
     }
     this.renderLabs();
-    this.renderSlackForm();
+    await this.refreshNotifySetup();
+    const params = new URLSearchParams(location.search);
+    if (params.get('tab') === 'notify') this.switchTab('notify');
+    else {
+      const status = await getSetupStatus().catch(() => null);
+      if (status?.needsSetup) this.switchTab('notify');
+    }
     window.scrollTo(0, 0);
   },
 
@@ -217,45 +249,148 @@ const OpsPage = {
         st.textContent = String(err.message || err);
       }
     });
-    document.getElementById('opsSlackForm')?.addEventListener('submit', (e) => {
+
+    document.getElementById('opsSlackForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const url = document.getElementById('opsSlackWebhook')?.value?.trim() || '';
-      const enabled = !!document.getElementById('opsSlackEnabled')?.checked;
       const st = document.getElementById('opsSlackStatus');
-      if (url && !url.includes('hooks.slack.com')) {
-        st.hidden = false;
-        st.textContent = 'hooks.slack.com の Incoming Webhook URL を入力してください';
-        return;
-      }
-      setSlackWebhook(url);
-      setSlackNotifyEnabled(enabled);
       st.hidden = false;
-      st.textContent = enabled
-        ? (url ? 'Slack Webhook を保存し、通知を有効にしました' : '通知ON（Cloudflare の SLACK_WEBHOOK_URL を利用）')
-        : '通知を無効にしました';
+      st.textContent = '保存中...';
+      try {
+        await saveNotifySettings({
+          webhook: document.getElementById('opsSlackWebhook')?.value?.trim() || '',
+          channel: document.getElementById('opsSlackChannel')?.value?.trim() || '',
+          enabled: !!document.getElementById('opsSlackEnabled')?.checked,
+          events: this.readEventToggles(),
+        });
+        st.textContent = '通知設定を保存しました（このブラウザ + 可能ならクラウド同期）';
+        await this.refreshNotifySetup();
+      } catch (err) {
+        st.textContent = String(err.message || err);
+      }
     });
+
     document.getElementById('opsSlackTest')?.addEventListener('click', async () => {
       const st = document.getElementById('opsSlackStatus');
       st.hidden = false;
       st.textContent = '送信中...';
-      const url = document.getElementById('opsSlackWebhook')?.value?.trim() || '';
-      if (url) setSlackWebhook(url);
-      setSlackNotifyEnabled(!!document.getElementById('opsSlackEnabled')?.checked);
+      try {
+        await saveNotifySettings({
+          webhook: document.getElementById('opsSlackWebhook')?.value?.trim() || '',
+          channel: document.getElementById('opsSlackChannel')?.value?.trim() || '',
+          enabled: !!document.getElementById('opsSlackEnabled')?.checked,
+          events: this.readEventToggles(),
+        });
+      } catch (err) {
+        st.textContent = String(err.message || err);
+        return;
+      }
       const res = await testSlackNotify();
-      if (res.ok) st.textContent = 'テスト通知を送信しました。Slack を確認してください。';
-      else if (res.data?.error === 'webhook_missing') {
-        st.textContent = 'Webhook 未設定です。URL を保存するか Cloudflare に SLACK_WEBHOOK_URL を設定してください。';
+      if (res.ok) {
+        st.textContent = 'テスト通知を送信しました。Slack チャンネルを確認してください。';
+        await saveNotifySettings({ setupDone: true });
+      } else if (res.data?.error === 'webhook_missing') {
+        st.textContent = 'Webhook 未設定です。①で URL を作成し、②に貼り付けて保存してください。';
       } else {
         st.textContent = '送信失敗: ' + (res.data?.error || res.error || res.status || 'unknown');
+      }
+      await this.refreshNotifySetup();
+    });
+
+    document.getElementById('opsSlackSaveEvents')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsSlackStatus');
+      st.hidden = false;
+      try {
+        await saveNotifySettings({ events: this.readEventToggles() });
+        st.textContent = 'イベント設定を保存しました';
+        await this.refreshNotifySetup();
+      } catch (err) {
+        st.textContent = String(err.message || err);
+      }
+    });
+
+    document.getElementById('opsSlackMarkDone')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsSlackStatus');
+      st.hidden = false;
+      await saveNotifySettings({ setupDone: true, enabled: true });
+      st.textContent = 'セットアップ完了にしました';
+      await this.refreshNotifySetup();
+    });
+
+    document.getElementById('copySlackManifest')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsSlackStatus');
+      try {
+        await navigator.clipboard.writeText(SLACK_MANIFEST);
+        if (st) {
+          st.hidden = false;
+          st.textContent = 'Slack App マニフェストをコピーしました。Create from Manifest に貼れます。';
+        }
+      } catch (_) {
+        if (st) {
+          st.hidden = false;
+          st.textContent = 'コピーに失敗しました。手動で slack-app-manifest.json を参照してください。';
+        }
       }
     });
   },
 
+  readEventToggles() {
+    const events = {};
+    document.querySelectorAll('#notifyEventList [data-event]').forEach(input => {
+      events[input.dataset.event] = !!input.checked;
+    });
+    return events;
+  },
+
+  async refreshNotifySetup() {
+    await loadNotifySettings().catch(() => {});
+    this.renderSlackForm();
+    const status = await getSetupStatus().catch(() => null);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+    if (!status) {
+      set('notifyApiStatus', '不明');
+      return;
+    }
+
+    set('notifyApiStatus', status.api?.functionReady ? '稼働' : '未検出');
+    set('notifyWebhookStatus', status.hasWebhook
+      ? (status.api?.hasEnvWebhook && !status.settings?.webhook ? 'CF秘密' : '設定済')
+      : '未設定');
+    set('notifyEnabledStatus', status.settings?.enabled ? 'ON' : 'OFF');
+    set('notifyReadyStatus', status.ready ? 'OK' : '要設定');
+
+    const banner = document.getElementById('notifySetupBanner');
+    if (banner) banner.hidden = !status.needsSetup;
+
+    const list = document.getElementById('notifyChecklist');
+    if (list) {
+      list.innerHTML = `
+        <li class="${status.hasWebhook ? 'ok' : ''}">Webhook URL を保存した ${status.hasWebhook ? '✓' : ''}</li>
+        <li class="${status.api?.functionReady ? 'ok' : ''}">通知API（/api/notify）が稼働 ${status.api?.functionReady ? '✓' : ''}</li>
+        <li class="${status.settings?.setupDone ? 'ok' : ''}">テスト送信 or セットアップ完了 ${status.settings?.setupDone ? '✓' : ''}</li>
+      `;
+    }
+  },
+
   renderSlackForm() {
+    const settings = getNotifySettings();
     const input = document.getElementById('opsSlackWebhook');
     const enabled = document.getElementById('opsSlackEnabled');
-    if (input) input.value = getSlackWebhook();
-    if (enabled) enabled.checked = isSlackNotifyEnabled();
+    const channel = document.getElementById('opsSlackChannel');
+    if (input) input.value = settings.webhook || '';
+    if (enabled) enabled.checked = settings.enabled !== false;
+    if (channel) channel.value = settings.channel || '';
+
+    const list = document.getElementById('notifyEventList');
+    if (list) {
+      const events = getNotifyEvents();
+      list.innerHTML = NOTIFY_EVENTS.map(ev => `
+        <label class="ops-event-item">
+          <input type="checkbox" data-event="${ev.id}" ${events[ev.id] !== false ? 'checked' : ''}>
+          <span>${escapeHtml(ev.label)}</span>
+        </label>
+      `).join('');
+    }
   },
 
   switchTab(id) {
@@ -270,6 +405,7 @@ const OpsPage = {
     if (id === 'requests') this.renderRequests();
     if (id === 'surveys') this.renderSurveys();
     if (id === 'lab') this.renderLabs();
+    if (id === 'notify') this.refreshNotifySetup();
   },
 
   async refreshShops() {

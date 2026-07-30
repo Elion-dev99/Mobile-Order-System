@@ -275,3 +275,67 @@ body.ops-body {
 @media (max-width: 640px) {
   .ops-top { flex-direction: column; align-items: start; }
 }
+
+
+.ops-status-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 0 0 20px;
+}
+.ops-banner {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(240, 180, 41, 0.45);
+  background: rgba(240, 180, 41, 0.12);
+  color: var(--ops-text);
+}
+.ops-banner strong { color: var(--ops-warn); }
+.ops-steps {
+  margin: 0 0 12px;
+  padding-left: 1.25rem;
+  color: var(--ops-muted);
+  line-height: 1.7;
+}
+.ops-steps a { color: var(--ops-accent); }
+.ops-event-list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.ops-event-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ops-line);
+  background: var(--ops-panel);
+  color: var(--ops-text);
+  font-size: 14px;
+}
+.ops-checklist li.ok { color: var(--ops-accent); }
+.ops-linkish {
+  background: none;
+  border: 0;
+  color: var(--ops-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+.ops-btn {
+  text-decoration: none;
+  color: #06261b;
+  background: var(--ops-accent);
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}

@@ -1,0 +1,33 @@
+name: Configure Slack Webhook
+
+on:
+  workflow_dispatch:
+    inputs:
+      webhook_url:
+        description: "Slack Incoming Webhook URL (https://hooks.slack.com/services/...)"
+        required: true
+        type: string
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate and put Cloudflare Pages secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WEBHOOK_URL: ${{ inputs.webhook_url }}
+        run: |
+          case "$WEBHOOK_URL" in
+            https://hooks.slack.com/services/*) ;;
+            *) echo "Invalid Slack Incoming Webhook URL"; exit 1 ;;
+          esac
+          printf '%s' "$WEBHOOK_URL" | npx --yes wrangler@4 pages secret put SLACK_WEBHOOK_URL --project-name=mobile-order-system

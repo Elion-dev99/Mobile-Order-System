@@ -49,6 +49,7 @@
   <nav class="ops-tabs">
     <button type="button" data-ops-tab="hq" class="active">HQ</button>
     <button type="button" data-ops-tab="shops">店舗</button>
+    <button type="button" data-ops-tab="notify">通知</button>
     <button type="button" data-ops-tab="requests">呼出</button>
     <button type="button" data-ops-tab="surveys">アンケート</button>
     <button type="button" data-ops-tab="lab">テスト</button>
@@ -96,6 +97,61 @@
       <div id="shopsList" class="ops-shop-grid"></div>
     </section>
 
+    <section data-ops-panel="notify" hidden>
+      <div id="notifySetupBanner" class="ops-banner" hidden>
+        <strong>Slack通知の初期設定がまだです</strong>
+        <span>下のウィザードを進めると、店舗・商品・契約のお知らせが Slack に届きます。</span>
+      </div>
+
+      <div class="ops-status-cards" id="notifyStatusCards">
+        <div class="ops-card"><span>通知API</span><strong id="notifyApiStatus">確認中</strong></div>
+        <div class="ops-card"><span>Webhook</span><strong id="notifyWebhookStatus">未設定</strong></div>
+        <div class="ops-card"><span>通知</span><strong id="notifyEnabledStatus">—</strong></div>
+        <div class="ops-card"><span>準備</span><strong id="notifyReadyStatus">—</strong></div>
+      </div>
+
+      <h2>① Slack Incoming Webhook を作成</h2>
+      <ol class="ops-steps">
+        <li><a href="https://api.slack.com/apps?new_app=1" target="_blank" rel="noopener">Slack App を新規作成</a>（From scratch または From a manifest）</li>
+        <li>マニフェスト利用時は下の「マニフェストをコピー」→ Create from Manifest に貼付け</li>
+        <li>左メニュー <strong>Incoming Webhooks</strong> → Activate を On（またはアプリをワークスペースにインストール）</li>
+        <li><strong>Add New Webhook to Workspace</strong> → 通知したいチャンネルを選択</li>
+        <li>表示された <code>https://hooks.slack.com/services/...</code> をコピーして②へ</li>
+      </ol>
+      <p class="ops-muted">アプリ名の例: <code>QuickOrder Notify</code> / チャンネル例: <code>#quickorder-ops</code></p>
+      <div class="ops-lab-links" style="margin-top:8px">
+        <a class="ops-btn" href="https://api.slack.com/apps?new_app=1" target="_blank" rel="noopener">Slack App を開く</a>
+        <a class="ops-btn secondary" href="https://slack.com/marketplace/A0F7XDUAZ" target="_blank" rel="noopener">Incoming Webhooks 説明</a>
+        <button type="button" class="ops-btn secondary" id="copySlackManifest">マニフェストをコピー</button>
+      </div>
+
+      <h2>② Webhook を保存</h2>
+      <form id="opsSlackForm" class="ops-form-grid">
+        <label class="ops-span-2">Incoming Webhook URL
+          <input id="opsSlackWebhook" type="url" placeholder="https://hooks.slack.com/services/T.../B.../..." autocomplete="off" required>
+        </label>
+        <label>通知チャンネル名（任意）
+          <input id="opsSlackChannel" type="text" placeholder="quickorder-ops" maxlength="80">
+        </label>
+        <label class="ops-inline ops-span-2"><input type="checkbox" id="opsSlackEnabled" checked> 通知を有効にする</label>
+        <button type="submit">設定を保存</button>
+        <button type="button" id="opsSlackTest" class="ops-btn-secondary">テスト送信</button>
+      </form>
+      <p id="opsSlackStatus" class="ops-status" hidden></p>
+
+      <h2>③ 通知するイベント</h2>
+      <div id="notifyEventList" class="ops-event-list"></div>
+      <button type="button" id="opsSlackSaveEvents" class="ops-btn-secondary">イベント設定を保存</button>
+
+      <h2>④ 動作確認</h2>
+      <ul class="ops-checklist" id="notifyChecklist">
+        <li>Webhook URL を保存した</li>
+        <li>テスト送信が Slack に届いた</li>
+        <li>店舗追加や商品保存で通知が来る</li>
+      </ul>
+      <button type="button" id="opsSlackMarkDone" class="ops-btn">セットアップ完了にする</button>
+    </section>
+
     <section data-ops-panel="requests" hidden>
       <h2>店員呼出・会計リクエスト</h2>
       <div id="requestsList"></div>
@@ -137,18 +193,7 @@
         <button type="submit">更新</button>
       </form>
       <p id="opsPwStatus" class="ops-status" hidden></p>
-
-      <h2 style="margin-top:28px">Slack 通知</h2>
-      <p class="ops-muted">店舗追加・削除、商品追加・削除、新規契約・リードなどを Slack に送ります。Incoming Webhook URL を保存するか、Cloudflare の環境変数 <code>SLACK_WEBHOOK_URL</code> を設定してください。</p>
-      <form id="opsSlackForm" class="ops-form-grid">
-        <label class="ops-span-2">Incoming Webhook URL
-          <input id="opsSlackWebhook" type="url" placeholder="https://hooks.slack.com/services/..." autocomplete="off">
-        </label>
-        <label class="ops-inline ops-span-2"><input type="checkbox" id="opsSlackEnabled" checked> 通知を有効にする</label>
-        <button type="submit">保存</button>
-        <button type="button" id="opsSlackTest" class="ops-btn-secondary">テスト送信</button>
-      </form>
-      <p id="opsSlackStatus" class="ops-status" hidden></p>
+      <p class="ops-muted" style="margin-top:20px">Slack 通知の設定は <button type="button" class="ops-linkish" data-ops-tab="notify">通知タブ</button> で行います。</p>
     </section>
   </main>
 </div>

@@ -44,7 +44,8 @@ export async function onRequestPost(context) {
     return json({
       ok: false,
       error: 'webhook_missing',
-      hint: 'Cloudflare Pages の環境変数 SLACK_WEBHOOK_URL を設定するか、Ops で Incoming Webhook URL を保存してください。',
+      hint: 'Ops の「通知」タブで Incoming Webhook URL を保存するか、Cloudflare の SLACK_WEBHOOK_URL を設定してください。',
+      hasEnvWebhook: !!(env && env.SLACK_WEBHOOK_URL),
     }, 400);
   }
 
@@ -78,9 +79,19 @@ export async function onRequestOptions() {
   return new Response(null, {
     status: 204,
     headers: {
-      'access-control-allow-methods': 'POST, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
       'access-control-allow-headers': 'content-type',
       'access-control-max-age': '86400',
     },
+  });
+}
+
+export async function onRequestGet(context) {
+  const { env } = context;
+  return json({
+    ok: true,
+    service: 'quickorder-slack-notify',
+    hasEnvWebhook: !!(env && env.SLACK_WEBHOOK_URL),
+    hint: 'POST { text, webhook? } で Slack に送信します',
   });
 }

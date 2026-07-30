@@ -23,5 +23,8 @@ service cloud.firestore {
     match /surveys/{id} {
       allow read, write: if true;
     }
+    match /ops/{doc} {
+      allow read, write: if true;
+    }
   }
 }

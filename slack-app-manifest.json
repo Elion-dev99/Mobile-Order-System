@@ -1,0 +1,23 @@
+{
+  "display_information": {
+    "name": "QuickOrder Notify",
+    "description": "店舗・商品・契約のお知らせを Slack に送ります",
+    "background_color": "#10231f"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "QuickOrder",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["incoming-webhook", "chat:write"]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
