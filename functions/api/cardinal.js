@@ -19,6 +19,8 @@ import { requireOpsSecret, corsHeaders, getOpsSecret } from './_ops-auth.js';
 import {
   readMaintenanceState,
   writeMaintenanceState,
+  applyScheduleToState,
+  effectiveMaintenance,
   DEFAULT_MESSAGE as MAINT_DEFAULT_MESSAGE,
 } from './_maintenance-store.js';
 
@@ -304,61 +306,97 @@ export async function onRequestPost(context) {
       }
     }
 
-    const siteDown = ['/', '/ops.html'].some((p) => !probes[p]?.ok);
-    const apiDown = !probes['/api/notify']?.ok || !probes['/api/cardinal']?.ok;
-    const firestoreDown = !probes.firestore?.ok;
+    // Ops drill: pretend site/Firestore are down without breaking production probes for Discord detail
+    const simulateUnhealthy = !!body.simulateUnhealthy || !!body.drillOutage;
+    if (simulateUnhealthy) {
+      probes['/__simulated'] = { ok: false, error: 'simulateUnhealthy', ms: 0 };
+      probes.firestore = { ok: false, error: 'simulateUnhealthy', status: 0, ms: 0 };
+    }
+
+    const siteDown = simulateUnhealthy || ['/', '/ops.html'].some((p) => !probes[p]?.ok);
+    const apiDown = simulateUnhealthy || !probes['/api/notify']?.ok || !probes['/api/cardinal']?.ok;
+    const firestoreDown = simulateUnhealthy || !probes.firestore?.ok;
     // Auto-maintenance: order path broken (Firestore) or site/API hard down
     const shouldMaintain = firestoreDown || siteDown || apiDown;
     const unhealthy = shouldMaintain || Object.values(probes).some((p) => !p.ok);
 
     let maintenance = null;
+    let scheduleApply = null;
     try {
       const prev = await readMaintenanceState(context.caches);
       if (shouldMaintain) {
         maintenance = await writeMaintenanceState(context.caches, {
           maintenance: true,
           message: MAINT_DEFAULT_MESSAGE,
-          updatedBy: 'cardinal-tick',
+          updatedBy: simulateUnhealthy ? 'cardinal:drill-tick' : 'cardinal-tick',
           source: 'cardinal',
           auto: true,
+          schedule: prev.schedule,
         });
-        if (!prev.maintenance) {
+        if (!prev.maintenance || simulateUnhealthy) {
           await postDiscord(env, body, {
-            title: 'Cardinal: 自動メンテナンス開始',
+            title: simulateUnhealthy
+              ? 'Cardinal: 障害メンテドリル（模擬）'
+              : 'Cardinal: 自動メンテナンス開始',
             color: 0xed4245,
             fields: [
-              { name: '理由', value: firestoreDown ? 'Firestore障害' : (siteDown ? 'サイト障害' : 'API障害'), inline: true },
+              {
+                name: '理由',
+                value: simulateUnhealthy
+                  ? 'simulateUnhealthy ドリル'
+                  : (firestoreDown ? 'Firestore障害' : (siteDown ? 'サイト障害' : 'API障害')),
+                inline: true,
+              },
               { name: '案内', value: MAINT_DEFAULT_MESSAGE, inline: false },
             ],
             timestamp: new Date().toISOString(),
             footer: { text: 'QuickOrder Cardinal' },
           }).catch(() => {});
         }
-      } else if (prev.maintenance && (prev.auto || prev.source === 'cardinal')) {
-        maintenance = await writeMaintenanceState(context.caches, {
-          maintenance: false,
-          updatedBy: 'cardinal-tick',
-          source: 'cardinal',
-          auto: true,
-        });
-        await postDiscord(env, body, {
-          title: 'Cardinal: 自動メンテナンス解除',
-          color: 0x57f287,
-          fields: [
-            { name: '状態', value: 'プローブ正常のため解除', inline: true },
-          ],
-          timestamp: new Date().toISOString(),
-          footer: { text: 'QuickOrder Cardinal' },
-        }).catch(() => {});
+      } else if (
+        prev.maintenance
+        && (prev.source === 'cardinal')
+        && prev.auto
+      ) {
+        // Don't clear if weekly/once schedule still active
+        scheduleApply = await applyScheduleToState(context.caches, { outageMaintain: false });
+        if (scheduleApply.scheduleEval?.active) {
+          maintenance = scheduleApply.state;
+        } else {
+          maintenance = await writeMaintenanceState(context.caches, {
+            maintenance: false,
+            updatedBy: 'cardinal-tick',
+            source: 'cardinal',
+            auto: true,
+            schedule: prev.schedule,
+          });
+          await postDiscord(env, body, {
+            title: 'Cardinal: 自動メンテナンス解除',
+            color: 0x57f287,
+            fields: [
+              { name: '状態', value: 'プローブ正常のため解除', inline: true },
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: 'QuickOrder Cardinal' },
+          }).catch(() => {});
+        }
       } else {
-        maintenance = prev;
+        scheduleApply = await applyScheduleToState(context.caches, { outageMaintain: false });
+        maintenance = scheduleApply.state;
       }
+      maintenance = {
+        ...effectiveMaintenance(maintenance),
+        scheduleApply,
+        simulated: simulateUnhealthy,
+      };
     } catch (e) {
       maintenance = { ok: false, error: String(e?.message || e) };
     }
 
     let dispatch = null;
-    if (unhealthy || force) {
+    // Drill must not burn Cursor credits unless explicitly requested
+    const allowDispatch = !simulateUnhealthy || !!body.dispatchOnDrill;
+    if (allowDispatch && (unhealthy || force)) {
       const role = unhealthy ? 'executor' : 'guardian';
       dispatch = await dispatchRole(env, role, {
         kind: unhealthy ? 'incident' : 'watchdog',
@@ -399,6 +437,7 @@ export async function onRequestPost(context) {
       action: 'tick',
       unhealthy,
       shouldMaintain,
+      simulateUnhealthy,
       probes,
       maintenance,
       dispatched: !!dispatch?.launched,

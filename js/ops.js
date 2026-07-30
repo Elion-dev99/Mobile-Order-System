@@ -46,7 +46,18 @@ import {
 import { escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
 import { ordersToCsv, downloadCsv } from './guest-extras.js';
 import {
-  loadMaintenance, subscribeMaintenance, setMaintenanceMode, getMaintenance, DEFAULT_MESSAGE,
+  loadMaintenance,
+  subscribeMaintenance,
+  setMaintenanceMode,
+  getMaintenance,
+  DEFAULT_MESSAGE,
+  saveMaintenanceSchedule,
+  runOutageMaintenanceDrill,
+  runCardinalOutageTickDrill,
+  describeSchedule,
+  getScheduleEval,
+  WEEKDAYS,
+  pushMaintenanceApi,
 } from './maintenance.js';
 
 const OpsPage = {
@@ -362,27 +373,149 @@ const OpsPage = {
 
   renderMaintenancePanel() {
     const state = getMaintenance();
+    const ev = getScheduleEval();
     const banner = document.getElementById('opsMaintenanceState');
     const input = document.getElementById('opsMaintenanceMessage');
     const hq = document.getElementById('hqHealth');
     if (input && document.activeElement !== input) {
       input.value = state.message || DEFAULT_MESSAGE;
     }
+    const effectiveOn = !!(state.maintenance || ev.active);
     if (banner) {
       banner.hidden = false;
-      if (state.maintenance) {
-        const auto = state.auto || state.source === 'cardinal';
-        banner.innerHTML = `<strong>現在 ON${auto ? ' · Cardinal自動' : ' · 手動'}</strong><span>${escapeHtml(state.message)}</span>`;
+      if (effectiveOn) {
+        const kind = state.maintenance
+          ? (state.source === 'cardinal' ? 'Cardinal自動' : (state.source === 'schedule' ? 'スケジュール' : '手動'))
+          : 'スケジュール中';
+        banner.innerHTML = `<strong>現在 ON · ${kind}</strong><span>${escapeHtml(state.maintenance ? state.message : ev.message)}</span>`;
         banner.style.borderColor = 'rgba(237, 66, 69, 0.45)';
         banner.style.background = 'rgba(237, 66, 69, 0.14)';
       } else {
-        banner.innerHTML = `<strong>現在 OFF</strong><span>通常営業（ゲスト新規受付可）。障害時は Cardinal が自動で ON にします。</span>`;
+        banner.innerHTML = `<strong>現在 OFF</strong><span>通常営業。障害時は Cardinal 自動 / 定期スケジュールで ON になります。</span>`;
         banner.style.borderColor = 'rgba(87, 242, 135, 0.35)';
         banner.style.background = 'rgba(87, 242, 135, 0.1)';
       }
     }
-    if (hq && state.maintenance) {
-      hq.textContent = state.auto || state.source === 'cardinal' ? '自動メンテ' : 'メンテ中';
+    if (hq && effectiveOn) {
+      hq.textContent = state.source === 'cardinal' ? '自動メンテ' : (ev.active || state.source === 'schedule' ? '定期メンテ' : 'メンテ中');
+    }
+    this.renderScheduleForm(state);
+  },
+
+  ensureSchedDays() {
+    const host = document.getElementById('opsSchedDays');
+    if (!host || host.dataset.ready) return;
+    host.dataset.ready = '1';
+    host.innerHTML = WEEKDAYS.map((d) => `
+      <label class="ops-inline" style="margin:0;">
+        <input type="checkbox" data-sched-day="${d.id}"> ${d.label}
+      </label>`).join('');
+  },
+
+  renderScheduleForm(state = getMaintenance()) {
+    this.ensureSchedDays();
+    const s = state.schedule || {};
+    const en = document.getElementById('opsSchedEnabled');
+    if (en && document.activeElement !== en) en.checked = !!s.enabled;
+    document.querySelectorAll('[data-sched-day]').forEach((el) => {
+      if (document.activeElement === el) return;
+      el.checked = Array.isArray(s.days) && s.days.includes(Number(el.dataset.schedDay));
+    });
+    const start = document.getElementById('opsSchedStart');
+    const end = document.getElementById('opsSchedEnd');
+    const msg = document.getElementById('opsSchedMessage');
+    if (start && document.activeElement !== start) start.value = s.start || '03:00';
+    if (end && document.activeElement !== end) end.value = s.end || '04:00';
+    if (msg && document.activeElement !== msg) msg.value = s.message || '';
+    const onceStart = document.getElementById('opsSchedOnceStart');
+    const onceEnd = document.getElementById('opsSchedOnceEnd');
+    const toLocal = (ms) => {
+      if (!ms) return '';
+      const d = new Date(ms);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    if (onceStart && document.activeElement !== onceStart) onceStart.value = toLocal(s.onceStart);
+    if (onceEnd && document.activeElement !== onceEnd) onceEnd.value = toLocal(s.onceEnd);
+    const sum = document.getElementById('opsSchedSummary');
+    if (sum) {
+      const ev = getScheduleEval();
+      sum.textContent = `${describeSchedule(s)} · いま${ev.active ? '窓内' : '窓外'}（${ev.reason}）`;
+    }
+  },
+
+  readScheduleForm() {
+    const days = [...document.querySelectorAll('[data-sched-day]:checked')]
+      .map((el) => Number(el.dataset.schedDay));
+    const onceStartRaw = document.getElementById('opsSchedOnceStart')?.value;
+    const onceEndRaw = document.getElementById('opsSchedOnceEnd')?.value;
+    return {
+      enabled: !!document.getElementById('opsSchedEnabled')?.checked,
+      timezone: 'Asia/Tokyo',
+      days,
+      start: document.getElementById('opsSchedStart')?.value || '03:00',
+      end: document.getElementById('opsSchedEnd')?.value || '04:00',
+      message: document.getElementById('opsSchedMessage')?.value?.trim()
+        || '定期メンテナンス中です。ご注文はレジにてお願いいたします。',
+      onceStart: onceStartRaw ? Date.parse(onceStartRaw) : null,
+      onceEnd: onceEndRaw ? Date.parse(onceEndRaw) : null,
+    };
+  },
+
+  async saveSchedule() {
+    const st = document.getElementById('opsSchedStatus');
+    if (!(await this.requireFirebaseForWrite('スケジュール保存'))) {
+      // Edge-only save still possible with Ops secret
+    }
+    if (st) { st.hidden = false; st.textContent = '保存中...'; }
+    try {
+      const user = getStaffUser();
+      await saveMaintenanceSchedule(this.readScheduleForm(), {
+        updatedBy: user?.email || getOpsRole() || 'ops',
+      });
+      this.renderMaintenancePanel();
+      if (st) st.textContent = 'スケジュールを保存しました';
+    } catch (e) {
+      console.error(e);
+      if (st) st.textContent = '保存失敗: ' + (e?.message || e);
+    }
+  },
+
+  async runMaintDrill(kind) {
+    const st = document.getElementById('opsMaintDrillStatus');
+    const log = document.getElementById('opsMaintDrillLog');
+    if (st) { st.hidden = false; st.textContent = '実行中...'; }
+    if (log) { log.hidden = false; log.textContent = ''; }
+    try {
+      let result;
+      if (kind === 'on') {
+        if (!confirm('模擬障害で自動メンテナンスを ON にします。客席注文が止まります。続行？')) {
+          if (st) st.textContent = 'キャンセル';
+          return;
+        }
+        result = await runOutageMaintenanceDrill({ clearAfter: false });
+      } else if (kind === 'tick') {
+        if (!confirm('Cardinal tick に模擬障害を送ります（エージェント起動なし）。続行？')) {
+          if (st) st.textContent = 'キャンセル';
+          return;
+        }
+        result = await runCardinalOutageTickDrill();
+      } else {
+        result = await pushMaintenanceApi({ action: 'drill_clear' });
+        await loadMaintenance();
+        result = { ok: !!result.ok, ...result, hint: 'ドリル解除を要求しました' };
+      }
+      this.renderMaintenancePanel();
+      if (st) {
+        st.textContent = result.ok
+          ? (result.hint || 'OK')
+          : (result.hint || '失敗 — Ops鍵とデプロイを確認');
+      }
+      if (log) log.textContent = JSON.stringify(result, null, 2);
+    } catch (e) {
+      console.error(e);
+      if (st) st.textContent = String(e?.message || e);
+      if (log) { log.hidden = false; log.textContent = String(e?.stack || e); }
     }
   },
 
@@ -423,6 +556,10 @@ const OpsPage = {
     document.getElementById('opsMaintenanceOn')?.addEventListener('click', () => this.applyMaintenance(true));
     document.getElementById('opsMaintenanceOff')?.addEventListener('click', () => this.applyMaintenance(false));
     document.getElementById('opsMaintenanceRefresh')?.addEventListener('click', () => this.refreshMaintenance());
+    document.getElementById('opsSchedSave')?.addEventListener('click', () => this.saveSchedule());
+    document.getElementById('opsMaintDrillOn')?.addEventListener('click', () => this.runMaintDrill('on'));
+    document.getElementById('opsMaintDrillTick')?.addEventListener('click', () => this.runMaintDrill('tick'));
+    document.getElementById('opsMaintDrillClear')?.addEventListener('click', () => this.runMaintDrill('clear'));
     document.querySelectorAll('[data-ops-tab]').forEach(btn => {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.opsTab));
     });
