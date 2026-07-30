@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/ops.css">
+  <link rel="stylesheet" href="css/ops.css?v=maint1">
 </head>
 <body class="ops-body">
 
@@ -80,6 +80,22 @@
         <button type="button" id="opsHealthAutoFix" class="ops-btn">Cursorに自動対処を依頼</button>
         <p id="opsHealthStatus" class="ops-status" hidden></p>
       </div>
+
+      <div class="ops-health-playbook" id="opsMaintenancePanel">
+        <h2>メンテナンスモード</h2>
+        <p class="ops-muted">全店舗の新規注文・呼出・予約・リードを止めます。厨房のステータス更新と Ops 操作は継続できます。店舗の「準備中」とは別です。</p>
+        <p id="opsMaintenanceState" class="ops-banner" hidden></p>
+        <label>案内文
+          <input id="opsMaintenanceMessage" type="text" maxlength="200" placeholder="メンテナンス中です。ご注文はレジにてお願いいたします。">
+        </label>
+        <div class="ops-toolbar" style="margin-top:12px;">
+          <button type="button" id="opsMaintenanceOn" class="ops-btn">メンテナンス開始</button>
+          <button type="button" id="opsMaintenanceOff" class="ops-btn-secondary">解除</button>
+          <button type="button" id="opsMaintenanceRefresh" class="ops-btn-secondary">再読込</button>
+        </div>
+        <p id="opsMaintenanceStatus" class="ops-status" hidden></p>
+      </div>
+
       <h2>店舗別きょう</h2>
       <div class="ops-table-wrap">
         <table>
@@ -473,7 +489,7 @@
   </main>
 </div>
 
-<script type="module" src="js/ops.js"></script>
+<script type="module" src="js/ops.js?v=maint1"></script>
 <script>
   // モジュール読み込み失敗時のフォールバック表示
   setTimeout(() => {

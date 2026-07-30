@@ -17,6 +17,7 @@ import {
 } from './reservations.js';
 import { startOfflineSync } from './offline-sync.js';
 import { markOrderPaid, paymentBadge } from './payments.js';
+import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
 
 const StorePage = {
   orders: [],
@@ -26,8 +27,10 @@ const StorePage = {
 
   async init() {
     resolveShopId();
-    await Promise.all([loadShop(), loadMenu()]);
+    await Promise.all([loadShop(), loadMenu(), loadMaintenance().catch(() => {})]);
     await ensureTrialStarted().catch(() => {});
+    subscribeMaintenance();
+    mountMaintenanceBanner({ compact: true });
     // Store floor tablets stay Auth-free: rules allow narrow shop field patches.
     // Firebase login is only for Ops / Admin (menu, billing, deletes).
     startOfflineSync();

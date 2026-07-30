@@ -18,6 +18,7 @@ import { getLocalMember, applyOrderToMember, pointsYenValue } from './loyalty.js
 import { maybeAutoPrint } from './printers.js';
 import { pushOrderToPos } from './pos-bridge.js';
 import { enqueueMutation } from './offline-sync.js';
+import { isMaintenanceMode, maintenanceMessage } from './maintenance.js';
 
 export function computeOrderTotals(cart, shop = getShop(), opts = {}) {
   const subtotal = (cart || []).reduce((s, e) => s + e.price * e.qty, 0);
@@ -63,6 +64,10 @@ export async function placeGuestOrder({
   memberPhone = '',
 } = {}) {
   if (!cart?.length) return { ok: false, error: 'empty' };
+  // Demo keeps working so Ops can smoke-test UI during maintenance
+  if (isMaintenanceMode() && !isDemoMode()) {
+    return { ok: false, error: 'maintenance', message: maintenanceMessage() };
+  }
 
   const orderId = (isDemoMode() ? 'DEMO-' : 'ORD-') + Math.random().toString(36).substring(2, 8).toUpperCase();
   const shop = getShop();
@@ -151,6 +156,10 @@ export async function placeGuestOrder({
     return { ok: true, orderId, order, statusUrl };
   } catch (e) {
     console.error(e);
+    // Do not locally queue during platform maintenance (rules deny create on purpose)
+    if (isMaintenanceMode() && !isDemoMode()) {
+      return { ok: false, error: 'maintenance', message: maintenanceMessage() };
+    }
     enqueueMutation({ type: 'orderCreate', collection: 'orders', docId: orderId, data: order });
     const n = enqueuePendingOrder(order);
     localStorage.removeItem(cartStorageKey());

@@ -231,6 +231,13 @@ export function enqueuePendingOrder(order) {
 }
 
 export async function flushPendingOrders(setDocFn) {
+  try {
+    const { isMaintenanceMode } = await import('./maintenance.js');
+    if (isMaintenanceMode()) {
+      const list = listPendingOrders();
+      return { sent: 0, left: list.length, maintenance: true };
+    }
+  } catch (_) {}
   const list = listPendingOrders();
   if (!list.length) return { sent: 0, left: 0 };
   const remain = [];

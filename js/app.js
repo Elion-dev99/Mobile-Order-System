@@ -15,6 +15,7 @@ import {
 } from './guest-features.js';
 import { mountGuestOrderHistory } from './order-history.js';
 import { placeGuestOrder, computeOrderTotals } from './place-order.js';
+import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
 import { validateCoupon, setAppliedCoupon, getAppliedCoupon, discountForCoupon } from './coupons.js';
 import {
   applyBrandTheme, mountQuickFilters, mountPartySizePrompt, mountShareTableLink,
@@ -75,7 +76,9 @@ const App = {
     this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
     const urlChannel = new URLSearchParams(location.search).get('channel');
     this.channel = setSelectedChannel(urlChannel || getSelectedChannel());
-    await Promise.all([loadShop(), loadMenu()]);
+    await Promise.all([loadShop(), loadMenu(), loadMaintenance().catch(() => {})]);
+    subscribeMaintenance();
+    mountMaintenanceBanner();
     const shop = getShop();
     applyBrandTheme(shop);
     this.member = getLocalMember(getShopId());
@@ -1512,6 +1515,11 @@ const App = {
       pointsRedeem: this.pointsRedeem,
       memberPhone: document.getElementById('memberPhone')?.value || '',
     });
+    if (!result?.ok) {
+      showToast(result?.message || result?.error || '注文に失敗しました');
+      this.updateSpaPlaceBtn();
+      return;
+    }
     this.cart = [];
     this.saveCart();
     this.updateCartBar();

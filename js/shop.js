@@ -7,6 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { notifyShopCreated, notifyShopDeleted, notifyContractActivated } from './notify.js';
 import { getAccessState, canUseFeature } from './plans.js';
+import { isMaintenanceMode, maintenanceMessage } from './maintenance.js';
 
 let shopCache = { ...DEFAULT_SHOP, id: DEFAULT_SHOP_ID };
 let menuCache = null;
@@ -408,8 +409,11 @@ export function isTableOrderingLocked(tableNumber) {
   }
 }
 
-/** Guest cannot place new orders (bill requested or last order). */
+/** Guest cannot place new orders (bill / last order / platform maintenance). */
 export function getOrderingBlockReason(tableNumber, shop = shopCache) {
+  if (isMaintenanceMode()) {
+    return { blocked: true, reason: 'maintenance', label: maintenanceMessage() };
+  }
   if (isTableOrderingLocked(tableNumber)) {
     return { blocked: true, reason: 'bill', label: 'お会計リクエスト済み' };
   }

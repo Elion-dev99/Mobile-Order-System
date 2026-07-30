@@ -42,6 +42,7 @@ import { listCoupons, normalizeCoupon, saveCoupons, createCouponDraft } from './
 import {
   getStaffRole, setStaffRole, verifyStaffPin, staffCan, staffRoleLabel,
 } from './staff-auth.js';
+import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
 
 const AdminPage = {
   filter: 'received',
@@ -70,6 +71,9 @@ const AdminPage = {
     }
 
     await loadShop();
+    await loadMaintenance().catch(() => {});
+    subscribeMaintenance();
+    mountMaintenanceBanner({ compact: true });
     await ensureTrialStarted();
     this.menuDraft = await ensureMenuSeeded();
     this._menuSnapshot = JSON.parse(JSON.stringify(this.menuDraft?.items || []));

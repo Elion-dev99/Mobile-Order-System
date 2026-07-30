@@ -8,10 +8,14 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { getShopId } from './shop.js';
 import { isDemoMode } from './demo.js';
+import { isMaintenanceMode, maintenanceMessage } from './maintenance.js';
 
 export async function createReservation({
   name, phone, partySize = 2, at, note = '', channel = 'web',
 } = {}, shopId = getShopId()) {
+  if (isMaintenanceMode() && !isDemoMode()) {
+    throw new Error(maintenanceMessage());
+  }
   const payload = {
     shopId,
     name: String(name || '').slice(0, 40),
@@ -41,6 +45,9 @@ export async function createReservation({
 export async function createWaitlistEntry({
   name, phone, partySize = 2, note = '',
 } = {}, shopId = getShopId()) {
+  if (isMaintenanceMode() && !isDemoMode()) {
+    throw new Error(maintenanceMessage());
+  }
   const payload = {
     shopId,
     name: String(name || 'ゲスト').slice(0, 40),
