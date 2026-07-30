@@ -38,7 +38,7 @@ import {
 import { maybeNotifySystemLoad } from './load-monitor.js';
 import { ordersToCsv, downloadCsv, applyBrandTheme, filterOrdersByDateRange } from './guest-extras.js';
 import { notifyOrderStatus } from './notify-orders.js';
-import { listCoupons, normalizeCoupon, saveCoupons } from './coupons.js';
+import { listCoupons, normalizeCoupon, saveCoupons, createCouponDraft } from './coupons.js';
 import {
   getStaffRole, setStaffRole, verifyStaffPin, staffCan, staffRoleLabel,
 } from './staff-auth.js';
@@ -306,7 +306,8 @@ const AdminPage = {
       });
     });
     document.getElementById('addCouponBtn')?.addEventListener('click', () => {
-      this.couponDraft.push(normalizeCoupon({ code: 'NEW', type: 'percent', value: 10, label: '新規クーポン' }));
+      this.syncCouponDraftFromDom();
+      this.couponDraft.push(createCouponDraft({ type: 'percent', value: 10, label: '新規クーポン' }));
       this.renderCouponEditor();
     });
     // default CSV range = today
@@ -1451,7 +1452,11 @@ const AdminPage = {
 
     const couponsBlock = document.getElementById('couponsBlock');
     if (couponsBlock) couponsBlock.hidden = !shopCanUse('coupons');
-    this.couponDraft = listCoupons(shop).map((c) => ({ ...c }));
+    // Keep in-progress editor rows across settings re-renders (plan change, unlock, etc.)
+    if (!this._couponsHydrated) {
+      this.couponDraft = listCoupons(shop).map((c) => ({ ...c }));
+      this._couponsHydrated = true;
+    }
     this.renderCouponEditor();
     this.syncOpsChrome();
   },
@@ -1553,6 +1558,7 @@ const AdminPage = {
     try {
       await saveShop(payload);
       if (shopCanUse('coupons')) await saveCoupons(this.couponDraft);
+      this._couponsHydrated = false;
       notifyPlanChanged({ ...getShop(), id: getShopId() }, prevPlan, payload.planId);
       this.applyShopBranding();
       this.renderBilling();
