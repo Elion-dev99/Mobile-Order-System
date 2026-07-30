@@ -1,10 +1,8 @@
 /**
- * Cloudflare Pages Function — Slack Incoming Webhook proxy.
- * Secrets: SLACK_WEBHOOK_URL (preferred)
- * Or pass webhook in JSON body (must be hooks.slack.com) when Ops configures it.
+ * Cloudflare Pages Function — Discord Incoming Webhook proxy.
+ * Secrets: DISCORD_WEBHOOK_URL (preferred)
+ * Or pass webhook in JSON body (discord.com / discordapp.com) from Ops.
  */
-
-const SLACK_HOST = 'hooks.slack.com';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -16,10 +14,12 @@ function json(data, status = 200) {
   });
 }
 
-function isSlackWebhook(url) {
+function isDiscordWebhook(url) {
   try {
     const u = new URL(String(url || ''));
-    return u.protocol === 'https:' && u.hostname === SLACK_HOST && u.pathname.startsWith('/services/');
+    if (u.protocol !== 'https:') return false;
+    if (u.hostname !== 'discord.com' && u.hostname !== 'discordapp.com') return false;
+    return /^\/api\/webhooks\/\d+\/[\w-]+/.test(u.pathname);
   } catch {
     return false;
   }
@@ -36,38 +36,42 @@ export async function onRequestPost(context) {
   }
 
   const webhook =
-    (env && env.SLACK_WEBHOOK_URL) ||
+    (env && env.DISCORD_WEBHOOK_URL) ||
     body.webhook ||
     '';
 
-  if (!isSlackWebhook(webhook)) {
+  if (!isDiscordWebhook(webhook)) {
     return json({
       ok: false,
       error: 'webhook_missing',
-      hint: 'Ops の「通知」タブで Incoming Webhook URL を保存するか、Cloudflare の SLACK_WEBHOOK_URL を設定してください。',
-      hasEnvWebhook: !!(env && env.SLACK_WEBHOOK_URL),
+      hint: 'Ops の「通知」タブで Discord Webhook URL を保存するか、Cloudflare の DISCORD_WEBHOOK_URL を設定してください。',
+      hasEnvWebhook: !!(env && env.DISCORD_WEBHOOK_URL),
     }, 400);
   }
 
-  const text = String(body.text || '').slice(0, 3500);
-  if (!text) return json({ ok: false, error: 'empty_text' }, 400);
-
-  const payload = { text };
-  if (Array.isArray(body.blocks) && body.blocks.length) {
-    payload.blocks = body.blocks.slice(0, 40);
+  const content = String(body.content || body.text || '').slice(0, 1900);
+  const embeds = Array.isArray(body.embeds) ? body.embeds.slice(0, 10) : [];
+  if (!content && !embeds.length) {
+    return json({ ok: false, error: 'empty_payload' }, 400);
   }
+
+  const payload = {};
+  if (content) payload.content = content;
+  if (embeds.length) payload.embeds = embeds;
   if (body.username) payload.username = String(body.username).slice(0, 80);
-  if (body.icon_emoji) payload.icon_emoji = String(body.icon_emoji).slice(0, 40);
+  if (body.avatar_url) payload.avatar_url = String(body.avatar_url).slice(0, 300);
+
+  const endpoint = webhook.includes('?') ? `${webhook}&wait=true` : `${webhook}?wait=true`;
 
   try {
-    const res = await fetch(webhook, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const raw = await res.text();
     if (!res.ok) {
-      return json({ ok: false, error: 'slack_error', status: res.status, raw: raw.slice(0, 200) }, 502);
+      return json({ ok: false, error: 'discord_error', status: res.status, raw: raw.slice(0, 300) }, 502);
     }
     return json({ ok: true });
   } catch (e) {
@@ -90,8 +94,8 @@ export async function onRequestGet(context) {
   const { env } = context;
   return json({
     ok: true,
-    service: 'quickorder-slack-notify',
-    hasEnvWebhook: !!(env && env.SLACK_WEBHOOK_URL),
-    hint: 'POST { text, webhook? } で Slack に送信します',
+    service: 'quickorder-discord-notify',
+    hasEnvWebhook: !!(env && env.DISCORD_WEBHOOK_URL),
+    hint: 'POST { content|embeds, webhook? } で Discord に送信します',
   });
 }

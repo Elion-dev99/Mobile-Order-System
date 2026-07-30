@@ -1,10 +1,10 @@
-name: Configure Slack Webhook
+name: Configure Discord Webhook
 
 on:
   workflow_dispatch:
     inputs:
       webhook_url:
-        description: "Slack Incoming Webhook URL (https://hooks.slack.com/services/...)"
+        description: "Discord Webhook URL (https://discord.com/api/webhooks/...)"
         required: true
         type: string
 
@@ -27,7 +27,7 @@ jobs:
           WEBHOOK_URL: ${{ inputs.webhook_url }}
         run: |
           case "$WEBHOOK_URL" in
-            https://hooks.slack.com/services/*) ;;
-            *) echo "Invalid Slack Incoming Webhook URL"; exit 1 ;;
+            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
+            *) echo "Invalid Discord Webhook URL"; exit 1 ;;
           esac
-          printf '%s' "$WEBHOOK_URL" | npx --yes wrangler@4 pages secret put SLACK_WEBHOOK_URL --project-name=mobile-order-system
+          printf '%s' "$WEBHOOK_URL" | npx --yes wrangler@4 pages secret put DISCORD_WEBHOOK_URL --project-name=mobile-order-system

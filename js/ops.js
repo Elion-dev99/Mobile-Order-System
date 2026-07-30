@@ -12,7 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { resolveServiceRequest, estimateWaitMinutes } from './guest-features.js';
 import {
-  testSlackNotify,
+  testDiscordNotify,
   loadNotifySettings,
   saveNotifySettings,
   getSetupStatus,
@@ -20,30 +20,6 @@ import {
   getNotifySettings,
   NOTIFY_EVENTS,
 } from './notify.js';
-
-const SLACK_MANIFEST = `{
-  "display_information": {
-    "name": "QuickOrder Notify",
-    "description": "店舗・商品・契約のお知らせを Slack に送ります",
-    "background_color": "#10231f"
-  },
-  "features": {
-    "bot_user": {
-      "display_name": "QuickOrder",
-      "always_online": false
-    }
-  },
-  "oauth_config": {
-    "scopes": {
-      "bot": ["incoming-webhook", "chat:write"]
-    }
-  },
-  "settings": {
-    "org_deploy_enabled": false,
-    "socket_mode_enabled": false,
-    "token_rotation_enabled": false
-  }
-}`;
 
 const OpsPage = {
   shops: [],
@@ -250,16 +226,16 @@ const OpsPage = {
       }
     });
 
-    document.getElementById('opsSlackForm')?.addEventListener('submit', async (e) => {
+    document.getElementById('opsNotifyForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const st = document.getElementById('opsSlackStatus');
+      const st = document.getElementById('opsNotifyStatus');
       st.hidden = false;
       st.textContent = '保存中...';
       try {
         await saveNotifySettings({
-          webhook: document.getElementById('opsSlackWebhook')?.value?.trim() || '',
-          channel: document.getElementById('opsSlackChannel')?.value?.trim() || '',
-          enabled: !!document.getElementById('opsSlackEnabled')?.checked,
+          webhook: document.getElementById('opsNotifyWebhook')?.value?.trim() || '',
+          channel: document.getElementById('opsNotifyChannel')?.value?.trim() || '',
+          enabled: !!document.getElementById('opsNotifyEnabled')?.checked,
           events: this.readEventToggles(),
         });
         st.textContent = '通知設定を保存しました（このブラウザ + 可能ならクラウド同期）';
@@ -269,35 +245,35 @@ const OpsPage = {
       }
     });
 
-    document.getElementById('opsSlackTest')?.addEventListener('click', async () => {
-      const st = document.getElementById('opsSlackStatus');
+    document.getElementById('opsNotifyTest')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsNotifyStatus');
       st.hidden = false;
       st.textContent = '送信中...';
       try {
         await saveNotifySettings({
-          webhook: document.getElementById('opsSlackWebhook')?.value?.trim() || '',
-          channel: document.getElementById('opsSlackChannel')?.value?.trim() || '',
-          enabled: !!document.getElementById('opsSlackEnabled')?.checked,
+          webhook: document.getElementById('opsNotifyWebhook')?.value?.trim() || '',
+          channel: document.getElementById('opsNotifyChannel')?.value?.trim() || '',
+          enabled: !!document.getElementById('opsNotifyEnabled')?.checked,
           events: this.readEventToggles(),
         });
       } catch (err) {
         st.textContent = String(err.message || err);
         return;
       }
-      const res = await testSlackNotify();
+      const res = await testDiscordNotify();
       if (res.ok) {
-        st.textContent = 'テスト通知を送信しました。Slack チャンネルを確認してください。';
+        st.textContent = 'テスト通知を送信しました。Discord を確認してください。';
         await saveNotifySettings({ setupDone: true });
       } else if (res.data?.error === 'webhook_missing') {
-        st.textContent = 'Webhook 未設定です。①で URL を作成し、②に貼り付けて保存してください。';
+        st.textContent = 'Webhook 未設定です。Discord で Webhook を作成し、②に貼り付けて保存してください。';
       } else {
         st.textContent = '送信失敗: ' + (res.data?.error || res.error || res.status || 'unknown');
       }
       await this.refreshNotifySetup();
     });
 
-    document.getElementById('opsSlackSaveEvents')?.addEventListener('click', async () => {
-      const st = document.getElementById('opsSlackStatus');
+    document.getElementById('opsNotifySaveEvents')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsNotifyStatus');
       st.hidden = false;
       try {
         await saveNotifySettings({ events: this.readEventToggles() });
@@ -308,29 +284,14 @@ const OpsPage = {
       }
     });
 
-    document.getElementById('opsSlackMarkDone')?.addEventListener('click', async () => {
-      const st = document.getElementById('opsSlackStatus');
+    document.getElementById('opsNotifyMarkDone')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsNotifyStatus');
       st.hidden = false;
       await saveNotifySettings({ setupDone: true, enabled: true });
       st.textContent = 'セットアップ完了にしました';
       await this.refreshNotifySetup();
     });
 
-    document.getElementById('copySlackManifest')?.addEventListener('click', async () => {
-      const st = document.getElementById('opsSlackStatus');
-      try {
-        await navigator.clipboard.writeText(SLACK_MANIFEST);
-        if (st) {
-          st.hidden = false;
-          st.textContent = 'Slack App マニフェストをコピーしました。Create from Manifest に貼れます。';
-        }
-      } catch (_) {
-        if (st) {
-          st.hidden = false;
-          st.textContent = 'コピーに失敗しました。手動で slack-app-manifest.json を参照してください。';
-        }
-      }
-    });
   },
 
   readEventToggles() {
@@ -343,7 +304,7 @@ const OpsPage = {
 
   async refreshNotifySetup() {
     await loadNotifySettings().catch(() => {});
-    this.renderSlackForm();
+    this.renderNotifyForm();
     const status = await getSetupStatus().catch(() => null);
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
 
@@ -372,11 +333,11 @@ const OpsPage = {
     }
   },
 
-  renderSlackForm() {
+  renderNotifyForm() {
     const settings = getNotifySettings();
-    const input = document.getElementById('opsSlackWebhook');
-    const enabled = document.getElementById('opsSlackEnabled');
-    const channel = document.getElementById('opsSlackChannel');
+    const input = document.getElementById('opsNotifyWebhook');
+    const enabled = document.getElementById('opsNotifyEnabled');
+    const channel = document.getElementById('opsNotifyChannel');
     if (input) input.value = settings.webhook || '';
     if (enabled) enabled.checked = settings.enabled !== false;
     if (channel) channel.value = settings.channel || '';
