@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/lp.css">
+  <link rel="stylesheet" href="css/lp.css?v=uptime1">
 </head>
 <body>
   <div class="lp-aurora" aria-hidden="true"></div>
@@ -18,6 +18,7 @@
   <header class="lp-top">
     <a class="lp-brand" href="lp.html">QuickOrder</a>
     <nav class="lp-nav">
+      <a href="#uptime">安心運用</a>
       <a href="#plans">料金プラン</a>
       <a href="#compare">比較</a>
       <a href="index.html?shop=default&table=1&demo=1" class="lp-nav-ghost">デモ</a>
@@ -56,6 +57,37 @@
           <h3>権限と多店舗へ</h3>
           <p>Businessは厨房/ホール/店長PINとSLA。Chainは店舗無制限と本部横断ダッシュボード。</p>
         </article>
+      </div>
+    </section>
+
+    <section class="lp-section" id="uptime">
+      <h2>障害のときも、席を混乱させない</h2>
+      <p class="lp-section-lead">注文経路の異常を検知すると、客席を自動でレジ案内に切り替え。復旧を確認したら再開します。店舗の「準備中」とは別の、プラットフォーム側の安全装置です。</p>
+      <div class="lp-uptime">
+        <div class="lp-uptime-visual" aria-hidden="true">
+          <span class="lp-uptime-ring"></span>
+          <span class="lp-uptime-ring lp-uptime-ring-delay"></span>
+          <span class="lp-uptime-core"></span>
+          <p class="lp-uptime-visual-label">常時ウォッチ</p>
+        </div>
+        <ol class="lp-uptime-flow">
+          <li>
+            <strong>検知</strong>
+            <span>注文受付と通知経路の健全性を定期チェック。ピーク時も裏で回り続けます。</span>
+          </li>
+          <li>
+            <strong>フェイルセーフ</strong>
+            <span>異常が続くとメンテナンス表示へ自動切替。手動で止めた場合は自動では戻しません。</span>
+          </li>
+          <li>
+            <strong>相互バックアップ</strong>
+            <span>監視役と復旧役がお互いの無応答を検知し、片方だけが止まっても運用を維持します。</span>
+          </li>
+          <li>
+            <strong>知らせは絞る</strong>
+            <span>深夜のノイズを抑え、日次の健全性サマリで朝に状況を把握できます。</span>
+          </li>
+        </ol>
       </div>
     </section>
 
