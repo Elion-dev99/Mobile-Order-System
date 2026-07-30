@@ -32,8 +32,9 @@
         <p class="lp-kicker">飲食店オペレーションOS</p>
         <h1 class="lp-brand-hero">QuickOrder</h1>
         <p class="lp-lead">席のQRから厨房着信・売上分析まで。<br>大手と同等の体験を、店舗規模に合う料金で。</p>
+        <p class="lp-scarcity" id="lpScarcity" hidden></p>
         <div class="lp-cta-row">
-          <a href="#plans" class="lp-btn-primary">プランを選ぶ</a>
+          <a href="#contact" class="lp-btn-primary" id="heroAnnualCta">Growth・年払いで相談</a>
           <a href="index.html?shop=default&table=1&demo=1" class="lp-btn-secondary">客席デモ</a>
         </div>
       </div>
@@ -65,8 +66,8 @@
           <p class="lp-section-lead">税別。年払いは実質2ヶ月無料（×10）。</p>
         </div>
         <div class="lp-cycle-toggle" role="group" aria-label="支払いサイクル">
-          <button type="button" class="lp-cycle active" data-cycle="monthly">月払い</button>
-          <button type="button" class="lp-cycle" data-cycle="annual">年払い <span>お得</span></button>
+          <button type="button" class="lp-cycle" data-cycle="monthly">月払い</button>
+          <button type="button" class="lp-cycle active" data-cycle="annual">年払い <span>2ヶ月分お得</span></button>
         </div>
       </div>
       <div class="lp-plan-grid" id="planGrid"></div>
@@ -135,7 +136,11 @@
 
     <section class="lp-section" id="contact">
       <h2>導入相談</h2>
-      <p class="lp-section-lead">希望プランを選んで送信。担当が48時間以内に見積もりを返します。</p>
+      <p class="lp-section-lead">希望プランを選んで送信。担当が48時間以内に見積もりを返します。年払いならキャッシュを先に回収できます。</p>
+      <p class="lp-quote-preview" id="leadQuotePreview"></p>
+      <div class="lp-cta-row" style="margin-bottom:16px">
+        <a class="lp-btn-primary" id="lpPayCta" href="#contact" hidden>カードで契約する</a>
+      </div>
       <form class="lp-form" id="leadForm">
         <label>店舗名<input name="shopName" required placeholder="例: 炭火焼鳥 まる"></label>
         <label>担当者メール<input name="email" type="email" required placeholder="you@example.com"></label>
@@ -146,7 +151,7 @@
         <label>支払い
           <select name="billingCycle" id="leadCycle">
             <option value="monthly">月払い</option>
-            <option value="annual">年払い</option>
+            <option value="annual" selected>年払い（おすすめ）</option>
           </select>
         </label>
         <label>席数の目安

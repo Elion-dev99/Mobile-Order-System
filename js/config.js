@@ -10,10 +10,16 @@ export const PRODUCT = {
   trialDays: 14,
   /** 年払い割引（月額×10 = 2ヶ月分無料） */
   annualMultiplier: 10,
+  /** LP既定を年払いにして ACV を上げる */
+  defaultBillingCycle: 'annual',
   /** 追加店舗（Growth以上） */
   extraStoreMonthly: 9800,
+  /** Stripe Payment Link（空なら見積もりCTAのみ） */
   stripePaymentLink: '',
   successPath: 'admin.html?billing=success',
+  /** LP希少性（運用で更新可） */
+  introSlotsRemaining: 7,
+  introSlotsLabel: '今月の優先導入枠',
   competitorNote: '大手は月額1〜3万円＋初期10万円超が一般的。QuickOrderは機能段階で最適化。',
 };
 
@@ -188,8 +194,11 @@ export const DEFAULT_SHOP = {
   adminPin: '',
   subscribed: false,
   subscribedAt: null,
+  /** トライアル開始・終了（未設定なら初回アクセスで付与） */
+  trialStartedAt: null,
+  trialEndsAt: null,
   planId: 'growth',
-  billingCycle: 'monthly',
+  billingCycle: 'annual',
   ownerEmail: '',
   ownerPhone: '',
   stores: 1,

@@ -1,10 +1,14 @@
 import { db } from './firebase.js';
 import {
   loadShop, saveShop, ensureMenuSeeded, saveMenu, getMenu, getShop, getShopId,
-  isSubscribed, markSubscribed, setItemSoldOut, isItemSoldOut
+  isSubscribed, markSubscribed, setItemSoldOut, isItemSoldOut,
+  ensureTrialStarted, getShopAccess, shopCanUse,
 } from './shop.js';
-import { PLANS } from './config.js';
-import { getPlan, yen, estimateMrr, estimateArr, featureEnabled } from './plans.js';
+import { PLANS, PRODUCT } from './config.js';
+import {
+  getPlan, yen, estimateMrr, estimateArr, featureEnabled,
+  nextPlanId, annualSavings, paymentCta, planPrice,
+} from './plans.js';
 import { resolveShopId, scopedKey, withShop, guestEntryUrl } from './tenant.js';
 import {
   collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, where
@@ -45,12 +49,14 @@ const AdminPage = {
     }
 
     await loadShop();
+    await ensureTrialStarted();
     this.menuDraft = await ensureMenuSeeded();
     this._menuSnapshot = JSON.parse(JSON.stringify(this.menuDraft?.items || []));
     this.applyShopBranding();
     applyBrandTheme(getShop());
     this.bindChrome();
     this.patchNavLinks();
+    this.renderRevenueBanner();
 
     if (!this.ensureAdminAccess()) return;
 
@@ -63,6 +69,46 @@ const AdminPage = {
     this.renderSettingsForm();
 
     if (params.get('view')) this.setView(params.get('view'));
+  },
+
+  renderRevenueBanner() {
+    const el = document.getElementById('adminRevenueBanner');
+    if (!el) return;
+    const shop = getShop();
+    const access = getShopAccess();
+    const plan = getPlan(shop.planId);
+    const next = nextPlanId(shop.planId);
+    const pay = paymentCta();
+
+    if (access.subscribed) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+
+    el.hidden = false;
+    if (access.trialActive) {
+      el.dataset.level = access.daysLeft <= 3 ? 'warn' : 'info';
+      el.innerHTML = `
+        <strong>無料トライアル残り ${access.daysLeft} 日</strong>
+        <span>${plan.name}のプレミアム機能を試用中。年払いなら実質2ヶ月分お得です。</span>
+        <a class="admin-banner-cta" href="${pay.href}">${pay.label}</a>
+        <button type="button" class="admin-banner-link" data-go-billing>料金を見る</button>`;
+    } else if (access.trialExpired) {
+      el.dataset.level = 'critical';
+      el.innerHTML = `
+        <strong>トライアル終了 — 分析・CSV・多言語などがロックされています</strong>
+        <span>厨房の基本運用は継続できます。契約でGrowth以上に戻すと全機能が復活します。</span>
+        <a class="admin-banner-cta" href="${pay.href}">${pay.label}</a>
+        <button type="button" class="admin-banner-link" data-go-billing>プランを選ぶ</button>`;
+    } else {
+      el.dataset.level = 'info';
+      el.innerHTML = `
+        <strong>収益最大化モード</strong>
+        <span>${PRODUCT.introSlotsLabel} 残り ${PRODUCT.introSlotsRemaining} 店 · ${next ? `${getPlan(next).name}へアップセル可能` : plan.name}</span>
+        <a class="admin-banner-cta" href="${pay.href}">${pay.label}</a>`;
+    }
+    el.querySelector('[data-go-billing]')?.addEventListener('click', () => this.setView('billing'));
   },
 
   patchNavLinks() {
@@ -140,6 +186,7 @@ const AdminPage = {
     document.getElementById('addMenuItemBtn')?.addEventListener('click', () => this.addMenuItem());
     document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.persistSettings());
     document.getElementById('activateSubBtn')?.addEventListener('click', () => this.activateSubscription());
+    document.getElementById('billingUpgradeBtn')?.addEventListener('click', () => this.upgradeToGrowthAnnual());
     document.getElementById('exportCsvBtn')?.addEventListener('click', () => this.exportTodayCsv());
     document.getElementById('printKitchenBtn')?.addEventListener('click', () => window.print());
     document.body.addEventListener('click', () => { this.soundReady = true; }, { once: true });
@@ -165,10 +212,11 @@ const AdminPage = {
     if (view === 'leads') this.renderLeads();
     if (view === 'analytics') this.renderAnalytics();
     if (view === 'menu') this.renderMenuEditor();
+    this.renderRevenueBanner();
   },
 
   playNewOrderSound() {
-    if (!featureEnabled(getShop(), 'soundAlert') || !this.soundReady) return;
+    if (!shopCanUse('soundAlert') || !this.soundReady) return;
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();
@@ -315,7 +363,7 @@ const AdminPage = {
     }
 
     const menu = this.menuDraft || getMenu();
-    const slaOn = featureEnabled(getShop(), 'slaTimer');
+    const slaOn = shopCanUse('slaTimer');
 
     container.innerHTML = filtered.map(order => {
       const status = order.status || 'received';
@@ -382,8 +430,18 @@ const AdminPage = {
   },
 
   exportTodayCsv() {
-    if (!featureEnabled(getShop(), 'exportCsv') && getShop().planId === 'lite') {
-      alert('CSV出力は Growth 以上のプラン機能です（デモとして続行します）');
+    if (!shopCanUse('exportCsv')) {
+      const pay = paymentCta();
+      const access = getShopAccess();
+      const reason = !featureEnabled(getShop(), 'exportCsv')
+        ? 'CSV出力は Growth 以上のプラン機能です。'
+        : access.trialExpired
+          ? 'トライアル終了のため CSV はロックされています。'
+          : 'この機能は利用できません。';
+      if (confirm(`${reason}\n\n${pay.label}へ進みますか？`)) {
+        location.href = pay.href;
+      }
+      return;
     }
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -728,17 +786,28 @@ const AdminPage = {
   renderAnalytics() {
     const shop = getShop();
     const hint = document.getElementById('analyticsPlanHint');
-    const unlocked = featureEnabled(shop, 'analytics');
+    const planOk = featureEnabled(shop, 'analytics');
+    const access = getShopAccess();
+    const unlocked = shopCanUse('analytics');
     if (hint) {
-      hint.textContent = unlocked
-        ? `${getPlan(shop.planId).name}プラン · リアルタイム集計`
-        : 'Growth以上で利用可能（設定でプランを変更）';
+      if (!planOk) {
+        hint.textContent = 'Growth以上で利用可能 — 下の課金タブからアップグレード';
+      } else if (access.trialExpired) {
+        hint.textContent = 'トライアル終了のためロック中 — 契約すると分析が復活します';
+      } else if (access.trialActive) {
+        hint.textContent = `${getPlan(shop.planId).name} · トライアル中（残り${access.daysLeft}日）`;
+      } else {
+        hint.textContent = `${getPlan(shop.planId).name}プラン · リアルタイム集計`;
+      }
     }
     if (!unlocked) {
+      const pay = paymentCta();
       document.getElementById('anTodayGmv').textContent = '—';
       document.getElementById('anTodayOrders').textContent = '—';
       document.getElementById('anAov').textContent = '—';
-      document.getElementById('analyticsTopItems').innerHTML = '<p class="admin-muted">アップセルでGrowthに切り替えると表示されます。</p>';
+      document.getElementById('analyticsTopItems').innerHTML = `
+        <p class="admin-muted">分析は有料機能です。Growth年払いなら実質2ヶ月分お得。</p>
+        <p><a class="admin-save-btn" style="display:inline-block;width:auto;padding:10px 16px;text-decoration:none;" href="${pay.href}">${pay.label}</a></p>`;
       document.getElementById('analyticsHours').innerHTML = '';
       return;
     }
@@ -786,8 +855,10 @@ const AdminPage = {
   renderBilling() {
     const shop = getShop();
     const plan = getPlan(shop.planId);
+    const cycle = shop.billingCycle || PRODUCT.defaultBillingCycle || 'annual';
+    const annual = planPrice(plan, 'annual');
     const selfMrr = isSubscribed()
-      ? estimateMrr({ planId: shop.planId, stores: shop.stores || 1, cycle: shop.billingCycle || 'monthly' })
+      ? estimateMrr({ planId: shop.planId, stores: shop.stores || 1, cycle })
       : 0;
 
     const openLeads = this.leads.filter(l => (l.status || 'new') === 'new').length;
@@ -795,6 +866,8 @@ const AdminPage = {
       .filter(l => l.status === 'won')
       .reduce((s, l) => s + (l.estimatedMrr || getPlan(l.planId || 'growth').priceMonthly), 0);
     const pipelineMrr = selfMrr + wonMrr;
+    const access = getShopAccess();
+    const pay = paymentCta();
 
     const planName = document.getElementById('billingPlanName');
     const priceEl = document.getElementById('billingPrice');
@@ -802,33 +875,80 @@ const AdminPage = {
     const mrrEl = document.getElementById('billingMrr');
     const arrEl = document.getElementById('billingArr');
     const subStatus = document.getElementById('subStatus');
+    const trialStatus = document.getElementById('trialStatus');
     const catalog = document.getElementById('billingCatalog');
+    const payLink = document.getElementById('billingPayLink');
 
     if (planName) planName.textContent = plan.name;
-    if (priceEl) priceEl.textContent = `¥${yen(plan.priceMonthly)}/月 · 初期¥${yen(plan.priceSetup)}`;
+    if (priceEl) {
+      priceEl.textContent = `月額 ¥${yen(plan.priceMonthly)} · 年払い実質 ¥${yen(annual.perMonthEffective)}/月（年額¥${yen(annual.chargeNow)}・¥${yen(annualSavings(plan))}お得）· 初期¥${yen(plan.priceSetup)}`;
+    }
     if (leadsEl) leadsEl.textContent = String(openLeads);
     if (mrrEl) mrrEl.textContent = `¥${yen(pipelineMrr)}`;
     if (arrEl) arrEl.textContent = `¥${yen(estimateArr(pipelineMrr))}`;
     if (subStatus) {
       subStatus.textContent = isSubscribed()
         ? `課金有効 · ${plan.name} · 自店舗MRR ¥${yen(selfMrr)}`
-        : '未課金 — 成約後に有効化するとMRRに反映されます';
+        : '未課金 — 契約または手動有効化でMRRに反映';
+    }
+    if (trialStatus) {
+      if (access.subscribed) trialStatus.textContent = 'トライアル不要（契約済み）';
+      else if (access.trialActive) trialStatus.textContent = `無料トライアル残り ${access.daysLeft} 日 · ${PRODUCT.introSlotsLabel} 残り ${PRODUCT.introSlotsRemaining} 店`;
+      else if (access.trialExpired) trialStatus.textContent = 'トライアル終了 — プレミアム機能はロック中';
+      else trialStatus.textContent = `初回アクセスで ${PRODUCT.trialDays} 日トライアルが開始されます`;
+    }
+    if (payLink) {
+      payLink.href = pay.href;
+      payLink.textContent = pay.label;
+      if (pay.mode === 'stripe') payLink.target = '_blank';
+      else payLink.removeAttribute('target');
     }
     if (catalog) {
-      catalog.innerHTML = PLANS.map(p => `
-        <div class="catalog-card ${p.id === plan.id ? 'active' : ''}">
+      catalog.innerHTML = PLANS.map(p => {
+        const ap = planPrice(p, 'annual');
+        return `
+        <div class="catalog-card ${p.id === plan.id ? 'active' : ''}" data-pick-plan="${p.id}">
           <div class="catalog-name">${p.name}${p.recommended ? ' ★' : ''}</div>
-          <div class="catalog-price">¥${yen(p.priceMonthly)}<span>/月</span></div>
-          <div class="catalog-setup">初期 ¥${yen(p.priceSetup)}</div>
-          <div class="catalog-meta">${p.maxTables == null ? '席数無制限' : `〜${p.maxTables}席`} · ${p.maxStores == null ? '店舗無制限' : `${p.maxStores}店舗`}</div>
-        </div>
-      `).join('');
+          <div class="catalog-price">¥${yen(ap.perMonthEffective)}<span>/月（年払）</span></div>
+          <div class="catalog-setup">初期 ¥${yen(p.priceSetup)} · 年額 ¥${yen(ap.chargeNow)}</div>
+          <div class="catalog-meta">${p.maxTables == null ? '席数無制限' : `〜${p.maxTables}席`} · ${p.maxStores == null ? '店舗無制限' : `${p.maxStores}店舗`}${p.orderFeePercent ? ` · 手数料${p.orderFeePercent}%` : ''}</div>
+        </div>`;
+      }).join('');
+      catalog.querySelectorAll('[data-pick-plan]').forEach((card) => {
+        card.addEventListener('click', async () => {
+          const id = card.dataset.pickPlan;
+          const prev = getShop()?.planId;
+          await saveShop({ planId: id, billingCycle: 'annual' });
+          notifyPlanChanged({ ...getShop(), id: getShopId() }, prev, id);
+          this.applyShopBranding();
+          this.renderBilling();
+          this.renderAnalytics();
+          this.renderRevenueBanner();
+          this.renderSettingsForm();
+        });
+      });
     }
+    this.renderRevenueBanner();
+  },
+
+  async upgradeToGrowthAnnual() {
+    const prev = getShop()?.planId;
+    await saveShop({ planId: 'growth', billingCycle: 'annual' });
+    notifyPlanChanged({ ...getShop(), id: getShopId() }, prev, 'growth');
+    this.renderBilling();
+    this.renderAnalytics();
+    this.renderRevenueBanner();
+    this.renderSettingsForm();
+    const growth = getPlan('growth');
+    const ap = planPrice(growth, 'annual');
+    alert(`Growth・年払いに切り替えました（実質 ¥${yen(ap.perMonthEffective)}/月）。契約手続きは「${paymentCta().label}」へ。`);
   },
 
   async activateSubscription() {
     await markSubscribed();
     this.renderBilling();
+    this.renderRevenueBanner();
+    this.renderAnalytics();
     alert('課金フラグを有効化しました（MRRに反映）');
   },
 

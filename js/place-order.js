@@ -8,6 +8,7 @@ import { getShopId, getShop } from './shop.js';
 import { cartStorageKey, isDemoMode, withDemo } from './demo.js';
 import { enqueuePendingOrder } from './health.js';
 import { notifyOrderPlaced } from './notify-orders.js';
+import { platformFeeForOrder, getPlan } from './plans.js';
 
 export async function placeGuestOrder({ cart, tableNumber, partySize = 0, onProgress } = {}) {
   if (!cart?.length) return { ok: false, error: 'empty' };
@@ -15,6 +16,10 @@ export async function placeGuestOrder({ cart, tableNumber, partySize = 0, onProg
   const orderId = (isDemoMode() ? 'DEMO-' : 'ORD-') + Math.random().toString(36).substring(2, 8).toUpperCase();
   const subtotal = cart.reduce((s, e) => s + e.price * e.qty, 0);
   const tax = Math.floor(subtotal * 0.1);
+  const total = subtotal + tax;
+  const shop = getShop();
+  const plan = getPlan(shop?.planId);
+  const platformFee = platformFeeForOrder(shop, total);
   const order = {
     id: orderId,
     shopId: getShopId(),
@@ -23,7 +28,10 @@ export async function placeGuestOrder({ cart, tableNumber, partySize = 0, onProg
     items: cart,
     subtotal,
     tax,
-    total: subtotal + tax,
+    total,
+    platformFee,
+    platformFeePercent: plan.orderFeePercent || 0,
+    platformFeeStatus: platformFee > 0 ? 'unbilled' : 'none',
     timestamp: Date.now(),
     status: 'received',
     demo: isDemoMode(),

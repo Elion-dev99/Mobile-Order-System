@@ -1,5 +1,8 @@
-import { loadShop, saveShop, getShop, isSubscribed, getShopId, getMenu, loadMenu, setItemSoldOut, isItemSoldOut } from './shop.js';
-import { getPlan, yen } from './plans.js';
+import {
+  loadShop, saveShop, getShop, isSubscribed, getShopId, getMenu, loadMenu,
+  setItemSoldOut, isItemSoldOut, ensureTrialStarted, getShopAccess,
+} from './shop.js';
+import { getPlan, yen, paymentCta } from './plans.js';
 import { db } from './firebase.js';
 import {
   collection, onSnapshot, query, where, orderBy
@@ -16,6 +19,7 @@ const StorePage = {
   async init() {
     resolveShopId();
     await Promise.all([loadShop(), loadMenu()]);
+    await ensureTrialStarted().catch(() => {});
     this.bind();
     this.patchNav();
     this.renderProfile();
@@ -91,15 +95,41 @@ const StorePage = {
   renderMeta() {
     const shop = getShop();
     const plan = getPlan(shop.planId);
+    const access = getShopAccess();
     document.getElementById('storeTitle').textContent = shop.name || 'QuickOrder';
     document.title = `店舗管理 | ${shop.name || 'QuickOrder'} (${getShopId()})`;
+    let billing = '未課金';
+    if (access.subscribed) billing = '課金中';
+    else if (access.trialActive) billing = `トライアル残り${access.daysLeft}日`;
+    else if (access.trialExpired) billing = 'トライアル終了';
     const sub = [
       getShopId(),
       plan.name,
+      shop.billingCycle === 'annual' ? '年払い' : '月払い',
       shop.hoursNote || '営業時間未設定',
-      isSubscribed() ? '課金中' : '未課金',
+      billing,
     ].join(' · ');
     document.getElementById('storePlanLine').textContent = sub;
+
+    let banner = document.getElementById('storeRevenueBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'storeRevenueBanner';
+      banner.className = 'store-revenue-banner';
+      document.querySelector('.store-header')?.after(banner)
+        || document.querySelector('main')?.prepend(banner);
+    }
+    if (access.subscribed) {
+      banner.hidden = true;
+    } else {
+      const pay = paymentCta();
+      banner.hidden = false;
+      banner.innerHTML = access.trialExpired
+        ? `<strong>トライアル終了</strong> — 分析など有料機能はロック中。<a href="${pay.href}">${pay.label}</a>`
+        : access.trialActive
+          ? `<strong>トライアル残り ${access.daysLeft} 日</strong> — 年払いで実質2ヶ月お得。<a href="${pay.href}">${pay.label}</a>`
+          : `<strong>未契約</strong> — <a href="${pay.href}">${pay.label}</a>`;
+    }
 
     const btn = document.getElementById('openToggle');
     if (btn) {

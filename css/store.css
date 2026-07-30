@@ -3,6 +3,19 @@
   padding-bottom: 48px;
 }
 
+.store-revenue-banner {
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(13, 92, 77, 0.1);
+  border: 1px solid rgba(13, 92, 77, 0.25);
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: 860px;
+}
+.store-revenue-banner a { font-weight: 700; color: #0D5C4D; }
+.store-revenue-banner[hidden] { display: none !important; }
+
 .store-header {
   display: flex;
   justify-content: space-between;

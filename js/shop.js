@@ -1,11 +1,12 @@
 import { db } from './firebase.js';
 import { MENU_DATA as DEFAULT_MENU } from './data.js';
-import { DEFAULT_SHOP } from './config.js';
+import { DEFAULT_SHOP, PRODUCT } from './config.js';
 import { resolveShopId, seedShopMeta, listSeedShops, DEFAULT_SHOP_ID, scopedKey } from './tenant.js';
 import {
   doc, getDoc, setDoc, collection, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { notifyShopCreated, notifyShopDeleted, notifyContractActivated } from './notify.js';
+import { getAccessState, canUseFeature } from './plans.js';
 
 let shopCache = { ...DEFAULT_SHOP, id: DEFAULT_SHOP_ID };
 let menuCache = null;
@@ -105,6 +106,8 @@ export async function loadShop(shopId = resolveShopId()) {
     console.warn('shop settings load failed', e);
     shopCache = mergeShop(shopCache?.id === shopId ? shopCache : {}, shopId);
   }
+  // Fire-and-forget trial stamp (don't block UI)
+  ensureTrialStarted().catch(() => {});
   return shopCache;
 }
 
@@ -357,10 +360,38 @@ export function isSubscribed() {
   }
 }
 
+/** Start 14-day trial once per shop (local + best-effort Firestore). */
+export async function ensureTrialStarted() {
+  if (isSubscribed()) return shopCache;
+  if (shopCache.trialEndsAt || shopCache.trialStartedAt) return shopCache;
+  // Demo / load-test shops skip commercial trial pressure
+  if (shopCache.loadTest || String(shopCache.id || '').startsWith('load-')) return shopCache;
+  const started = Date.now();
+  const ends = started + PRODUCT.trialDays * 86400000;
+  try {
+    return await saveShop({ trialStartedAt: started, trialEndsAt: ends });
+  } catch (_) {
+    shopCache = mergeShop({ ...shopCache, trialStartedAt: started, trialEndsAt: ends }, getShopId());
+    return shopCache;
+  }
+}
+
+export function getShopAccess() {
+  return getAccessState(shopCache, { subscribed: isSubscribed() });
+}
+
+export function shopCanUse(featureKey) {
+  return canUseFeature(shopCache, featureKey, { subscribed: isSubscribed() });
+}
+
 export async function markSubscribed() {
   const was = isSubscribed();
   try { localStorage.setItem(scopedKey('mos_subscribed'), '1'); } catch (_) {}
-  const shop = await saveShop({ subscribed: true, subscribedAt: Date.now() });
+  const shop = await saveShop({
+    subscribed: true,
+    subscribedAt: Date.now(),
+    trialEndsAt: shopCache.trialEndsAt || Date.now(),
+  });
   if (!was) {
     notifyContractActivated({ ...shopCache, ...shop, id: getShopId() });
   }
