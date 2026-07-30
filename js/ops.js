@@ -167,20 +167,28 @@ const OpsPage = {
     });
     document.getElementById('createShopForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const id = document.getElementById('newShopId').value.trim().toLowerCase();
+      const rawId = document.getElementById('newShopId').value.trim().toLowerCase();
+      const id = rawId.replace(/[^a-z0-9_-]/g, '').slice(0, 48);
       const name = document.getElementById('newShopName').value.trim();
       const status = document.getElementById('createShopStatus');
       status.hidden = false;
+      status.textContent = '作成中...';
+      if (!id || id.length < 2) {
+        status.textContent = '店舗IDは英小文字・数字・ハイフンで2文字以上にしてください';
+        return;
+      }
       try {
         await upsertShop(id, {
           name: name || id,
           subtitle: document.getElementById('newShopSubtitle').value.trim(),
           tableCount: Number(document.getElementById('newShopTables').value) || 10,
           planId: document.getElementById('newShopPlan').value || 'growth',
+          isOpen: true,
         });
-        status.textContent = `店舗 ${id} を作成しました`;
+        status.textContent = `店舗「${name || id}」(${id}) を作成しました`;
         e.target.reset();
         await this.refreshShops();
+        this.switchTab('shops');
       } catch (err) {
         console.error(err);
         status.textContent = '作成に失敗: ' + (err.message || err);
