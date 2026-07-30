@@ -65,6 +65,15 @@ function mergeShop(data = {}, shopId = resolveShopId()) {
 export async function loadShop(shopId = resolveShopId()) {
   shopIdCache = shopId;
   try {
+    const localRaw = localStorage.getItem(scopedKey('mos_shop_settings'));
+    if (localRaw) {
+      const local = JSON.parse(localRaw);
+      if (local?.id === shopId || !local?.id) {
+        shopCache = mergeShop(local, shopId);
+      }
+    }
+  } catch (_) {}
+  try {
     const snap = await getDoc(settingsRef(shopId));
     if (snap.exists()) {
       shopCache = mergeShop(snap.data() || {}, shopId);
@@ -79,18 +88,33 @@ export async function loadShop(shopId = resolveShopId()) {
         return shopCache;
       }
     }
-    shopCache = mergeShop({}, shopId);
+    shopCache = mergeShop(shopCache?.id === shopId ? shopCache : {}, shopId);
     try { await setDoc(settingsRef(shopId), { ...shopCache, createdAt: Date.now() }, { merge: true }); } catch (_) {}
   } catch (e) {
     console.warn('shop settings load failed', e);
-    shopCache = mergeShop({}, shopId);
+    shopCache = mergeShop(shopCache?.id === shopId ? shopCache : {}, shopId);
   }
   return shopCache;
 }
 
 export async function saveShop(partial, shopId = getShopId()) {
   shopCache = mergeShop({ ...shopCache, ...partial }, shopId);
-  await setDoc(settingsRef(shopId), shopCache, { merge: true });
+  try {
+    await setDoc(settingsRef(shopId), shopCache, { merge: true });
+  } catch (e) {
+    console.warn('saveShop firestore failed, local fallback', e);
+    try {
+      localStorage.setItem(scopedKey('mos_shop_settings'), JSON.stringify(shopCache));
+      const local = JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
+      const idx = local.findIndex(s => s.id === shopId);
+      if (idx >= 0) local[idx] = shopCache;
+      else local.push(shopCache);
+      localStorage.setItem('mos_local_shops', JSON.stringify(local));
+      if (shopId === DEFAULT_SHOP_ID) {
+        try { await setDoc(legacySettingsRef(), shopCache, { merge: true }); } catch (_) {}
+      }
+    } catch (_) {}
+  }
   return shopCache;
 }
 
