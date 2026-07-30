@@ -21,6 +21,14 @@ import {
   loadFavorites, toggleFavorite, isFavorite, itemHasTag, confirmAlcoholAge,
   getPartySize, tagBadgesHtml, suggestSetCombos,
 } from './guest-extras.js';
+import { CHANNELS, getSelectedChannel, setSelectedChannel, channelLabel } from './channels.js';
+import { listPaymentMethods } from './payments.js';
+import {
+  getLocalMember, upsertMember, setLocalMember,
+} from './loyalty.js';
+import { createReservation, createWaitlistEntry, estimateWaitlistMinutes } from './reservations.js';
+import { startOfflineSync } from './offline-sync.js';
+import { applyLangToDocument, ensureA11yBasics, normalizeLang, t as tUi } from './i18n-ui.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -53,15 +61,24 @@ const App = {
   spaCartBound: false,
   quickFilters: new Set(),
   favorites: new Set(),
+  channel: 'dine_in',
+  paymentMethod: 'pay_at_register',
+  pointsRedeem: 0,
+  member: null,
 
   async init() {
     activateDemoFromUrl();
     resolveShopId();
     ensureDemoBanner();
+    ensureA11yBasics();
+    startOfflineSync();
     this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
+    const urlChannel = new URLSearchParams(location.search).get('channel');
+    this.channel = setSelectedChannel(urlChannel || getSelectedChannel());
     await Promise.all([loadShop(), loadMenu()]);
     const shop = getShop();
     applyBrandTheme(shop);
+    this.member = getLocalMember(getShopId());
     this.favorites = loadFavorites();
     if (shop.isOpen === false && !isDemoMode()) {
       document.body.classList.add('shop-closed');
@@ -73,9 +90,9 @@ const App = {
       : `${shop.name || 'Menu'} | ${getShopId()}`;
 
     try {
-      this.locale = localStorage.getItem('mos_locale') || shop.locale || 'ja';
+      this.locale = normalizeLang(localStorage.getItem('mos_locale') || shop.locale || 'ja');
     } catch {
-      this.locale = shop.locale || 'ja';
+      this.locale = normalizeLang(shop.locale || 'ja');
     }
 
     this.setupLangToggle();
@@ -83,11 +100,15 @@ const App = {
     if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.applyLocaleChrome();
+    applyLangToDocument(this.locale);
     this.ensureMenuDelegation();
     this.mountGuestExtras();
+    this.mountReserveBar();
     this.renderMenu();
     this.bindEvents();
     this.bindSpaCart();
+    this.bindEnterpriseCheckout();
+    this.renderChannelPaymentUi();
     this.updateCartBar();
     mountGuestServiceActions({
       tableNumber: this.tableNumber,
@@ -316,28 +337,29 @@ const App = {
     wrap.querySelectorAll('button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.lang === this.locale);
       btn.onclick = () => {
-        if (btn.dataset.lang === 'en' && !shopCanUse('multiLang')) {
-          showToast('日英メニューは Growth 以上の機能です');
+        if (btn.dataset.lang !== 'ja' && !shopCanUse('multiLang')) {
+          showToast('多言語メニューは Growth 以上の機能です');
           return;
         }
-        this.locale = btn.dataset.lang;
+        this.locale = normalizeLang(btn.dataset.lang);
         try { localStorage.setItem('mos_locale', this.locale); } catch (_) {}
         wrap.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
         this.applyLocaleChrome();
+        applyLangToDocument(this.locale);
         this.renderMenu();
       };
     });
   },
 
   applyLocaleChrome() {
-    document.documentElement.lang = this.locale === 'en' ? 'en' : 'ja';
+    applyLangToDocument(this.locale);
     document.querySelectorAll('.table-number').forEach(el => {
       el.textContent = `${this.t('table')} ${this.tableNumber}`;
     });
     const search = document.getElementById('searchInput');
-    if (search) search.placeholder = this.t('search');
+    if (search) search.placeholder = this.t('search') || tUi('search', this.locale);
     const cartLabel = document.querySelector('.cart-bar-left > span:first-child');
-    if (cartLabel) cartLabel.textContent = this.t('cart');
+    if (cartLabel) cartLabel.textContent = this.t('cart') || tUi('cart', this.locale);
     const allergenSummary = document.querySelector('.guest-allergen summary');
     if (allergenSummary) allergenSummary.textContent = this.t('allergen');
 
@@ -1223,7 +1245,12 @@ const App = {
 
   renderSpaCartSummary() {
     const shop = getShop();
-    const totals = computeOrderTotals(this.cart, shop, { tipPercent: this.tipPercent });
+    this.pointsRedeem = Math.max(0, Number(document.getElementById('pointsRedeem')?.value) || this.pointsRedeem || 0);
+    const totals = computeOrderTotals(this.cart, shop, {
+      tipPercent: this.tipPercent,
+      pointsRedeem: this.pointsRedeem,
+      member: this.member,
+    });
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     const show = (id, on) => { const el = document.getElementById(id); if (el) el.hidden = !on; };
     set('subtotalAmount', `¥${totals.subtotal.toLocaleString()}`);
@@ -1248,6 +1275,120 @@ const App = {
     if (tipRow) tipRow.hidden = !(shopCanUse('tip') && shop.tipEnabled);
     const couponRow = document.getElementById('couponRow');
     if (couponRow) couponRow.style.display = shopCanUse('coupons') ? '' : 'none';
+    this.renderChannelPaymentUi();
+  },
+
+  mountReserveBar() {
+    if (document.getElementById('guestReserveBar')) return;
+    const host = document.querySelector('.guest-header');
+    if (!host) return;
+    const bar = document.createElement('div');
+    bar.id = 'guestReserveBar';
+    bar.className = 'guest-reserve-bar';
+    bar.innerHTML = `
+      ${shopCanUse('reservations') ? `<button type="button" id="guestReserveBtn">${tUi('reserve', this.locale)}</button>` : ''}
+      ${shopCanUse('waitlist') ? `<button type="button" id="guestWaitBtn">${tUi('waitlist', this.locale)}</button>` : ''}
+    `;
+    host.appendChild(bar);
+    document.getElementById('guestReserveBtn')?.addEventListener('click', async () => {
+      const name = prompt(this.locale === 'en' ? 'Name' : 'お名前');
+      if (!name) return;
+      const phone = prompt(this.locale === 'en' ? 'Phone' : '電話番号') || '';
+      const party = Number(prompt(this.locale === 'en' ? 'Party size' : '人数', '2')) || 2;
+      const at = Date.now() + 60 * 60 * 1000;
+      try {
+        const r = await createReservation({ name, phone, partySize: party, at });
+        showToast(`予約しました（${new Date(r.at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}）`);
+      } catch (e) { showToast(String(e?.message || e)); }
+    });
+    document.getElementById('guestWaitBtn')?.addEventListener('click', async () => {
+      const name = prompt(this.locale === 'en' ? 'Name' : 'お名前', 'ゲスト') || 'ゲスト';
+      const phone = prompt(this.locale === 'en' ? 'Phone' : '電話番号') || '';
+      const party = Number(prompt(this.locale === 'en' ? 'Party size' : '人数', String(this.splitPeople || 2))) || 2;
+      try {
+        const w = await createWaitlistEntry({ name, phone, partySize: party });
+        const mins = estimateWaitlistMinutes([], party);
+        showToast(`順番待ち登録（目安 ${mins}分）ID:${w.id}`);
+      } catch (e) { showToast(String(e?.message || e)); }
+    });
+  },
+
+  renderChannelPaymentUi() {
+    const shop = getShop();
+    const enabled = Array.isArray(shop.channelsEnabled) ? shop.channelsEnabled : CHANNELS.map((c) => c.id);
+    document.getElementById('channelRow')?.querySelectorAll('[data-channel]').forEach((btn) => {
+      const id = btn.dataset.channel;
+      const on = enabled.includes(id) && (
+        id === 'dine_in'
+        || (id === 'takeout' && shopCanUse('takeout'))
+        || (id === 'delivery' && shopCanUse('delivery'))
+      );
+      btn.hidden = !on;
+      btn.classList.toggle('active', id === this.channel);
+      btn.textContent = channelLabel(id);
+    });
+    const payHost = document.getElementById('paymentRow');
+    if (payHost) {
+      const methods = shopCanUse('payments') ? listPaymentMethods(shop) : [];
+      payHost.hidden = !methods.length;
+      document.getElementById('paymentTitle')?.toggleAttribute('hidden', !methods.length);
+      if (!methods.some((m) => m.id === this.paymentMethod) && methods[0]) {
+        this.paymentMethod = methods[0].id;
+      }
+      payHost.innerHTML = methods.map((m) =>
+        `<button type="button" class="payment-btn ${m.id === this.paymentMethod ? 'active' : ''}" data-pay="${m.id}">${m.label}</button>`
+      ).join('');
+      payHost.querySelectorAll('[data-pay]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          this.paymentMethod = btn.dataset.pay;
+          this.renderChannelPaymentUi();
+        });
+      });
+    }
+    const memberRow = document.getElementById('memberRow');
+    const loyaltyOn = shopCanUse('loyalty') && shop.loyaltyEnabled !== false;
+    if (memberRow) memberRow.hidden = !loyaltyOn;
+    document.getElementById('memberTitle')?.toggleAttribute('hidden', !loyaltyOn);
+    if (loyaltyOn && this.member) {
+      const phone = document.getElementById('memberPhone');
+      const name = document.getElementById('memberName');
+      const msg = document.getElementById('memberMsg');
+      const redeemWrap = document.getElementById('memberRedeemWrap');
+      if (phone) phone.value = this.member.phone || '';
+      if (name) name.value = this.member.name || '';
+      if (msg) {
+        msg.hidden = false;
+        msg.textContent = `残高 ${this.member.points || 0} pt · 来店 ${this.member.visitCount || 0}回`;
+      }
+      if (redeemWrap) redeemWrap.hidden = false;
+    }
+  },
+
+  bindEnterpriseCheckout() {
+    document.getElementById('channelRow')?.querySelectorAll('[data-channel]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.channel = setSelectedChannel(btn.dataset.channel);
+        this.renderChannelPaymentUi();
+      });
+    });
+    document.getElementById('memberSaveBtn')?.addEventListener('click', async () => {
+      try {
+        const phone = document.getElementById('memberPhone')?.value || '';
+        const name = document.getElementById('memberName')?.value || '';
+        this.member = await upsertMember({ phone, name });
+        setLocalMember(this.member);
+        showToast('会員を登録しました');
+        this.renderChannelPaymentUi();
+        this.renderSpaCartSummary();
+      } catch (e) {
+        showToast(String(e?.message || e));
+      }
+    });
+    document.getElementById('pointsRedeem')?.addEventListener('input', () => {
+      this.pointsRedeem = Math.max(0, Number(document.getElementById('pointsRedeem')?.value) || 0);
+      this.renderSpaCartSummary();
+      this.updateCartBar();
+    });
   },
 
   bindCheckoutExtras() {
@@ -1322,11 +1463,16 @@ const App = {
       btn.textContent = isDemoMode() ? 'テスト注文を送信中...' : '注文を送信中...';
     }
     const party = getPartySize() || this.splitPeople || 0;
+    this.pointsRedeem = Math.max(0, Number(document.getElementById('pointsRedeem')?.value) || 0);
     const result = await placeGuestOrder({
       cart: this.cart,
       tableNumber: this.tableNumber,
       partySize: party,
       tipPercent: this.tipPercent,
+      channel: this.channel,
+      paymentMethod: this.paymentMethod,
+      pointsRedeem: this.pointsRedeem,
+      memberPhone: document.getElementById('memberPhone')?.value || '',
     });
     this.cart = [];
     this.saveCart();

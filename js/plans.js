@@ -152,6 +152,15 @@ export function planComparisonRows() {
     { key: 'slaTimer', label: '配膳SLA', feature: true },
     { key: 'tableBoard', label: 'テーブル状況ボード', feature: true },
     { key: 'brandCustom', label: 'ブランドカスタム', feature: true },
+    { key: 'payments', label: '決済UI（形）', feature: true },
+    { key: 'takeout', label: 'テイクアウト', feature: true },
+    { key: 'delivery', label: 'デリバリー', feature: true },
+    { key: 'reservations', label: '予約', feature: true },
+    { key: 'waitlist', label: '待ち行列', feature: true },
+    { key: 'loyalty', label: 'ポイント会員', feature: true },
+    { key: 'posBridge', label: 'POS連携（形）', feature: true },
+    { key: 'deepAnalytics', label: '深い分析', feature: true },
+    { key: 'autoPrint', label: '厨房自動印刷', feature: true },
     { key: 'orderFeePercent', label: '注文手数料', format: v => (v ? `${v}%` : 'なし') },
   ];
   return keys.map(row => ({

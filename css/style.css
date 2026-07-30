@@ -2062,3 +2062,48 @@ body.printing-kitchen #adminGate { display: none !important; }
   body.printing-kitchen { background: #fff; }
   body.printing-kitchen .kitchen-print-root { display: block !important; }
 }
+
+/* Deep analytics + store FOH */
+.deep-hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 72px;
+  margin: 10px 0 16px;
+}
+.deep-hour {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 4px;
+}
+.deep-hour i {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  background: #0A84FF;
+  border-radius: 2px 2px 0 0;
+}
+.deep-hour span { font-size: 9px; color: #8E8E93; }
+.store-foh-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #e8eceb;
+  font-size: 14px;
+}
+.store-foh-row button {
+  border: 1px solid #cfd8d6;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}

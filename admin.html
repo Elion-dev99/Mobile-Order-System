@@ -28,6 +28,8 @@
 <div class="admin-tabs" id="adminViewTabs">
   <button class="admin-tab active" data-view="orders">注文</button>
   <button class="admin-tab" data-view="analytics">分析</button>
+  <button class="admin-tab" data-view="foh">予約/待ち</button>
+  <button class="admin-tab" data-view="members">会員</button>
   <button class="admin-tab" data-view="menu">メニュー</button>
   <button class="admin-tab" data-view="leads">リード</button>
   <button class="admin-tab" data-view="billing">収益</button>
@@ -100,6 +102,29 @@
     <div id="analyticsTopItems"></div>
     <h3 class="admin-subhead">時間帯別</h3>
     <div id="analyticsHours"></div>
+    <h3 class="admin-subhead">深い分析 / POS</h3>
+    <p class="admin-muted" id="analyticsPosStatus">POS: —</p>
+    <button type="button" id="posConnectBtn" class="admin-link-btn" style="border:none;cursor:pointer;">POSスタブ接続</button>
+    <label class="admin-muted" style="display:block;margin:10px 0;">
+      <input type="checkbox" id="autoPrintToggle"> 新規注文で厨房伝票を自動印刷
+    </label>
+    <div id="analyticsDeep"></div>
+  </div>
+</div>
+
+<div id="fohPanel" class="admin-panel hidden">
+  <div class="admin-panel-inner">
+    <h2>予約・待ち行列</h2>
+    <p class="admin-muted">ゲスト画面から登録された予約/順番待ちを処理します。</p>
+    <div id="frontOfHouseList"></div>
+  </div>
+</div>
+
+<div id="membersPanel" class="admin-panel hidden">
+  <div class="admin-panel-inner">
+    <h2>ポイント会員</h2>
+    <p class="admin-muted">電話番号ベースの簡易CRM。決済連携は後日。</p>
+    <div id="membersList"></div>
   </div>
 </div>
 

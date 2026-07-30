@@ -876,6 +876,18 @@ const OpsPage = {
       this.setToolsStatus('キューを空にしました');
     });
     document.getElementById('toolsRefreshPending')?.addEventListener('click', () => this.renderTools());
+    document.getElementById('toolsHqMenuSync')?.addEventListener('click', async () => {
+      const log = document.getElementById('toolsHqSyncLog');
+      if (log) { log.hidden = false; log.textContent = '同期スタブ実行中...'; }
+      const shops = this.shops || [];
+      const lines = [`HQ menu sync stub @ ${new Date().toISOString()}`, `targets: ${shops.length}`];
+      for (const s of shops.slice(0, 50)) {
+        lines.push(`- ${s.id || s.name}: queued (stub)`);
+      }
+      lines.push('Real fan-out / POS push not wired yet.');
+      if (log) log.textContent = lines.join('\n');
+      this.setToolsStatus('HQメニュー同期スタブを記録しました');
+    });
     document.getElementById('toolsDumpEnv')?.addEventListener('click', () => this.dumpEnv());
     document.getElementById('toolsCopyEnv')?.addEventListener('click', async () => {
       const text = document.getElementById('toolsEnvDump')?.textContent || '';

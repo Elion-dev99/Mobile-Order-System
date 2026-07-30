@@ -5,8 +5,20 @@ import {
   ensureTrialStarted, getShopAccess, shopCanUse, getItemStock, setItemStock,
 } from './shop.js';
 import {
-  ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn,
+  ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn, getStaffUser,
 } from './staff-firebase-auth.js';
+import { paymentBadge, markOrderPaid } from './payments.js';
+import { channelLabel } from './channels.js';
+import { maybeAutoPrint } from './printers.js';
+import { writeAudit } from './audit-log.js';
+import { buildDeepAnalytics, hourBarsHtml } from './analytics-deep.js';
+import { rememberShopStaffEmail, assertStaffShopAccess } from './shop-scope.js';
+import { startOfflineSync } from './offline-sync.js';
+import { subscribeMembers } from './loyalty.js';
+import {
+  subscribeReservations, subscribeWaitlist, updateReservationStatus, updateWaitlistStatus,
+} from './reservations.js';
+import { posStatusLabel, connectPos, syncMenuToPos } from './pos-bridge.js';
 import { PLANS, PRODUCT } from './config.js';
 import {
   getPlan, yen, estimateMrr, estimateArr, featureEnabled,
@@ -72,14 +84,20 @@ const AdminPage = {
     if (!this.ensureAdminAccess()) return;
 
     ensureStaffAuthStyles();
-    await ensureStaffFirebase({
+    startOfflineSync();
+    const fbUser = await ensureStaffFirebase({
       title: '厨房・管理の Firebase ログイン',
       hint: 'メニュー保存・設定・注文削除に必要です。ステータス更新だけなら「後で」でも可。',
-    }).catch(() => {});
+    }).catch(() => null);
+    if (fbUser?.email) {
+      await rememberShopStaffEmail(fbUser.email).catch(() => {});
+      assertStaffShopAccess(getShopId());
+    }
 
     this.subscribeToOrders();
     this.subscribeToLeads();
     this.subscribeRequests();
+    this.subscribeEnterprisePanels();
     this.renderMenuEditor();
     this.renderBilling();
     this.renderAnalytics();
@@ -308,6 +326,8 @@ const AdminPage = {
     const map = {
       orders: 'ordersPanel',
       analytics: 'analyticsPanel',
+      foh: 'fohPanel',
+      members: 'membersPanel',
       menu: 'menuPanel',
       leads: 'leadsPanel',
       billing: 'billingPanel',
@@ -320,6 +340,8 @@ const AdminPage = {
     if (view === 'leads') this.renderLeads();
     if (view === 'analytics') this.renderAnalytics();
     if (view === 'menu') this.renderMenuEditor();
+    if (view === 'foh') this.renderFrontOfHouse();
+    if (view === 'members') this.renderMembersPanel();
     this.renderRevenueBanner();
   },
 
@@ -543,29 +565,36 @@ const AdminPage = {
     const elapsed = Math.floor((Date.now() - order.timestamp) / 60000);
     const slaClass = slaOn && status !== 'done' && elapsed >= 15 ? 'sla-late' : slaOn && status !== 'done' && elapsed >= 8 ? 'sla-warn' : '';
     const party = order.partySize ? ` · ${order.partySize}名` : '';
+    const ch = order.channel ? ` · ${channelLabel(order.channel)}` : '';
     const extras = [];
     if (order.couponCode) extras.push(`クーポン ${order.couponCode}`);
     if (order.serviceCharge) extras.push(`サ料 ¥${order.serviceCharge.toLocaleString()}`);
     if (order.tip) extras.push(`チップ ¥${order.tip.toLocaleString()}`);
+    if (order.paymentStatus) extras.push(`決済 ${paymentBadge(order.payment || { status: order.paymentStatus })}`);
 
+    const unpaid = order.paymentStatus && order.paymentStatus !== 'paid' && order.paymentStatus !== 'none';
     const actionBtns = status === 'received' ? `
       <button class="admin-action-btn start" data-id="${order.id}" data-status="cooking">🔥 調理開始</button>
       <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
+      ${unpaid ? `<button class="admin-action-btn" data-pay-close="${order.id}">会計クローズ</button>` : ''}
     ` : status === 'cooking' ? `
       <button class="admin-action-btn start" data-id="${order.id}" data-status="finishing">✨ 仕上げへ</button>
       <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
+      ${unpaid ? `<button class="admin-action-btn" data-pay-close="${order.id}">会計クローズ</button>` : ''}
     ` : status === 'finishing' ? `
       <button class="admin-action-btn complete" style="flex:1;" data-id="${order.id}" data-status="done">✅ 配膳完了</button>
-    ` : `<div style="font-size:13px;color:#4A5568;text-align:center;padding:8px;">配膳完了</div>`;
+      ${unpaid ? `<button class="admin-action-btn" data-pay-close="${order.id}">会計クローズ</button>` : ''}
+    ` : `<div style="font-size:13px;color:#4A5568;text-align:center;padding:8px;">配膳完了${unpaid ? '' : ' / 会計済可'}</div>
+      ${unpaid ? `<button class="admin-action-btn" data-pay-close="${order.id}">会計クローズ（形）</button>` : ''}`;
 
     return `
       <div class="admin-order-card ${cardClass} ${slaClass}">
         <div class="admin-order-top">
           <div>
             <div class="admin-order-id">${order.id}</div>
-            <div class="admin-order-time">${elapsed === 0 ? 'たった今' : elapsed + '分前'} — ${statusLabel}${party}${slaOn && status !== 'done' ? ` · SLA ${elapsed}分` : ''}</div>
+            <div class="admin-order-time">${elapsed === 0 ? 'たった今' : elapsed + '分前'} — ${statusLabel}${party}${ch}${slaOn && status !== 'done' ? ` · SLA ${elapsed}分` : ''}</div>
           </div>
-          <div class="admin-table-badge">テーブル ${order.tableNumber}</div>
+          <div class="admin-table-badge">${order.channel === 'takeout' || order.channel === 'delivery' ? channelLabel(order.channel) : 'テーブル'} ${order.tableNumber}</div>
         </div>
         <div class="admin-items">
           ${(order.items || []).map(item => {
@@ -599,6 +628,27 @@ const AdminPage = {
     container.querySelectorAll('[data-id][data-status]').forEach(btn => {
       btn.addEventListener('click', () => this.updateStatus(btn.dataset.id, btn.dataset.status));
     });
+    container.querySelectorAll('[data-pay-close]').forEach((btn) => {
+      btn.addEventListener('click', () => this.closePayment(btn.dataset.payClose));
+    });
+  },
+
+  async closePayment(orderId) {
+    const order = this.orders.find((o) => o.id === orderId);
+    if (!order) return;
+    if (!confirm('会計をクローズしますか？（決済プロバイダ未接続・形のみ）')) return;
+    try {
+      const patch = await markOrderPaid(order);
+      await updateDoc(doc(db, 'orders', orderId), patch);
+      await writeAudit({
+        action: 'payment_close',
+        actor: getStaffUser()?.email || getStaffRole() || 'staff',
+        detail: orderId,
+      });
+    } catch (e) {
+      console.error(e);
+      alert('会計クローズに失敗しました');
+    }
   },
 
   exportRangeCsv() {
@@ -678,6 +728,14 @@ const AdminPage = {
         tableNumber: hit.tableNumber,
         status,
         total: hit.total,
+      }).catch(() => {});
+      if (shopCanUse('autoPrint')) {
+        maybeAutoPrint({ ...hit, status }, getShop(), 'status').catch(() => {});
+      }
+      writeAudit({
+        action: 'order_status',
+        actor: getStaffUser()?.email || getStaffRole() || 'kitchen',
+        detail: `${orderId} → ${status}`,
       }).catch(() => {});
     }
     try {
@@ -1112,6 +1170,115 @@ const AdminPage = {
             <span>${h}</span>
           </div>`).join('')}
       </div>`;
+
+    const deepHost = document.getElementById('analyticsDeep');
+    if (deepHost) {
+      if (!shopCanUse('deepAnalytics')) {
+        deepHost.innerHTML = `<p class="admin-muted">深い分析（チャネル×時間帯）は Business 以上です。</p>`;
+      } else {
+        const deep = buildDeepAnalytics(this.orders, { from: start.getTime() });
+        deepHost.innerHTML = `
+          <p class="admin-muted">ピーク ${deep.peakHour ?? '—'}時 · 注文 ${deep.peakHourOrders}件 · チャネル別 ${deep.byChannel.map((c) => `${c.id}:${c.count}`).join(' / ') || '—'}</p>
+          <div class="deep-hours">${hourBarsHtml(deep.byHour)}</div>
+          <div class="analytics-row"><span>カテゴリ混成</span><strong>${deep.byCategory.slice(0, 5).map((c) => `${c.id}×${c.qty}`).join(' · ') || '—'}</strong></div>
+        `;
+      }
+    }
+    const posEl = document.getElementById('analyticsPosStatus');
+    if (posEl) posEl.textContent = posStatusLabel(shop);
+  },
+
+  subscribeEnterprisePanels() {
+    const shopId = getShopId();
+    this.members = [];
+    this.reservations = [];
+    this.waitlist = [];
+    if (shopCanUse('loyalty')) {
+      subscribeMembers(shopId, (rows) => {
+        this.members = rows;
+        this.renderMembersPanel();
+      });
+    }
+    if (shopCanUse('reservations')) {
+      subscribeReservations(shopId, (rows) => {
+        this.reservations = rows;
+        this.renderFrontOfHouse();
+      });
+    }
+    if (shopCanUse('waitlist')) {
+      subscribeWaitlist(shopId, (rows) => {
+        this.waitlist = rows;
+        this.renderFrontOfHouse();
+      });
+    }
+    document.getElementById('posConnectBtn')?.addEventListener('click', async () => {
+      if (!shopCanUse('posBridge')) {
+        alert('POS連携は Business 以上です');
+        return;
+      }
+      await connectPos({ provider: 'square_stub', locationId: 'stub-loc' });
+      try {
+        await saveShop({ posProvider: 'square_stub', posLocationId: 'stub-loc', posLastSyncAt: Date.now() });
+      } catch (_) {}
+      await syncMenuToPos(getMenu(), getShop());
+      alert('POS をスタブ接続しました（実APIは未配線）');
+      this.renderAnalytics();
+    });
+    document.getElementById('autoPrintToggle')?.addEventListener('change', async (e) => {
+      try {
+        await saveShop({ autoPrintOnOrder: !!e.target.checked, printerMode: 'browser' });
+      } catch (err) { console.error(err); }
+    });
+  },
+
+  renderMembersPanel() {
+    const el = document.getElementById('membersList');
+    if (!el) return;
+    if (!shopCanUse('loyalty')) {
+      el.innerHTML = `<p class="admin-muted">会員・ポイントは Growth 以上です</p>`;
+      return;
+    }
+    if (!this.members?.length) {
+      el.innerHTML = `<p class="admin-muted">会員はまだいません</p>`;
+      return;
+    }
+    el.innerHTML = this.members.slice(0, 40).map((m) => `
+      <div class="analytics-row">
+        <span>${this.escapeHtml(m.name || m.phone)} · ${this.escapeHtml(m.phone)}</span>
+        <strong>${m.points || 0}pt · ${m.visitCount || 0}回来店</strong>
+      </div>
+    `).join('');
+  },
+
+  renderFrontOfHouse() {
+    const el = document.getElementById('frontOfHouseList');
+    if (!el) return;
+    const rsv = (this.reservations || []).filter((r) => r.status === 'booked').slice(0, 20);
+    const wait = (this.waitlist || []).filter((w) => w.status === 'waiting').slice(0, 20);
+    el.innerHTML = `
+      <h3 class="admin-subhead">予約</h3>
+      ${rsv.length ? rsv.map((r) => `
+        <div class="analytics-row">
+          <span>${this.escapeHtml(r.name)} · ${r.partySize}名 · ${new Date(r.at).toLocaleString('ja-JP')}</span>
+          <button type="button" class="admin-link-btn" data-rsv="${r.id}" data-rsv-status="seated">着席</button>
+        </div>`).join('') : '<p class="admin-muted">予約なし</p>'}
+      <h3 class="admin-subhead">待ち行列</h3>
+      ${wait.length ? wait.map((w) => `
+        <div class="analytics-row">
+          <span>${this.escapeHtml(w.name)} · ${w.partySize}名</span>
+          <button type="button" class="admin-link-btn" data-wait="${w.id}" data-wait-status="called">呼出</button>
+        </div>`).join('') : '<p class="admin-muted">待ちなし</p>'}
+    `;
+    el.querySelectorAll('[data-rsv]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try { await updateReservationStatus(btn.dataset.rsv, btn.dataset.rsvStatus); } catch (e) { console.error(e); }
+      });
+    });
+    el.querySelectorAll('[data-wait]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try { await updateWaitlistStatus(btn.dataset.wait, btn.dataset.waitStatus); } catch (e) { console.error(e); }
+      });
+    });
   },
 
   renderBilling() {
