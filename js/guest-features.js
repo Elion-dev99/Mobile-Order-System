@@ -4,6 +4,7 @@ import {
 } from './shop.js';
 import { isDemoMode } from './demo.js';
 import { notifyBillRequested } from './notify.js';
+import { notifyStaffCall } from './notify-orders.js';
 import {
   collection, addDoc, doc, onSnapshot, query, where, orderBy, updateDoc
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
@@ -257,6 +258,13 @@ export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast, 
             cutlery: locale === 'en' ? 'Cutlery requested' : 'カトラリーを依頼しました',
             staff: locale === 'en' ? 'Staff called' : '店員を呼び出しました',
           }[svc] || (locale === 'en' ? 'Sent' : '送信しました');
+          notifyStaffCall({
+            shopId: getShopId(),
+            shopName: getShop()?.name,
+            tableNumber,
+            note: note || msg,
+            requestId: req.id,
+          }).catch(() => {});
           onToast?.(msg);
           setTimeout(() => { btn.disabled = false; }, 2500);
         }

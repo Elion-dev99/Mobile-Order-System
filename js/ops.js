@@ -19,6 +19,8 @@ import {
   getSetupStatus,
   getNotifyEvents,
   getNotifySettings,
+  getDiscordWebhook,
+  isLikelyDiscordWebhook,
   NOTIFY_EVENTS,
 } from './notify.js';
 import { maybeNotifySystemLoad, notifySystemLoadNow, assessSystemLoad } from './load-monitor.js';
@@ -27,6 +29,7 @@ import {
   playbookFor,
   listPendingOrders,
 } from './health.js';
+import { runFullLoadTest, ensureWebhookReady } from './load-test.js';
 
 const OpsPage = {
   shops: [],
@@ -40,6 +43,7 @@ const OpsPage = {
   health: null,
 
   async init() {
+    await this.bootstrapWebhookFromQuery();
     if (!isOpsAuthed()) {
       this.showGate();
       return;
@@ -425,6 +429,70 @@ const OpsPage = {
       if (st) st.textContent = `送信しました（${health?.emoji || ''} ${health?.label || ''}）`;
     });
 
+    document.getElementById('opsLoadTestRun')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const stopBtn = document.getElementById('opsLoadTestStop');
+      const st = document.getElementById('opsLoadTestStatus');
+      const log = document.getElementById('opsLoadTestLog');
+      const shopCount = Number(document.getElementById('loadTestShops')?.value) || 25;
+      const ordersPerShop = Number(document.getElementById('loadTestOrders')?.value) || 10;
+      const webhook = document.getElementById('loadTestWebhook')?.value?.trim()
+        || document.getElementById('opsNotifyWebhook')?.value?.trim()
+        || getDiscordWebhook();
+      if (st) { st.hidden = false; st.textContent = '準備中...'; }
+      if (log) { log.hidden = false; log.textContent = ''; }
+      this._loadTestAbort = false;
+      if (stopBtn) stopBtn.disabled = false;
+      btn.disabled = true;
+      if (webhook && isLikelyDiscordWebhook(webhook)) {
+        await ensureWebhookReady(webhook);
+      } else if (st) {
+        st.textContent = '警告: Discord Webhook 未設定。注文負荷は実行しますが通知は失敗します。通知タブで URL を保存してください。';
+      }
+      const lines = [];
+      const pushLog = (msg, meta) => {
+        const line = meta ? `${msg} ${typeof meta === 'object' ? JSON.stringify(meta) : meta}` : msg;
+        lines.push(line);
+        if (log) {
+          log.textContent = lines.slice(-80).join('\n');
+          log.scrollTop = log.scrollHeight;
+        }
+        if (st) st.textContent = msg;
+      };
+      try {
+        const summary = await runFullLoadTest({
+          shopCount,
+          ordersPerShop,
+          webhook,
+          onProgress: (msg, meta) => {
+            if (this._loadTestAbort) throw new Error('aborted');
+            pushLog(msg, meta);
+          },
+        });
+        pushLog('=== 完了 ===', {
+          shops: summary.shopsCreated,
+          orders: summary.ordersCreated,
+          discordOk: summary.discordOk,
+          discordFail: summary.discordFail,
+          sec: summary.elapsedSec,
+        });
+        if (st) {
+          st.textContent = `完了: 店舗${summary.shopsCreated} / 注文${summary.ordersCreated} / Discord成功${summary.discordOk} 失敗${summary.discordFail}（${summary.elapsedSec}s）`;
+        }
+        await this.refreshShops();
+      } catch (err) {
+        pushLog('エラー: ' + (err?.message || err));
+        if (st) st.textContent = '中断または失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
+      if (stopBtn) stopBtn.disabled = true;
+    });
+    document.getElementById('opsLoadTestStop')?.addEventListener('click', () => {
+      this._loadTestAbort = true;
+      const st = document.getElementById('opsLoadTestStatus');
+      if (st) { st.hidden = false; st.textContent = '停止リクエスト中...'; }
+    });
+
     document.getElementById('opsNotifySaveEvents')?.addEventListener('click', async () => {
       const st = document.getElementById('opsNotifyStatus');
       st.hidden = false;
@@ -506,6 +574,21 @@ const OpsPage = {
         </label>
       `).join('');
     }
+  },
+
+
+  async bootstrapWebhookFromQuery() {
+    try {
+      const wh = new URLSearchParams(location.search).get('webhook')
+        || new URLSearchParams(location.search).get('discordWebhook');
+      if (wh && isLikelyDiscordWebhook(wh)) {
+        await ensureWebhookReady(wh);
+        const input = document.getElementById('opsNotifyWebhook');
+        if (input) input.value = wh;
+        const lt = document.getElementById('loadTestWebhook');
+        if (lt) lt.value = wh;
+      }
+    } catch (_) {}
   },
 
   switchTab(id) {
