@@ -23,11 +23,17 @@ jobs:
       - name: Cardinal tick
         env:
           FORCE: ${{ github.event.inputs.force || 'false' }}
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
         run: |
+          if [ -z "$OPS_API_SECRET" ]; then
+            echo "Missing GitHub secret OPS_API_SECRET (must match Cloudflare OPS_API_SECRET)"
+            exit 1
+          fi
           BODY=$(printf '%s' "{\"action\":\"tick\",\"force\":$( [ \"$FORCE\" = \"true\" ] && echo true || echo false ),\"source\":\"github-cron\",\"baseUrl\":\"https://mobile-order-system.pages.dev\"}")
           echo "POST /api/cardinal tick force=$FORCE"
           RESP=$(curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
             -H 'content-type: application/json' \
+            -H "x-ops-secret: $OPS_API_SECRET" \
             -d "$BODY")
           echo "$RESP" | tee /tmp/cardinal-tick.json
           echo "$RESP" | grep -q '"ok":true' || echo "$RESP" | grep -q '"ok": true' || {

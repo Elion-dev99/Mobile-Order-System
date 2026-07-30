@@ -569,17 +569,17 @@ const AdminPage = {
             }
             return `
               <div class="admin-item-row">
-                <span>${item.emoji}</span>
-                <span class="admin-item-qty">×${item.qty}</span>
-                <span>${item.name}</span>
-                ${customParts.length ? `<span class="admin-item-custom">(${customParts.join('/')})</span>` : ''}
-                ${item.note ? `<span class="admin-item-custom">📝${item.note}</span>` : ''}
+                <span>${this.escapeHtml(item.emoji || '')}</span>
+                <span class="admin-item-qty">×${Number(item.qty) || 1}</span>
+                <span>${this.escapeHtml(item.name)}</span>
+                ${customParts.length ? `<span class="admin-item-custom">(${this.escapeHtml(customParts.join('/'))})</span>` : ''}
+                ${item.note ? `<span class="admin-item-custom">📝${this.escapeHtml(item.note)}</span>` : ''}
               </div>`;
           }).join('')}
         </div>
         <div style="font-size:13px;font-weight:700;color:#A0AEC0;margin-bottom:10px;">
           小計 ¥${(order.subtotal || 0).toLocaleString()} · 税 ¥${(order.tax || 0).toLocaleString()} · 合計 ¥${(order.total || 0).toLocaleString()}
-          ${extras.length ? `<br><span style="font-weight:500;">${extras.join(' · ')}</span>` : ''}
+          ${extras.length ? `<br><span style="font-weight:500;">${this.escapeHtml(extras.join(' · '))}</span>` : ''}
         </div>
         <div class="admin-action-row">${actionBtns}</div>
       </div>`;
@@ -633,15 +633,15 @@ const AdminPage = {
     }
     root.innerHTML = open.map((o) => {
       const items = (o.items || []).map((i) =>
-        `<li><strong>×${i.qty}</strong> ${i.emoji || ''} ${i.name}${i.note ? ` <em>${i.note}</em>` : ''}</li>`
+        `<li><strong>×${Number(i.qty) || 1}</strong> ${this.escapeHtml(i.emoji || '')} ${this.escapeHtml(i.name)}${i.note ? ` <em>${this.escapeHtml(i.note)}</em>` : ''}</li>`
       ).join('');
       return `
         <article class="kitchen-ticket">
           <header>
-            <div class="kt-table">卓 ${o.tableNumber}</div>
-            <div class="kt-id">${o.id}</div>
+            <div class="kt-table">卓 ${this.escapeHtml(String(o.tableNumber ?? ''))}</div>
+            <div class="kt-id">${this.escapeHtml(o.id)}</div>
           </header>
-          <p class="kt-meta">${new Date(o.timestamp || Date.now()).toLocaleString('ja-JP')} · ${o.status || 'received'}</p>
+          <p class="kt-meta">${new Date(o.timestamp || Date.now()).toLocaleString('ja-JP')} · ${this.escapeHtml(o.status || 'received')}</p>
           <ul>${items}</ul>
           <footer>合計 ¥${(o.total || 0).toLocaleString()}</footer>
         </article>`;
@@ -858,6 +858,14 @@ const AdminPage = {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   },
 
+  escapeHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  },
+
   syncMenuDraftFromDom() {
     const rows = document.querySelectorAll('#menuEditorList .menu-edit-card, #menuEditorList .menu-edit-row');
     rows.forEach((row, idx) => {
@@ -967,21 +975,21 @@ const AdminPage = {
     list.innerHTML = this.leads.map(lead => `
       <div class="lead-card">
         <div class="lead-top">
-          <strong>${lead.shopName || '無題'}</strong>
-          <span>${lead.status || 'new'}</span>
+          <strong>${this.escapeHtml(lead.shopName || '無題')}</strong>
+          <span>${this.escapeHtml(lead.status || 'new')}</span>
         </div>
-        <div class="lead-meta">${lead.email || ''} ${lead.phone ? '· ' + lead.phone : ''}</div>
+        <div class="lead-meta">${this.escapeHtml(lead.email || '')} ${lead.phone ? '· ' + this.escapeHtml(lead.phone) : ''}</div>
         <div class="lead-meta">
-          プラン: ${lead.planName || lead.planId || '-'}
+          プラン: ${this.escapeHtml(lead.planName || lead.planId || '-')}
           · 見込みMRR ¥${yen(lead.estimatedMrr || lead.planPrice || 0)}
-          · 席数 ${lead.tables || '-'}
-          · 店舗 ${lead.stores || 1}
+          · 席数 ${this.escapeHtml(String(lead.tables || '-'))}
+          · 店舗 ${this.escapeHtml(String(lead.stores || 1))}
         </div>
         <div class="lead-meta">${lead.createdAt ? new Date(lead.createdAt).toLocaleString('ja-JP') : ''}</div>
-        ${lead.message ? `<p class="lead-msg">${lead.message}</p>` : ''}
+        ${lead.message ? `<p class="lead-msg">${this.escapeHtml(lead.message)}</p>` : ''}
         <div class="admin-action-row" style="margin-top:10px;">
-          <button class="admin-action-btn start" data-lead="${lead.id}" data-lead-status="contacted">対応中</button>
-          <button class="admin-action-btn complete" data-lead="${lead.id}" data-lead-status="won">成約</button>
+          <button class="admin-action-btn start" data-lead="${this.escapeAttr(lead.id)}" data-lead-status="contacted">対応中</button>
+          <button class="admin-action-btn complete" data-lead="${this.escapeAttr(lead.id)}" data-lead-status="won">成約</button>
         </div>
       </div>
     `).join('');

@@ -15,15 +15,17 @@
  * - CURSOR_AUTOMATION_WEBHOOK_URL + CURSOR_AUTOMATION_API_KEY (legacy shared)
  */
 
+import { requireOpsSecret, corsHeaders, getOpsSecret } from './_ops-auth.js';
+
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
 
-function json(data, status = 200) {
+function json(data, status = 200, request = null) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
-      'access-control-allow-origin': '*',
+      ...corsHeaders(request),
     },
   });
 }
@@ -88,7 +90,8 @@ function rolePrompt(role, task = {}, meta = {}) {
 }
 
 async function postDiscord(env, body, embed) {
-  const webhook = (env && env.DISCORD_WEBHOOK_URL) || body.webhook || '';
+  // Never trust client-supplied webhook on Cardinal (use CF secret only)
+  const webhook = (env && env.DISCORD_WEBHOOK_URL) || '';
   if (!isDiscordWebhook(webhook)) return { ok: false, skipped: true, reason: 'no_discord' };
   const endpoint = webhook.includes('?') ? `${webhook}&wait=true` : `${webhook}?wait=true`;
   const res = await fetch(endpoint, {
@@ -201,14 +204,21 @@ async function dispatchRole(env, role, task, body) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const j = (data, status = 200) => json(data, status, request);
   let body;
   try {
     body = await request.json();
   } catch {
-    return json({ ok: false, error: 'invalid_json' }, 400);
+    return j({ ok: false, error: 'invalid_json' }, 400);
   }
 
   const action = String(body.action || 'status');
+
+  // Public: status only. Privileged actions require OPS_API_SECRET.
+  if (action !== 'status') {
+    const gate = requireOpsSecret(request, env, body, j);
+    if (!gate.ok) return gate.response;
+  }
 
   if (action === 'heartbeat') {
     const role = body.role === 'executor' ? 'executor' : 'guardian';
@@ -224,7 +234,7 @@ export async function onRequestPost(context) {
         footer: { text: 'QuickOrder Cardinal' },
       }).catch(() => {});
     }
-    return json({
+    return j({
       ok: true,
       action: 'heartbeat',
       role,
@@ -237,7 +247,7 @@ export async function onRequestPost(context) {
     const role = body.role === 'guardian' ? 'guardian' : 'executor';
     const task = body.task || {};
     const result = await dispatchRole(env, role, task, body);
-    return json({
+    return j({
       ok: true,
       action: 'dispatch',
       ...result,
@@ -306,7 +316,7 @@ export async function onRequestPost(context) {
       }).catch(() => {});
     }
 
-    return json({
+    return j({
       ok: true,
       action: 'tick',
       unhealthy,
@@ -316,36 +326,32 @@ export async function onRequestPost(context) {
     });
   }
 
-  return json({
+  return j({
     ok: true,
     action: 'status',
     service: 'quickorder-cardinal',
     configured: {
       discord: !!(env?.DISCORD_WEBHOOK_URL),
       apiKey: !!(env?.CURSOR_API_KEY),
+      opsSecret: !!getOpsSecret(env),
       guardianWebhook: !!(env?.CURSOR_GUARDIAN_WEBHOOK_URL || env?.CURSOR_AUTOMATION_WEBHOOK_URL),
       executorWebhook: !!(env?.CURSOR_EXECUTOR_WEBHOOK_URL || env?.CURSOR_AUTOMATION_WEBHOOK_URL),
     },
   });
 }
 
-export async function onRequestGet() {
+export async function onRequestGet(context) {
   return json({
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    hint: 'POST { action: "heartbeat"|"dispatch"|"status"|"tick", role, task? }',
-  });
+    hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }.',
+  }, 200, context.request);
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
   return new Response(null, {
     status: 204,
-    headers: {
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, POST, OPTIONS',
-      'access-control-allow-headers': 'content-type',
-      'access-control-max-age': '86400',
-    },
+    headers: corsHeaders(context.request),
   });
 }

@@ -39,11 +39,13 @@ SAO のカーディナルシステムに着想した、**監視体（Guardian）
 
 Cursor Automations UI なしでも運用できます。
 
-1. **Cloudflare** に `CURSOR_API_KEY` が入っている（本番 `/api/cardinal` の `configured.apiKey=true`）
-2. **GitHub Actions** `Cardinal cron watchdog` が毎時 `:15` UTC に `/api/cardinal` の `tick` を叩く  
+1. **Cloudflare** に `CURSOR_API_KEY` と **`OPS_API_SECRET`** が入っている  
+2. **GitHub** に同じ `OPS_API_SECRET`（cron の `X-Ops-Secret` 用）  
+3. **GitHub Actions** `Cardinal cron watchdog` が毎時 `:15` UTC に `/api/cardinal` の `tick` を叩く  
    - 正常 → エージェント起動なし（Discord があれば心拍のみ）  
    - 異常 → **Executor** を自動起動  
-3. **Ops → Cardinal** タブ / 障害時 AutoHeal からもオンデマンド起動
+4. **Ops → 鍵** タブに `OPS_API_SECRET` を保存（ブラウザからの dispatch / AutoHeal 用）  
+5. 詳細: `docs/security.md`
 
 手動で今すぐ tick:
 
@@ -63,7 +65,8 @@ curl -X POST https://mobile-order-system.pages.dev/api/cardinal \
 
 ```bash
 CURSOR_API_KEY=...                 # 必須級（済）
-DISCORD_WEBHOOK_URL=...            # 任意（通知強化）
+OPS_API_SECRET=...                 # 必須（dispatch/tick/incident）
+DISCORD_WEBHOOK_URL=...            # 推奨（サーバ側 webhook）
 CURSOR_GUARDIAN_WEBHOOK_URL=...    # 任意
 CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 ```

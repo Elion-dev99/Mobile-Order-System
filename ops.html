@@ -18,11 +18,7 @@
   <div class="ops-gate-card">
     <p class="ops-eyebrow">Internal</p>
     <h1>QuickOrder Ops</h1>
-    <p>テスト画面と総合管理。Cursor用 / オーナー用パスワードで入室。</p>
-    <div class="ops-pw-hint">
-      <div><span>Cursor</span><code id="hintCursor">cursor2026</code><button type="button" data-fill="cursor2026">このパスワードで入室</button></div>
-      <div><span>Owner</span><code id="hintOwner">owner2026</code><button type="button" data-fill="owner2026">このパスワードで入室</button></div>
-    </div>
+    <p>内部管理コンソール。パスワードは画面に表示しません。共有チャネル外で受け取った値を入力してください。</p>
     <form id="opsLoginForm">
       <label>パスワード
         <input type="password" id="opsPassword" autocomplete="current-password" required autofocus>
@@ -255,8 +251,20 @@
     </section>
 
     <section data-ops-panel="security" hidden>
+      <h2>Ops API シークレット</h2>
+      <p class="ops-muted">Cloudflare の <code>OPS_API_SECRET</code> と同じ値。Cardinal / Incident / クライアントWebhook通知に必要です。既定ではこのタブのセッションにのみ保持します。</p>
+      <form id="opsSecretForm" class="ops-form-grid">
+        <label class="ops-span-2">OPS_API_SECRET
+          <input id="opsApiSecret" type="password" autocomplete="off" placeholder="Cloudflare と同じ秘密値" minlength="8">
+        </label>
+        <label class="ops-inline ops-span-2"><input type="checkbox" id="opsSecretPersist"> このブラウザに保存（非推奨・共用PCではオフ）</label>
+        <button type="submit">シークレットを保存</button>
+        <button type="button" id="opsSecretClear" class="ops-btn-secondary">消去</button>
+      </form>
+      <p id="opsSecretStatus" class="ops-status" hidden></p>
+
       <h2>パスワード更新</h2>
-      <p class="ops-muted">このブラウザにカスタムハッシュを保存します。既定: Cursor / Owner の2系統。</p>
+      <p class="ops-muted">このブラウザにカスタムハッシュを保存します（SHA-256）。平文は保存しません。</p>
       <form id="opsPwForm" class="ops-form-grid">
         <label>対象
           <select id="opsPwRole">
@@ -268,7 +276,7 @@
         <button type="submit">更新</button>
       </form>
       <p id="opsPwStatus" class="ops-status" hidden></p>
-      <p class="ops-muted" style="margin-top:20px">Discord 通知の設定は <button type="button" class="ops-linkish" data-ops-tab="notify">通知タブ</button> で行います。</p>
+      <p class="ops-muted" style="margin-top:20px">Discord 通知の設定は <button type="button" class="ops-linkish" data-ops-tab="notify">通知タブ</button> で行います。詳細は <code>docs/security.md</code>。</p>
     </section>
   </main>
 </div>

@@ -467,11 +467,11 @@ const StorePage = {
       <div class="store-req-row ${r.type === 'bill' ? 'is-bill' : ''}">
         <div class="store-req-main">
           <strong>${label}</strong>
-          <span class="store-req-seat">席 ${r.tableNumber}</span>
+          <span class="store-req-seat">席 ${escapeHtml(String(r.tableNumber ?? ''))}</span>
           ${r.type === 'bill' ? '<span class="store-req-hint">お客様はレジへ向かいます</span>' : ''}
-          ${r.note && r.type !== 'bill' ? `<span class="store-req-hint">${r.note}</span>` : ''}
+          ${r.note && r.type !== 'bill' ? `<span class="store-req-hint">${escapeHtml(r.note)}</span>` : ''}
         </div>
-        <button type="button" data-resolve="${r.id}" data-table="${r.tableNumber}">対応済</button>
+        <button type="button" data-resolve="${escapeHtml(r.id)}" data-table="${escapeHtml(String(r.tableNumber ?? ''))}">対応済</button>
       </div>`;
     }).join('') || '<p class="store-muted">現在なし</p>';
     list.querySelectorAll('[data-resolve]').forEach(btn => {
@@ -530,5 +530,13 @@ const StorePage = {
     this.renderTableBoard();
   },
 };
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 document.addEventListener('DOMContentLoaded', () => StorePage.init());

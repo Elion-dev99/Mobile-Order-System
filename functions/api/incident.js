@@ -9,14 +9,17 @@
  * - CURSOR_AUTOMATION_API_KEY — Basic auth username for automation webhook
  */
 
+import { requireOpsSecret, corsHeaders, getOpsSecret } from './_ops-auth.js';
+
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
 
-function json(data, status = 200) {
+function json(data, status = 200, request = null) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
+      ...corsHeaders(request),
     },
   });
 }
@@ -57,7 +60,7 @@ function buildAgentPrompt(incident = {}) {
 }
 
 async function postDiscord(env, body, incident) {
-  const webhook = (env && env.DISCORD_WEBHOOK_URL) || body.webhook || '';
+  const webhook = (env && env.DISCORD_WEBHOOK_URL) || '';
   if (!isDiscordWebhook(webhook)) return { ok: false, skipped: true, reason: 'no_discord' };
 
   const status = incident.status || incident.severity || 'unknown';
@@ -141,12 +144,16 @@ async function dispatchCursorAgent(env, incident) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const j = (data, status = 200) => json(data, status, request);
   let body;
   try {
     body = await request.json();
   } catch {
-    return json({ ok: false, error: 'invalid_json' }, 400);
+    return j({ ok: false, error: 'invalid_json' }, 400);
   }
+
+  const gate = requireOpsSecret(request, env, body, j);
+  if (!gate.ok) return gate.response;
 
   const incident = {
     ...body,
@@ -159,7 +166,7 @@ export async function onRequestPost(context) {
 
   const discord = await postDiscord(env, body, incident).catch(e => ({ ok: false, error: String(e?.message || e) }));
 
-  return json({
+  return j({
     ok: true,
     discord,
     cursor,
@@ -169,21 +176,19 @@ export async function onRequestPost(context) {
   });
 }
 
-export async function onRequestGet() {
+export async function onRequestGet(context) {
+  const { env, request } = context;
   return json({
     ok: true,
     service: 'quickorder-incident',
-    hint: 'POST { status, summary, firestoreOk, notifyApiOk, webhook? } で障害を受け付け、Cursor自動対処を起動します',
-  });
+    opsSecretConfigured: !!getOpsSecret(env),
+    hint: 'POST requires X-Ops-Secret. Body: { status, summary, firestoreOk, notifyApiOk }',
+  }, 200, request);
 }
 
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
   return new Response(null, {
     status: 204,
-    headers: {
-      'access-control-allow-methods': 'GET, POST, OPTIONS',
-      'access-control-allow-headers': 'content-type',
-      'access-control-max-age': '86400',
-    },
+    headers: corsHeaders(context.request),
   });
 }
