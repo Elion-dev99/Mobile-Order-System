@@ -29,16 +29,18 @@ body.ops-body {
   place-items: center;
   padding: 24px;
 }
-.ops-gate.is-visible,
-.ops-gate:not([hidden]) {
+.ops-gate.is-visible {
   display: grid;
+}
+.ops-gate[hidden],
+#opsApp[hidden] {
+  display: none !important;
 }
 #opsApp {
   display: none;
 }
-#opsApp.is-visible,
-#opsApp:not([hidden]) {
-  display: block;
+#opsApp.is-visible {
+  display: block !important;
 }
 .ops-gate-card {
   width: min(420px, 100%);

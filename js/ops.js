@@ -70,12 +70,11 @@ const OpsPage = {
       if (input) input.type = e.target.checked ? 'text' : 'password';
     });
     document.querySelectorAll('[data-fill]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const input = document.getElementById('opsPassword');
-        if (input) {
-          input.value = btn.dataset.fill;
-          input.focus();
-        }
+        if (input) input.value = btn.dataset.fill;
+        // ワンタップ入室（入力だけで終わらないようにする）
+        await this.tryLogin(btn.dataset.fill, btn);
       });
     });
 
@@ -85,40 +84,55 @@ const OpsPage = {
       e.stopPropagation();
       const btn = form.querySelector('button[type="submit"]');
       const pw = document.getElementById('opsPassword').value;
-      const err = document.getElementById('opsLoginError');
-      err.hidden = true;
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = '入室中...';
-      }
-      let res;
-      try {
-        res = await verifyOpsPassword(pw);
-      } catch (ex) {
-        console.error(ex);
-        err.hidden = false;
-        err.textContent = '認証処理でエラーが出ました。再読み込みしてください';
-        if (btn) { btn.disabled = false; btn.textContent = '入室'; }
-        return;
-      }
-      if (!res.ok) {
-        err.hidden = false;
-        err.textContent = 'パスワードが違います（Cursor: cursor2026 / Owner: owner2026）';
-        if (btn) { btn.disabled = false; btn.textContent = '入室'; }
-        return;
-      }
-      setOpsRole(res.role);
-      // リロードせずその場で画面切替（iOSで session が消えて戻る問題を回避）
-      try {
-        await this.enterApp();
-      } catch (ex) {
-        console.error(ex);
-        err.hidden = false;
-        err.textContent = '画面の切替に失敗しました。もう一度お試しください';
-        if (btn) { btn.disabled = false; btn.textContent = '入室'; }
-      }
+      await this.tryLogin(pw, btn);
     });
   },
+
+  async tryLogin(password, btn) {
+    const err = document.getElementById('opsLoginError');
+    if (err) {
+      err.hidden = true;
+      err.textContent = '';
+    }
+    const original = btn?.textContent;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '入室中...';
+    }
+    let res;
+    try {
+      res = await verifyOpsPassword(password);
+    } catch (ex) {
+      console.error(ex);
+      if (err) {
+        err.hidden = false;
+        err.textContent = '認証処理でエラーが出ました。再読み込みしてください';
+      }
+      if (btn) { btn.disabled = false; btn.textContent = original || '入室'; }
+      return;
+    }
+    if (!res.ok) {
+      if (err) {
+        err.hidden = false;
+        err.textContent = 'パスワードが違います（Cursor: cursor2026 / Owner: owner2026）';
+      }
+      if (btn) { btn.disabled = false; btn.textContent = original || '入室'; }
+      return;
+    }
+    setOpsRole(res.role);
+    try {
+      await this.enterApp();
+    } catch (ex) {
+      console.error(ex);
+      if (err) {
+        err.hidden = false;
+        err.textContent = '画面の切替に失敗しました。もう一度お試しください';
+      }
+      if (btn) { btn.disabled = false; btn.textContent = original || '入室'; }
+    }
+  },
+
+  _removeGateHandlers() {},
 
   showApp() {
     const gate = document.getElementById('opsGate');
