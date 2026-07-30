@@ -4,11 +4,19 @@
  *  - cursor: agent / engineering access
  *  - owner: 店舗オーナー本人
  *
- * Defaults (change after first login in ops settings):
- *   Cursor → cursor-ops-3dc6
- *   Owner  → yukiyo-ops-2026
+ * いま有効なパスワード（コピペ推奨）:
+ *   Cursor → cursor2026
+ *   Owner  → owner2026
+ *
+ * 旧パスワードも当面受け付けます。
  */
 const OPS_SESSION = 'mos_ops_role';
+
+/** @type {Record<'cursor'|'owner', string[]>} */
+const PLAIN_PASSWORDS = {
+  cursor: ['cursor2026', 'cursor-ops-3dc6'],
+  owner: ['owner2026', 'yukiyo-ops-2026'],
+};
 
 async function sha256(text) {
   const data = new TextEncoder().encode(text);
@@ -20,24 +28,43 @@ let liveHashes = null;
 
 async function getLiveHashes() {
   if (liveHashes) return liveHashes;
-  liveHashes = {
-    cursor: await sha256('cursor-ops-3dc6'),
-    owner: await sha256('yukiyo-ops-2026'),
-  };
+  liveHashes = { cursor: new Set(), owner: new Set() };
+  for (const role of /** @type {const} */ (['cursor', 'owner'])) {
+    for (const pw of PLAIN_PASSWORDS[role]) {
+      liveHashes[role].add(await sha256(pw));
+    }
+  }
   return liveHashes;
 }
 
+function normalizePassword(password) {
+  return String(password || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // zero-width
+    .replace(/\u3000/g, ' ')
+    .trim();
+}
+
 export async function verifyOpsPassword(password) {
-  const hashes = await getLiveHashes();
-  const h = await sha256(String(password || ''));
-  if (h === hashes.cursor) return { ok: true, role: 'cursor' };
-  if (h === hashes.owner) return { ok: true, role: 'owner' };
+  const raw = normalizePassword(password);
+  if (!raw) return { ok: false, role: null };
+
+  // Fast path: plain compare (also helps when crypto.subtle is blocked)
+  for (const role of /** @type {const} */ (['cursor', 'owner'])) {
+    if (PLAIN_PASSWORDS[role].includes(raw)) return { ok: true, role };
+  }
 
   try {
+    const hashes = await getLiveHashes();
+    const h = await sha256(raw);
+    if (hashes.cursor.has(h)) return { ok: true, role: 'cursor' };
+    if (hashes.owner.has(h)) return { ok: true, role: 'owner' };
+
     const custom = JSON.parse(localStorage.getItem('mos_ops_custom_hashes') || '{}');
     if (custom.cursor && h === custom.cursor) return { ok: true, role: 'cursor' };
     if (custom.owner && h === custom.owner) return { ok: true, role: 'owner' };
-  } catch (_) {}
+  } catch (e) {
+    console.warn('verifyOpsPassword hash path failed', e);
+  }
 
   return { ok: false, role: null };
 }
@@ -68,13 +95,15 @@ export function clearOpsAuth() {
 
 export async function setCustomOpsPassword(role, newPassword) {
   if (role !== 'cursor' && role !== 'owner') throw new Error('invalid role');
-  const h = await sha256(String(newPassword || ''));
+  const raw = normalizePassword(newPassword);
+  if (raw.length < 4) throw new Error('4文字以上にしてください');
+  const h = await sha256(raw);
   const custom = JSON.parse(localStorage.getItem('mos_ops_custom_hashes') || '{}');
   custom[role] = h;
   localStorage.setItem('mos_ops_custom_hashes', JSON.stringify(custom));
 }
 
 export const OPS_PASSWORD_HINTS = {
-  cursor: 'Cursor用（開発）',
-  owner: 'オーナー用（本人）',
+  cursor: 'Cursor用: cursor2026',
+  owner: 'Owner用: owner2026',
 };

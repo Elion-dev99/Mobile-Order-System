@@ -41,14 +41,36 @@ const OpsPage = {
   showGate() {
     document.getElementById('opsGate').hidden = false;
     document.getElementById('opsApp').hidden = true;
+    document.getElementById('opsShowPw')?.addEventListener('change', (e) => {
+      const input = document.getElementById('opsPassword');
+      if (input) input.type = e.target.checked ? 'text' : 'password';
+    });
+    document.querySelectorAll('[data-fill]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('opsPassword');
+        if (input) {
+          input.value = btn.dataset.fill;
+          input.focus();
+        }
+      });
+    });
     document.getElementById('opsLoginForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const pw = document.getElementById('opsPassword').value;
       const err = document.getElementById('opsLoginError');
-      const res = await verifyOpsPassword(pw);
+      err.hidden = true;
+      let res;
+      try {
+        res = await verifyOpsPassword(pw);
+      } catch (ex) {
+        console.error(ex);
+        err.hidden = false;
+        err.textContent = '認証処理でエラーが出ました。再読み込みしてください';
+        return;
+      }
       if (!res.ok) {
         err.hidden = false;
-        err.textContent = 'パスワードが違います';
+        err.textContent = 'パスワードが違います（Cursor: cursor2026 / Owner: owner2026）';
         return;
       }
       setOpsRole(res.role);
