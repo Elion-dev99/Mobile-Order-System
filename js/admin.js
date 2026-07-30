@@ -17,6 +17,7 @@ import {
   notifyPlanChanged,
 } from './notify.js';
 import { maybeNotifySystemLoad } from './load-monitor.js';
+import { ordersToCsv, downloadCsv, applyBrandTheme } from './guest-extras.js';
 
 const AdminPage = {
   filter: 'received',
@@ -46,6 +47,7 @@ const AdminPage = {
     this.menuDraft = await ensureMenuSeeded();
     this._menuSnapshot = JSON.parse(JSON.stringify(this.menuDraft?.items || []));
     this.applyShopBranding();
+    applyBrandTheme(getShop());
     this.bindChrome();
     this.patchNavLinks();
 
@@ -137,6 +139,8 @@ const AdminPage = {
     document.getElementById('addMenuItemBtn')?.addEventListener('click', () => this.addMenuItem());
     document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.persistSettings());
     document.getElementById('activateSubBtn')?.addEventListener('click', () => this.activateSubscription());
+    document.getElementById('exportCsvBtn')?.addEventListener('click', () => this.exportTodayCsv());
+    document.getElementById('printKitchenBtn')?.addEventListener('click', () => window.print());
     document.body.addEventListener('click', () => { this.soundReady = true; }, { once: true });
   },
 
@@ -314,16 +318,25 @@ const AdminPage = {
 
     container.innerHTML = filtered.map(order => {
       const status = order.status || 'received';
-      const cardClass = status === 'cooking' ? 'cooking' : status === 'done' ? 'done' : '';
-      const statusLabel = { received: '📥 受付済み', cooking: '🔥 調理中', done: '✅ 完了' }[status] || '';
+      const cardClass = status === 'cooking' ? 'cooking' : status === 'finishing' ? 'finishing' : status === 'done' ? 'done' : '';
+      const statusLabel = {
+        received: '📥 受付済み',
+        cooking: '🔥 調理中',
+        finishing: '✨ 仕上げ',
+        done: '✅ 完了',
+      }[status] || '';
       const elapsed = Math.floor((Date.now() - order.timestamp) / 60000);
       const slaClass = slaOn && status !== 'done' && elapsed >= 15 ? 'sla-late' : slaOn && status !== 'done' && elapsed >= 8 ? 'sla-warn' : '';
+      const party = order.partySize ? ` · ${order.partySize}名` : '';
 
       const actionBtns = status === 'received' ? `
         <button class="admin-action-btn start" data-id="${order.id}" data-status="cooking">🔥 調理開始</button>
         <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
       ` : status === 'cooking' ? `
-        <button class="admin-action-btn complete" style="flex:1;" data-id="${order.id}" data-status="done">✅ 完了にする</button>
+        <button class="admin-action-btn start" data-id="${order.id}" data-status="finishing">✨ 仕上げへ</button>
+        <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
+      ` : status === 'finishing' ? `
+        <button class="admin-action-btn complete" style="flex:1;" data-id="${order.id}" data-status="done">✅ 配膳完了</button>
       ` : `<div style="font-size:13px;color:#4A5568;text-align:center;padding:8px;">配膳完了</div>`;
 
       return `
@@ -331,7 +344,7 @@ const AdminPage = {
           <div class="admin-order-top">
             <div>
               <div class="admin-order-id">${order.id}</div>
-              <div class="admin-order-time">${elapsed === 0 ? 'たった今' : elapsed + '分前'} — ${statusLabel}${slaOn && status !== 'done' ? ` · SLA ${elapsed}分` : ''}</div>
+              <div class="admin-order-time">${elapsed === 0 ? 'たった今' : elapsed + '分前'} — ${statusLabel}${party}${slaOn && status !== 'done' ? ` · SLA ${elapsed}分` : ''}</div>
             </div>
             <div class="admin-table-badge">テーブル ${order.tableNumber}</div>
           </div>
@@ -367,7 +380,24 @@ const AdminPage = {
     });
   },
 
+  exportTodayCsv() {
+    if (!featureEnabled(getShop(), 'exportCsv') && getShop().planId === 'lite') {
+      alert('CSV出力は Growth 以上のプラン機能です（デモとして続行します）');
+    }
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const rows = this.orders.filter((o) => (o.timestamp || 0) >= start.getTime());
+    const csv = ordersToCsv(rows);
+    downloadCsv(`orders-${getShopId()}-${start.toISOString().slice(0, 10)}.csv`, csv);
+  },
+
   async updateStatus(orderId, status) {
+    // Optimistic UI
+    const hit = this.orders.find((o) => o.id === orderId);
+    if (hit) {
+      hit.status = status;
+      this.renderOrders();
+    }
     try {
       await updateDoc(doc(db, 'orders', orderId), { status });
     } catch (e) { console.error(e); }
@@ -383,8 +413,11 @@ const AdminPage = {
   renderMenuEditor() {
     const list = document.getElementById('menuEditorList');
     if (!list || !this.menuDraft) return;
+    const allergenIds = (this.menuDraft.allergens || []).map((a) => a.id);
     list.innerHTML = this.menuDraft.items.map((item, idx) => {
       const customs = Array.isArray(item.customizable) ? item.customizable : [];
+      const tags = Array.isArray(item.tags) ? item.tags : [];
+      const allers = Array.isArray(item.allergens) ? item.allergens : [];
       return `
       <article class="menu-edit-card" data-idx="${idx}">
         <div class="menu-edit-main">
@@ -406,9 +439,24 @@ const AdminPage = {
               ).join('')}
             </select>
           </label>
+          <label class="me-field">カロリー
+            <input class="me-cal" type="number" min="0" step="10" value="${Number(item.calories) || 0}" aria-label="カロリー">
+          </label>
           <label class="me-check"><input type="checkbox" class="me-popular" ${item.popular ? 'checked' : ''}><span>人気</span></label>
+          <label class="me-check"><input type="checkbox" class="me-alcohol" ${item.alcohol || tags.includes('alcohol') ? 'checked' : ''}><span>アルコール</span></label>
           <label class="me-check"><input type="checkbox" class="me-soldout" data-id="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}><span>品切れ</span></label>
           <button type="button" class="me-del" data-idx="${idx}">削除</button>
+        </div>
+        <div class="me-tag-row">
+          ${['veg', 'spicy', 'kids', 'set'].map((t) => `
+            <label class="me-check"><input type="checkbox" class="me-tag" data-tag="${t}" ${tags.includes(t) ? 'checked' : ''}><span>${t}</span></label>
+          `).join('')}
+        </div>
+        <div class="me-allergen-row">
+          <strong style="font-size:12px;color:#A0AEC0;">アレルギー</strong>
+          ${(allergenIds.length ? allergenIds : ['gluten', 'egg', 'dairy', 'shrimp', 'peanut', 'soy']).map((a) => `
+            <label class="me-check"><input type="checkbox" class="me-allergen" data-allergen="${a}" ${allers.includes(a) ? 'checked' : ''}><span>${a}</span></label>
+          `).join('')}
         </div>
 
         <div class="me-sale-block">
@@ -557,6 +605,11 @@ const AdminPage = {
         });
       });
 
+      const tags = [...row.querySelectorAll('.me-tag:checked')].map((el) => el.dataset.tag).filter(Boolean);
+      const alcohol = !!row.querySelector('.me-alcohol')?.checked;
+      if (alcohol && !tags.includes('alcohol')) tags.push('alcohol');
+      const allergens = [...row.querySelectorAll('.me-allergen:checked')].map((el) => el.dataset.allergen).filter(Boolean);
+
       this.menuDraft.items[idx] = {
         ...this.menuDraft.items[idx],
         emoji: row.querySelector('.me-emoji')?.value || '🍽️',
@@ -565,6 +618,10 @@ const AdminPage = {
         price: Number(row.querySelector('.me-price')?.value) || 0,
         category: row.querySelector('.me-cat')?.value || 'side',
         popular: !!row.querySelector('.me-popular')?.checked,
+        calories: Number(row.querySelector('.me-cal')?.value) || 0,
+        alcohol,
+        tags,
+        allergens,
         saleEnabled: !!row.querySelector('.me-sale-on')?.checked,
         salePrice: Number(row.querySelector('.me-sale-price')?.value) || 0,
         saleFrom: row.querySelector('.me-sale-from')?.value || '11:00',

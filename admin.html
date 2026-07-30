@@ -36,8 +36,13 @@
   <div class="admin-tabs" id="orderFilterTabs">
     <button class="admin-tab active" data-filter="received">受付済み</button>
     <button class="admin-tab" data-filter="cooking">調理中</button>
+    <button class="admin-tab" data-filter="finishing">仕上げ</button>
     <button class="admin-tab" data-filter="done">完了</button>
     <button class="admin-tab" data-filter="all">すべて</button>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button type="button" id="exportCsvBtn" class="admin-link-btn" style="border:none;cursor:pointer;">本日CSV出力</button>
+    <button type="button" id="printKitchenBtn" class="admin-link-btn" style="border:none;cursor:pointer;">厨房伝票印刷</button>
   </div>
   <div class="admin-content" id="adminContent">
     <div style="text-align:center;padding:60px 20px;color:#8E8E93;">

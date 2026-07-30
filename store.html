@@ -78,6 +78,24 @@
           <option value="en">English</option>
         </select>
       </label>
+      <label>ブランドカラー（アクセント）
+        <input id="storeAccent" name="accentColor" type="color" value="#0D5C4D">
+      </label>
+      <label>最低注文金額（税抜・0で無効）
+        <input id="storeMinOrder" name="minOrderAmount" type="number" min="0" step="100" value="0">
+      </label>
+      <label class="store-check">
+        <input type="checkbox" id="storePartyRequired" name="partySizeRequired">
+        <span>来店時に人数入力を必須にする</span>
+      </label>
+      <label class="store-check">
+        <input type="checkbox" id="storeAgeGate" name="ageGateEnabled" checked>
+        <span>アルコール商品に年齢確認を出す</span>
+      </label>
+      <label class="store-check">
+        <input type="checkbox" id="storeQuickService" name="quickServiceEnabled" checked>
+        <span>お水・おしぼり・カトラリーのクイック依頼を表示</span>
+      </label>
       <button type="submit" class="store-save">保存する</button>
       <p class="store-status" id="storeStatus" hidden></p>
     </form>

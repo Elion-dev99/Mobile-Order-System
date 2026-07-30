@@ -15,6 +15,11 @@ import {
 } from './guest-features.js';
 import { mountGuestOrderHistory } from './order-history.js';
 import { placeGuestOrder } from './place-order.js';
+import {
+  applyBrandTheme, mountQuickFilters, mountPartySizePrompt, mountShareTableLink,
+  loadFavorites, toggleFavorite, isFavorite, itemHasTag, confirmAlcoholAge,
+  getPartySize, tagBadgesHtml, suggestSetCombos,
+} from './guest-extras.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -44,6 +49,8 @@ const App = {
   view: 'menu',
   splitPeople: 1,
   spaCartBound: false,
+  quickFilters: new Set(),
+  favorites: new Set(),
 
   async init() {
     activateDemoFromUrl();
@@ -52,6 +59,8 @@ const App = {
     this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
     await Promise.all([loadShop(), loadMenu()]);
     const shop = getShop();
+    applyBrandTheme(shop);
+    this.favorites = loadFavorites();
     if (shop.isOpen === false && !isDemoMode()) {
       document.body.classList.add('shop-closed');
     }
@@ -73,6 +82,7 @@ const App = {
     this.loadCart();
     this.applyLocaleChrome();
     this.ensureMenuDelegation();
+    this.mountGuestExtras();
     this.renderMenu();
     this.bindEvents();
     this.bindSpaCart();
@@ -100,6 +110,36 @@ const App = {
     });
   },
 
+  mountGuestExtras() {
+    const shop = getShop();
+    mountShareTableLink({
+      tableNumber: this.tableNumber,
+      locale: this.locale,
+      onToast: showToast,
+    });
+    mountQuickFilters({
+      locale: this.locale,
+      active: this.quickFilters,
+      onChange: (next) => {
+        this.quickFilters = next;
+        this.mountGuestExtras();
+        this.renderMenu();
+      },
+    });
+    mountPartySizePrompt({
+      locale: this.locale,
+      required: !!shop.partySizeRequired,
+      onDone: (n) => {
+        if (n > 0) {
+          this.splitPeople = n;
+          const splitNum = document.getElementById('splitNum');
+          if (splitNum) splitNum.textContent = String(n);
+          showToast(this.locale === 'en' ? `${n} guests` : `${n}名様`);
+        }
+      },
+    });
+  },
+
   loadGuestHistory() {
     const host = document.getElementById('guestHistoryList');
     if (!host) return;
@@ -107,9 +147,43 @@ const App = {
       host,
       tableNumber: this.tableNumber,
       locale: this.locale,
+      onReorder: (order) => this.reorderFromHistory(order),
     }).catch(() => {
       host.innerHTML = `<p class="oh-empty">${this.locale === 'en' ? 'Could not load history' : '履歴を読めませんでした'}</p>`;
     });
+  },
+
+  reorderFromHistory(order) {
+    if (!this.canOrder()) {
+      showToast(this.orderingBlocked().label);
+      return;
+    }
+    const items = order?.items || [];
+    if (!items.length) return;
+    for (const line of items) {
+      if (isItemSoldOut(line.itemId)) continue;
+      const menuItem = getMenu().items.find((i) => i.id === line.itemId);
+      if (menuItem && itemHasTag(menuItem, 'alcohol') && getShop().ageGateEnabled !== false) {
+        if (!confirmAlcoholAge(this.locale)) continue;
+      }
+      this.cart.push({
+        id: Date.now() + Math.random(),
+        itemId: line.itemId,
+        name: line.name,
+        emoji: line.emoji,
+        price: line.price,
+        qty: line.qty || 1,
+        customizations: { ...(line.customizations || {}) },
+        toggles: { ...(line.toggles || {}) },
+        note: line.note || '',
+        saleApplied: !!line.saleApplied,
+      });
+    }
+    this.saveCart();
+    this.updateCartBar();
+    this.renderMenu();
+    showToast(this.t('reorder'));
+    this.showView('cart');
   },
 
   subscribeBillLock() {
@@ -432,7 +506,7 @@ const App = {
         ? (this.locale === 'en' ? 'Sold out' : '品切れ')
         : (this.locale === 'en' ? 'Unavailable' : '注文不可')}</span>`
       : customizable
-        ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : '＋'}</button>`
+        ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : this.t('choose')}</button>`
         : qty > 0
           ? `<div class="qty-stepper" data-id="${item.id}">
                <button type="button" data-action="minus" aria-label="minus">−</button>
@@ -485,6 +559,11 @@ const App = {
         e.stopPropagation();
         if (this._lastActAt && performance.now() - this._lastActAt < 40) return;
         this._lastActAt = performance.now();
+        if (actionBtn.dataset.action === 'fav') {
+          this.favorites = toggleFavorite(itemId);
+          this.updateCard(itemId);
+          return;
+        }
         if (isItemSoldOut(itemId)) return;
         const action = actionBtn.dataset.action;
         if (action === 'minus') {
@@ -500,6 +579,9 @@ const App = {
           return;
         }
         if (action === 'plus') {
+          if (itemHasTag(item, 'alcohol') && getShop().ageGateEnabled !== false) {
+            if (!confirmAlcoholAge(this.locale)) return;
+          }
           this.bumpPlain(item, 1);
           // Toast only occasionally — every tap toast was janky on mobile
           if (!this._toastQuietUntil || performance.now() > this._toastQuietUntil) {
@@ -520,8 +602,11 @@ const App = {
 
   filteredItems() {
     const MENU_DATA = getMenu();
+    const favs = this.favorites || loadFavorites();
     return MENU_DATA.items.filter(item => {
-      if (isItemSoldOut(item.id)) return true; // still show, marked sold out
+      if (isItemSoldOut(item.id)) {
+        // still show unless quick filters exclude
+      }
       const allergenMatch = this.activeAllergens.length === 0 ||
         !this.activeAllergens.some(a => (item.allergens || []).includes(a));
       const text = this.itemText(item);
@@ -530,7 +615,19 @@ const App = {
         text.name.toLowerCase().includes(q) ||
         text.description.toLowerCase().includes(q) ||
         (item.name || '').toLowerCase().includes(q);
-      return allergenMatch && searchMatch;
+
+      const qf = this.quickFilters || new Set();
+      let quickMatch = true;
+      if (qf.size) {
+        quickMatch = [...qf].every((f) => {
+          if (f === 'popular') return !!item.popular;
+          if (f === 'sale') return isSaleActive(item);
+          if (f === 'fav') return isFavorite(item.id, favs);
+          if (f === 'veg' || f === 'spicy' || f === 'kids') return itemHasTag(item, f);
+          return true;
+        });
+      }
+      return allergenMatch && searchMatch && quickMatch;
     });
   },
 
@@ -587,6 +684,7 @@ const App = {
     const customizable = this.isCustomizable(item);
     const onSale = isSaleActive(item);
     const unit = getItemUnitPrice(item);
+    const fav = isFavorite(item.id, this.favorites);
     const allergenHTML = (item.allergens || []).map(a => {
       const matched = this.activeAllergens.includes(a);
       return `<span class="allergen-tag ${matched ? 'matched' : ''}">${this.allergenLabel(a)}</span>`;
@@ -597,7 +695,7 @@ const App = {
         ? (this.locale === 'en' ? 'Sold out' : '品切れ')
         : (this.locale === 'en' ? 'Unavailable' : '注文不可')}</span>`
       : customizable
-      ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : '＋'}</button>`
+      ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : this.t('choose')}</button>`
       : qty > 0
         ? `<div class="qty-stepper" data-id="${item.id}">
              <button type="button" data-action="minus" aria-label="minus">−</button>
@@ -620,9 +718,10 @@ const App = {
         <div class="menu-card-body">
           <div class="menu-card-header">
             <div class="menu-card-name">${text.name}</div>
-            ${item.popular ? `<span class="popular-badge">${this.t('popular')}</span>` : ''}
+            <button type="button" class="fav-btn ${fav ? 'is-on' : ''}" data-action="fav" aria-label="${this.t('fav')}">${fav ? '★' : '☆'}</button>
           </div>
           <div class="menu-card-desc">${text.description}</div>
+          ${tagBadgesHtml(item, this.locale)}
           ${allergenHTML ? `<div class="allergen-tags">${allergenHTML}</div>` : ''}
           ${customizable && !soldOut && !blocked ? `<div class="custom-hint">${this.t('customize')}</div>` : ''}
           <div class="menu-card-footer">
@@ -691,6 +790,9 @@ const App = {
     }
     const item = getMenu().items.find(i => i.id === itemId);
     if (!item || isItemSoldOut(itemId)) return;
+    if (itemHasTag(item, 'alcohol') && getShop().ageGateEnabled !== false) {
+      if (!confirmAlcoholAge(this.locale)) return;
+    }
     this.modalItem = item;
     this.modalQty = 1;
     this.modalCustomizations = {};
@@ -751,6 +853,7 @@ const App = {
         <div class="modal-item-desc">${text.description}</div>
         ${priceLine}
         ${onSale ? `<p class="modal-sale-note">${this.locale === 'en' ? 'Timed sale' : '時間帯セール中'} ${item.saleFrom || ''}–${item.saleUntil || ''}</p>` : ''}
+        ${tagBadgesHtml(item, this.locale)}
         ${allergenHTML}
       </div>
       ${customizeHTML ? `<div class="modal-divider"></div><div class="modal-customize">${customizeHTML}</div>` : ''}
@@ -1039,7 +1142,11 @@ const App = {
       wrap.className = 'cart-upsells';
       container.after(wrap);
     }
-    const recs = recommendUpsells(this.cart, 3).filter(i => !isItemSoldOut(i.id));
+    const setRecs = suggestSetCombos(this.cart, getMenu().items || [], 2).filter(i => !isItemSoldOut(i.id));
+    const recs = [...setRecs, ...recommendUpsells(this.cart, 3)]
+      .filter((i, idx, arr) => arr.findIndex((x) => x.id === i.id) === idx)
+      .filter(i => !isItemSoldOut(i.id))
+      .slice(0, 4);
     if (!recs.length || !this.cart.length) {
       wrap.innerHTML = '';
       return;
@@ -1129,6 +1236,13 @@ const App = {
         : block.label;
       return;
     }
+    const subtotal = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
+    const min = Number(getShop().minOrderAmount) || 0;
+    if (min > 0 && subtotal < min) {
+      btn.disabled = true;
+      btn.textContent = `${this.t('minOrder')}（¥${min.toLocaleString()}）`;
+      return;
+    }
     btn.disabled = this.cart.length === 0;
     btn.textContent = '注文を確定する';
   },
@@ -1140,14 +1254,23 @@ const App = {
       this.updateSpaPlaceBtn();
       return;
     }
+    const subtotal = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
+    const min = Number(getShop().minOrderAmount) || 0;
+    if (min > 0 && subtotal < min) {
+      showToast(`${this.t('minOrder')} ¥${min.toLocaleString()}`);
+      this.updateSpaPlaceBtn();
+      return;
+    }
     const btn = document.getElementById('placeOrderBtn');
     if (btn) {
       btn.disabled = true;
       btn.textContent = isDemoMode() ? 'テスト注文を送信中...' : '注文を送信中...';
     }
+    const party = getPartySize() || this.splitPeople || 0;
     const result = await placeGuestOrder({
       cart: this.cart,
       tableNumber: this.tableNumber,
+      partySize: party,
     });
     this.cart = [];
     this.saveCart();

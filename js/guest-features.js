@@ -186,16 +186,24 @@ export function subscribeTableBillLock(tableNumber, onChange) {
   });
 }
 
-/** Mount guest action chips: call staff / request bill */
+/** Mount guest action chips: call staff / request bill / quick service */
 export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast, onBillLocked }) {
   if (document.getElementById('guestServiceBar')) return;
   const bar = document.createElement('div');
   bar.id = 'guestServiceBar';
   bar.className = 'guest-service-bar';
+  const shop = getShop();
   const staffLabel = locale === 'en' ? 'Call staff' : '店員を呼ぶ';
   const billLabel = locale === 'en' ? 'Check out' : 'お会計';
+  const waterLabel = locale === 'en' ? 'Water' : 'お水';
+  const towelLabel = locale === 'en' ? 'Towel' : 'おしぼり';
+  const cutleryLabel = locale === 'en' ? 'Cutlery' : 'カトラリー';
+  const quick = shop.quickServiceEnabled !== false;
   bar.innerHTML = `
     <button type="button" data-svc="staff">${staffLabel}</button>
+    ${quick ? `<button type="button" data-svc="water" data-note="${locale === 'en' ? 'Water please' : 'お水ください'}">${waterLabel}</button>` : ''}
+    ${quick ? `<button type="button" data-svc="towel" data-note="${locale === 'en' ? 'Towel please' : 'おしぼりください'}">${towelLabel}</button>` : ''}
+    ${quick ? `<button type="button" data-svc="cutlery" data-note="${locale === 'en' ? 'Cutlery please' : 'カトラリーください'}">${cutleryLabel}</button>` : ''}
     <button type="button" data-svc="bill">${billLabel}</button>
   `;
   const header = document.querySelector('.guest-header') || document.body;
@@ -221,13 +229,18 @@ export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast, 
       }
       btn.disabled = true;
       try {
-        const req = await createServiceRequest({ type: btn.dataset.svc, tableNumber });
-        if (btn.dataset.svc === 'bill') {
+        const svc = btn.dataset.svc;
+        const isBill = svc === 'bill';
+        const isStaffLike = svc === 'staff' || svc === 'water' || svc === 'towel' || svc === 'cutlery';
+        const type = isBill ? 'bill' : 'staff';
+        const note = btn.dataset.note || (svc === 'staff' ? '' : svc);
+        const req = await createServiceRequest({ type, tableNumber, note });
+        if (isBill) {
           setTableOrderingLocked(tableNumber, true, { requestId: req.id });
-          const shop = getShop();
+          const shopNow = getShop();
           notifyBillRequested({
             shopId: getShopId(),
-            shopName: shop?.name,
+            shopName: shopNow?.name,
             tableNumber,
             requestId: req.id,
           }).catch(() => {});
@@ -237,10 +250,14 @@ export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast, 
               ? 'Please go to the register'
               : 'レジへお進みください（店舗に通知しました）'
           );
-        } else {
-          onToast?.(
-            locale === 'en' ? 'Staff called' : '店員を呼び出しました'
-          );
+        } else if (isStaffLike) {
+          const msg = {
+            water: locale === 'en' ? 'Water requested' : 'お水を依頼しました',
+            towel: locale === 'en' ? 'Towel requested' : 'おしぼりを依頼しました',
+            cutlery: locale === 'en' ? 'Cutlery requested' : 'カトラリーを依頼しました',
+            staff: locale === 'en' ? 'Staff called' : '店員を呼び出しました',
+          }[svc] || (locale === 'en' ? 'Sent' : '送信しました');
+          onToast?.(msg);
           setTimeout(() => { btn.disabled = false; }, 2500);
         }
       } catch (e) {

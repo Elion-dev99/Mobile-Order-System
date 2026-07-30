@@ -1,11 +1,12 @@
 import { db } from './firebase.js';
 import { TablePin } from './pin.js';
-import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { doc, onSnapshot, collection, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { activateDemoFromUrl, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
 import { resolveShopId } from './tenant.js';
-import { loadShop } from './shop.js';
-import { mountSurveyCard } from './guest-features.js';
+import { loadShop, getShopId } from './shop.js';
+import { mountSurveyCard, estimateWaitMinutes } from './guest-features.js';
 import { mountGuestOrderHistory } from './order-history.js';
+import { playReadyChime } from './guest-extras.js';
 
 const StatusPage = {
   order: null,
@@ -14,6 +15,8 @@ const StatusPage = {
   etaMinutes: 0,
   unsubscribe: null,
   demoTimers: [],
+  _prevStatus: null,
+  _etaTimer: null,
 
   steps: [
     { label: '注文を受け付けました', desc: 'ご注文ありがとうございます！' },
@@ -144,6 +147,14 @@ const StatusPage = {
     const timeline = document.getElementById('orderTimeline');
     if (!timeline) return;
 
+    if (this._prevStatus && this._prevStatus !== 'done' && status === 'done') {
+      playReadyChime();
+      try {
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+      } catch (_) {}
+    }
+    this._prevStatus = status;
+
     timeline.innerHTML = this.steps.map((step, i) => {
       let dotClass = '', labelClass = '';
       if (i < stepIndex) { dotClass = 'done'; labelClass = 'done'; }
@@ -165,23 +176,72 @@ const StatusPage = {
       this.updateETA();
       if (this.unsubscribe) this.unsubscribe();
       mountSurveyCard({ orderId: this.orderId, locale: 'ja' });
+    } else if (status === 'finishing') {
+      this.etaMinutes = Math.min(this.etaMinutes || 5, 4);
+      this.updateETA();
+    } else if (status === 'cooking') {
+      this.etaMinutes = Math.min(this.etaMinutes || 10, 8);
+      this.updateETA();
     }
   },
 
   startETA() {
-    this.etaMinutes = isDemoMode() ? 3 : (12 + Math.floor(Math.random() * 6));
+    if (isDemoMode()) {
+      this.etaMinutes = 3;
+      this.updateETA();
+      this._etaTimer = setInterval(() => {
+        if (this.etaMinutes > 0) { this.etaMinutes--; this.updateETA(); }
+        else clearInterval(this._etaTimer);
+      }, 2000);
+      return;
+    }
+    // Seed from kitchen load, then tick down
+    this.etaMinutes = 10;
     this.updateETA();
-    const tickMs = isDemoMode() ? 2000 : 60000;
-    const interval = setInterval(() => {
-      if (this.etaMinutes > 0) { this.etaMinutes--; this.updateETA(); }
-      else clearInterval(interval);
-    }, tickMs);
+    try {
+      const q = query(
+        collection(db, 'orders'),
+        where('shopId', '==', getShopId()),
+        orderBy('timestamp', 'desc')
+      );
+      onSnapshot(q, (snap) => {
+        if (this.order?.status === 'done') return;
+        const orders = snap.docs.map((d) => d.data());
+        const est = estimateWaitMinutes(orders);
+        // Don't jump ETA up aggressively once ticking
+        if (!this._etaSeeded) {
+          this.etaMinutes = est;
+          this._etaSeeded = true;
+        } else {
+          this.etaMinutes = Math.max(1, Math.min(est, this.etaMinutes));
+        }
+        this.updateETA();
+      }, () => {
+        this.updateETA();
+      });
+    } catch (_) {
+      this.updateETA();
+    }
+    this._etaTimer = setInterval(() => {
+      if (this.order?.status === 'done') {
+        clearInterval(this._etaTimer);
+        return;
+      }
+      if (this.etaMinutes > 1) {
+        this.etaMinutes--;
+        this.updateETA();
+      }
+    }, 60000);
   },
 
   updateETA() {
     const el = document.getElementById('etaTime') || document.getElementById('etaMinutes');
     if (!el) return;
-    el.textContent = this.etaMinutes > 0 ? `約${this.etaMinutes}分` : '完成！';
+    if (this.order?.status === 'done' || this.etaMinutes <= 0) {
+      el.textContent = '完成！';
+      return;
+    }
+    el.textContent = `約${this.etaMinutes}分`;
   },
 };
 
