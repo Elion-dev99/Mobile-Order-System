@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Enable Email/Password Auth, create a staff user, deploy Firestore rules.
 # Requires FIREBASE_TOKEN from: npx firebase-tools@latest login:ci
+#
+# IMPORTANT: This script never links a billing account or upgrades to Blaze.
 set -euo pipefail
 
 PROJECT_ID="${FIREBASE_PROJECT_ID:-mobile-order-system-c7c70}"
@@ -8,7 +10,6 @@ API_KEY="${FIREBASE_WEB_API_KEY:-AIzaSyBDe3aI2F-W9wSFxHtcaplYs5-U2MdrNI8}"
 STAFF_EMAIL="${STAFF_EMAIL:?STAFF_EMAIL required}"
 STAFF_PASSWORD="${STAFF_PASSWORD:?STAFF_PASSWORD required}"
 FIREBASE_TOKEN="${FIREBASE_TOKEN:?FIREBASE_TOKEN required (npx firebase-tools login:ci)}"
-BILLING_ACCOUNT="${BILLING_ACCOUNT:-}" # optional: billingAccounts/XXXX
 
 TOOLS_ROOT="$(npm root -g 2>/dev/null)/firebase-tools"
 if [[ ! -d "$TOOLS_ROOT" ]]; then
@@ -28,7 +29,7 @@ npx --yes firebase-tools@latest deploy --only firestore:rules \
 echo "==> Auth enable + staff user (via firebase-tools token refresh)"
 PROJECT_ID="$PROJECT_ID" API_KEY="$API_KEY" STAFF_EMAIL="$STAFF_EMAIL" \
 STAFF_PASSWORD="$STAFF_PASSWORD" FIREBASE_TOKEN="$FIREBASE_TOKEN" \
-BILLING_ACCOUNT="$BILLING_ACCOUNT" TOOLS_ROOT="$TOOLS_ROOT" \
+TOOLS_ROOT="$TOOLS_ROOT" \
 node <<'NODE'
 const path = require('path');
 const https = require('https');
@@ -40,7 +41,6 @@ const apiKey = process.env.API_KEY;
 const email = process.env.STAFF_EMAIL;
 const password = process.env.STAFF_PASSWORD;
 const refresh = process.env.FIREBASE_TOKEN;
-const billingAccount = process.env.BILLING_ACCOUNT || '';
 const sc = [scopes.CLOUD_PLATFORM, scopes.FIREBASE_PLATFORM, scopes.EMAIL, scopes.OPENID];
 
 function req(method, url, headers, body) {
@@ -66,25 +66,13 @@ function req(method, url, headers, body) {
   if (!access || String(access).startsWith('1//')) throw new Error('Failed to refresh access token');
   const az = { Authorization: 'Bearer ' + access, 'X-Goog-User-Project': project };
 
-  // Ensure billing if initializeAuth needs it
-  let init = await req('POST', `https://identitytoolkit.googleapis.com/v2/projects/${project}/identityPlatform:initializeAuth`, az, {});
+  // Never auto-link billing / upgrade to Blaze.
+  const init = await req('POST', `https://identitytoolkit.googleapis.com/v2/projects/${project}/identityPlatform:initializeAuth`, az, {});
   console.log('initializeAuth', init.status, JSON.stringify(init.body).slice(0, 200));
   if (init.status >= 400 && /BILLING_NOT_ENABLED/.test(init.body.error?.message || '')) {
-    await req('POST', `https://serviceusage.googleapis.com/v1/projects/${project}/services/cloudbilling.googleapis.com:enable`, az, {});
-    await new Promise((r) => setTimeout(r, 5000));
-    let account = billingAccount;
-    if (!account) {
-      const list = await req('GET', 'https://cloudbilling.googleapis.com/v1/billingAccounts', az, null);
-      account = (list.body.billingAccounts || []).find((a) => a.open)?.name || '';
-    }
-    if (!account) throw new Error('No open billing account; link billing in GCP Console then retry');
-    const link = await req('PUT', `https://cloudbilling.googleapis.com/v1/projects/${project}/billingInfo`, az, {
-      billingAccountName: account,
-    });
-    console.log('billing link', link.status, JSON.stringify(link.body).slice(0, 200));
-    await new Promise((r) => setTimeout(r, 5000));
-    init = await req('POST', `https://identitytoolkit.googleapis.com/v2/projects/${project}/identityPlatform:initializeAuth`, az, {});
-    console.log('initializeAuth2', init.status, JSON.stringify(init.body).slice(0, 200));
+    console.error('Auth init needs billing, but this script will NOT upgrade to Blaze.');
+    console.error('Enable Authentication in Firebase Console (Spark) first, then re-run.');
+    process.exit(1);
   }
 
   const cfg = await req('PATCH',
