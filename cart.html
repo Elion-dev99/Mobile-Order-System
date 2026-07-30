@@ -3,21 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#F2F2F7">
+  <meta name="theme-color" content="#0D5C4D">
   <title>カート | QuickOrder</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/guest.css">
 </head>
-<body>
+<body class="guest">
 
 <header class="page-header">
-  <button class="back-btn" id="backBtn">‹ メニュー</button>
+  <button class="back-btn" id="backBtn" type="button">メニューへ</button>
   <div class="page-title">カート</div>
   <div style="width:80px;"></div>
 </header>
 
 <main class="cart-content">
-
   <div class="cart-section-title">注文内容</div>
   <div id="cartItems"></div>
 
@@ -41,27 +44,24 @@
 
   <div class="cart-section-title">割り勘</div>
   <div class="split-section">
-    <div class="split-title">👥 人数で割り勘</div>
+    <div class="split-title">人数で割り勘</div>
     <div class="split-controls">
-      <button class="split-btn" id="splitMinus">−</button>
+      <button class="split-btn" id="splitMinus" type="button">−</button>
       <div class="split-num" id="splitNum">1</div>
-      <button class="split-btn" id="splitPlus">＋</button>
+      <button class="split-btn" id="splitPlus" type="button">＋</button>
       <span class="split-result">人</span>
     </div>
     <div id="splitResult" class="hidden">
       <span class="split-amount" id="splitAmount"></span>
     </div>
   </div>
-
-  <div style="height:8px;"></div>
 </main>
 
 <div class="place-order-bar">
-  <button class="place-order-btn" id="placeOrderBtn" disabled>注文を確定する</button>
+  <button class="place-order-btn" id="placeOrderBtn" disabled type="button">注文を確定する</button>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
-
 <script type="module" src="js/cart.js"></script>
 </body>
 </html>

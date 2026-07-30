@@ -1,0 +1,424 @@
+/* ===== Guest ordering UI — hospitality polish ===== */
+:root {
+  --g-ink: #17201C;
+  --g-muted: rgba(23, 32, 28, 0.58);
+  --g-faint: rgba(23, 32, 28, 0.38);
+  --g-line: rgba(23, 32, 28, 0.1);
+  --g-surface: rgba(255, 255, 255, 0.78);
+  --g-accent: #0D5C4D;
+  --g-accent-2: #147A66;
+  --g-warm: #C45E2A;
+  --g-bg0: #E9F0ED;
+  --g-bg1: #F4F7F6;
+  --g-display: "Fraunces", "Hiragino Mincho ProN", serif;
+  --g-sans: "Zen Kaku Gothic New", "Hiragino Sans", sans-serif;
+  --g-radius: 18px;
+  --g-ease: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.guest {
+  font-family: var(--g-sans);
+  color: var(--g-ink);
+  background:
+    radial-gradient(900px 420px at 10% -10%, rgba(13, 92, 77, 0.12), transparent 55%),
+    radial-gradient(700px 380px at 100% 0%, rgba(196, 94, 42, 0.08), transparent 50%),
+    linear-gradient(180deg, var(--g-bg1) 0%, var(--g-bg0) 100%);
+  min-height: 100vh;
+  overscroll-behavior: none;
+}
+
+body.guest::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  z-index: 0;
+}
+
+body.guest > * { position: relative; z-index: 1; }
+
+/* Header */
+.guest-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 14px 16px 0;
+  background: rgba(244, 247, 246, 0.86);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid var(--g-line);
+}
+
+.guest-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.guest-brand {
+  font-family: var(--g-display) !important;
+  font-size: clamp(2rem, 7vw, 2.6rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1 !important;
+  color: var(--g-ink) !important;
+  animation: guestRise 0.6s var(--g-ease) both;
+}
+
+.guest-table {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--g-muted);
+  font-weight: 500;
+  animation: guestRise 0.6s var(--g-ease) 0.06s both;
+}
+
+.guest-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+body.guest .nav-action,
+body.guest .pin-action {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(13, 92, 77, 0.08);
+  color: var(--g-accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+body.guest .lang-toggle button {
+  border-radius: 10px;
+  background: transparent;
+  color: var(--g-muted);
+  border: 1px solid transparent;
+}
+body.guest .lang-toggle button.active {
+  background: var(--g-accent);
+  color: #fff;
+}
+
+.guest-search {
+  margin-bottom: 12px;
+  animation: guestRise 0.6s var(--g-ease) 0.12s both;
+}
+
+body.guest .search-input {
+  width: 100%;
+  padding: 13px 16px;
+  border: 1px solid var(--g-line);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.7);
+  font: 500 0.95rem/1.3 var(--g-sans);
+  color: var(--g-ink);
+  outline: none;
+}
+body.guest .search-input:focus {
+  border-color: rgba(13, 92, 77, 0.45);
+  background: #fff;
+}
+
+body.guest .category-tabs {
+  background: transparent;
+  border: none;
+  margin: 0 -16px;
+  padding: 0 0 12px;
+}
+body.guest .tabs-inner {
+  gap: 8px;
+  padding: 0 16px 2px;
+}
+body.guest .tab-btn {
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--g-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+body.guest .tab-btn.active {
+  background: var(--g-ink);
+  color: #F4F7F6;
+}
+
+.guest-allergen {
+  margin: 10px 16px 0;
+  border-radius: 14px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+  overflow: hidden;
+}
+.guest-allergen summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--g-muted);
+}
+.guest-allergen summary::-webkit-details-marker { display: none; }
+body.guest .allergen-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+body.guest .allergen-chip {
+  border-radius: 10px;
+  padding: 7px 12px;
+  background: rgba(23,32,28,0.05);
+  color: var(--g-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+body.guest .allergen-chip.active {
+  background: rgba(196, 94, 42, 0.12);
+  color: var(--g-warm);
+}
+
+/* Menu */
+body.guest .menu-main {
+  padding: 16px 16px 120px;
+}
+
+body.guest .menu-list {
+  display: grid;
+  gap: 12px;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+body.guest .menu-card {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 14px;
+  align-items: stretch;
+  padding: 14px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius);
+  border-bottom: 1px solid var(--g-line);
+  backdrop-filter: blur(8px);
+  transition: transform var(--g-ease), border-color var(--g-ease), background var(--g-ease);
+  animation: guestRise 0.5s var(--g-ease) both;
+}
+body.guest .menu-card:nth-child(1) { animation-delay: 0.02s; }
+body.guest .menu-card:nth-child(2) { animation-delay: 0.05s; }
+body.guest .menu-card:nth-child(3) { animation-delay: 0.08s; }
+body.guest .menu-card:nth-child(4) { animation-delay: 0.11s; }
+body.guest .menu-card:nth-child(5) { animation-delay: 0.14s; }
+body.guest .menu-card:active {
+  transform: scale(0.985);
+  background: #fff;
+}
+
+body.guest .menu-card-emoji {
+  width: 84px;
+  height: 84px;
+  border-radius: 16px;
+  font-size: 2.2rem;
+  background:
+    linear-gradient(145deg, rgba(13,92,77,0.12), rgba(196,94,42,0.1));
+}
+
+body.guest .menu-card-body { gap: 6px; }
+body.guest .menu-card-name {
+  font-family: var(--g-display);
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--g-ink);
+}
+body.guest .menu-card-desc {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--g-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+body.guest .popular-badge {
+  background: rgba(13, 92, 77, 0.12);
+  color: var(--g-accent);
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+body.guest .allergen-tag {
+  background: rgba(23,32,28,0.05);
+  color: var(--g-faint);
+  border-radius: 8px;
+  font-size: 0.7rem;
+}
+body.guest .allergen-tag.matched {
+  background: rgba(196,94,42,0.12);
+  color: var(--g-warm);
+}
+body.guest .menu-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+body.guest .allergen-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+body.guest .toast {
+  background: var(--g-ink);
+  color: #F4F7F6;
+  border-radius: 12px;
+  font-weight: 600;
+}
+body.guest .locked-state {
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+  color: var(--g-muted);
+  border-radius: var(--g-radius);
+}
+body.guest .menu-card-price span {
+  font-family: var(--g-sans);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--g-faint);
+  margin-left: 4px;
+}
+body.guest .add-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--g-accent);
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  transition: transform var(--g-ease), background var(--g-ease);
+}
+body.guest .add-btn:active { transform: scale(0.92); background: var(--g-accent-2); }
+
+body.guest .empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--g-muted);
+  background: var(--g-surface);
+  border-radius: var(--g-radius);
+  border: 1px solid var(--g-line);
+}
+body.guest .empty-state .emoji { display: none; }
+
+/* Cart bar */
+body.guest .cart-bar {
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  background: transparent;
+}
+body.guest .cart-bar-btn {
+  width: 100%;
+  border-radius: 16px;
+  background: var(--g-ink);
+  color: #F4F7F6;
+  padding: 16px 18px;
+  box-shadow: none;
+}
+body.guest .cart-count-pill {
+  background: var(--g-accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+/* Modal */
+body.guest .modal-overlay {
+  background: rgba(23, 32, 28, 0.45);
+}
+body.guest .modal-sheet {
+  background: #F7FAF8;
+  border-radius: 24px 24px 0 0;
+  max-height: 88vh;
+}
+body.guest .modal-item-name {
+  font-family: var(--g-display);
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+body.guest .modal-add-btn,
+body.guest .place-order-btn,
+body.guest .status-btn.primary {
+  background: var(--g-accent);
+  border-radius: 14px;
+  font-weight: 800;
+}
+body.guest .option-chip.selected,
+body.guest .qty-btn.plus {
+  background: var(--g-accent);
+  color: #fff;
+}
+
+/* Cart / status pages */
+body.guest .page-header,
+body.guest .status-header {
+  background: rgba(244, 247, 246, 0.9);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--g-line);
+}
+body.guest .page-title,
+body.guest .status-header h1 {
+  font-family: var(--g-display);
+  letter-spacing: -0.02em;
+}
+body.guest .cart-item,
+body.guest .order-summary,
+body.guest .split-section,
+body.guest .status-card,
+body.guest .eta-card {
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+  border-radius: 16px;
+  box-shadow: none;
+}
+body.guest .cart-items-group {
+  background: transparent;
+  gap: 10px;
+  display: grid;
+}
+body.guest .place-order-bar,
+body.guest .status-action-bar {
+  background: rgba(244, 247, 246, 0.92);
+  border-top: 1px solid var(--g-line);
+}
+
+@keyframes guestRise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (min-width: 720px) {
+  body.guest .menu-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  body.guest .menu-main,
+  body.guest .guest-header,
+  body.guest .guest-allergen {
+    max-width: 920px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  body.guest .guest-allergen { margin-left: auto; margin-right: auto; width: calc(100% - 32px); }
+}

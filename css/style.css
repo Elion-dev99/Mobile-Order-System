@@ -125,6 +125,20 @@ img { max-width: 100%; }
   font-size: 15px;
   line-height: 1.8;
 }
+
+.search-bar {
+  padding: 0 16px 10px;
+}
+
+.search-wrap {
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 15px;
   color: var(--label-tertiary);
   pointer-events: none;

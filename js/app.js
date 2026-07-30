@@ -98,8 +98,8 @@ const App = {
     if (!area) return;
     const protectedState = TablePin.isProtected(this.tableNumber);
     area.innerHTML = `
-      <button class="nav-action pin-action" id="pinSetupBtn">
-        ${protectedState ? '🔒 PIN設定' : '🔓 PIN設定'}
+      <button class="nav-action pin-action" id="pinSetupBtn" type="button">
+        ${protectedState ? 'PIN変更' : 'PIN設定'}
       </button>`;
     document.getElementById('pinSetupBtn')?.addEventListener('click', () => this.promptPinSettings());
   },
@@ -181,7 +181,6 @@ const App = {
     if (filtered.length === 0) {
       container.innerHTML = `
         <div class="empty-state fade-in">
-          <div class="emoji">🔍</div>
           <h3>該当するメニューがありません</h3>
           <p>検索条件やアレルギーフィルターを変えてみてください</p>
         </div>`;
@@ -212,32 +211,32 @@ const App = {
     const allergenHTML = (item.allergens || []).map(a => {
       const al = MENU_DATA.allergens.find(al => al.id === a);
       const matched = this.activeAllergens.includes(a);
-      return `<span class="allergen-tag ${matched ? 'matched' : ''}">${al ? al.emoji + al.label : a}</span>`;
+      return `<span class="allergen-tag ${matched ? 'matched' : ''}">${al ? al.label : a}</span>`;
     }).join('');
 
     return `
-      <div class="menu-card fade-in" data-id="${item.id}">
-        <div class="menu-card-emoji">${item.emoji}</div>
+      <article class="menu-card" data-id="${item.id}">
+        <div class="menu-card-emoji" aria-hidden="true">${item.emoji || ''}</div>
         <div class="menu-card-body">
           <div class="menu-card-header">
             <div class="menu-card-name">${item.name}</div>
             ${item.popular ? `<span class="popular-badge">${this.t('popular')}</span>` : ''}
           </div>
-          <div class="menu-card-desc">${item.description}</div>
+          <div class="menu-card-desc">${item.description || ''}</div>
           ${allergenHTML ? `<div class="allergen-tags">${allergenHTML}</div>` : ''}
           <div class="menu-card-footer">
             <div class="menu-card-price">¥${item.price.toLocaleString()}<span>${this.t('tax')}</span></div>
-            <button class="add-btn" aria-label="${item.name}を追加">＋</button>
+            <button class="add-btn" type="button" aria-label="${item.name}を追加">＋</button>
           </div>
         </div>
-      </div>`;
+      </article>`;
   },
 
   addToCartDirect(item) {
     this.cart.push({ id: Date.now(), itemId: item.id, name: item.name, emoji: item.emoji, price: item.price, qty: 1, customizations: {}, toggles: {}, note: '' });
     this.saveCart();
     this.updateCartBar();
-    showToast(`🛒 ${item.name} を追加しました`);
+    showToast(`${item.name} を追加しました`);
   },
 
   openModal(itemId) {
@@ -263,7 +262,7 @@ const App = {
       <div class="modal-allergen-list">
         ${allergens.map(a => {
           const al = MENU_DATA.allergens.find(al => al.id === a);
-          return `<span class="modal-allergen-tag">${al ? al.emoji + ' ' + al.label : a}</span>`;
+          return `<span class="modal-allergen-tag">${al ? al.label : a}</span>`;
         }).join('')}
       </div>` : '';
 
@@ -380,7 +379,7 @@ const App = {
     });
     this.saveCart();
     this.updateCartBar();
-    showToast(`🛒 ${item.name} をカートに追加しました`);
+    showToast(`${item.name} をカートに追加しました`);
   },
 
   closeModal() {
@@ -422,14 +421,6 @@ const App = {
         this.renderMenu();
       });
     });
-    const toggleBtn = document.getElementById('allergenToggleBtn');
-    const allergenFilters = document.getElementById('allergenFilters');
-    if (toggleBtn && allergenFilters) {
-      toggleBtn.addEventListener('click', () => {
-        allergenFilters.classList.toggle('open');
-        toggleBtn.classList.toggle('active');
-      });
-    }
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
       let timer;

@@ -3,67 +3,66 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#F2F2F7">
-  <title>モバイルオーダー</title>
+  <meta name="theme-color" content="#0D5C4D">
+  <title>メニュー</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/guest.css">
 </head>
-<body>
+<body class="guest">
 
-<header class="header">
-  <div class="nav-bar">
-    <div class="nav-title-area">
-      <div class="nav-large-title">QuickOrder</div>
-      <div class="nav-subtitle"><span class="table-number">テーブル 1</span></div>
+<header class="guest-header">
+  <div class="guest-header-top">
+    <div class="guest-brand-block">
+      <div class="nav-large-title guest-brand">QuickOrder</div>
+      <div class="guest-table"><span class="table-number">テーブル 1</span></div>
     </div>
-    <div id="pinControlArea"></div>
-    <div class="lang-toggle hidden" id="langToggle">
-      <button type="button" data-lang="ja" class="active">JP</button>
-      <button type="button" data-lang="en">EN</button>
-    </div>
-    <a href="lp.html" class="nav-action">店舗向け</a>
-    <a href="admin.html" class="nav-action">🧑‍🍳 厨房</a>
-  </div>
-  <div class="search-bar">
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="search" class="search-input" id="searchInput" placeholder="メニューを検索...">
+    <div class="guest-header-actions">
+      <div id="pinControlArea"></div>
+      <div class="lang-toggle hidden" id="langToggle">
+        <button type="button" data-lang="ja" class="active">JP</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
     </div>
   </div>
+
+  <div class="guest-search">
+    <input type="search" class="search-input" id="searchInput" placeholder="メニューを検索" enterkeyhint="search">
+  </div>
+
+  <nav class="category-tabs" aria-label="カテゴリ">
+    <div class="tabs-inner">
+      <button class="tab-btn active" data-cat="all">すべて</button>
+      <button class="tab-btn" data-cat="rice">ご飯もの</button>
+      <button class="tab-btn" data-cat="noodle">めん類</button>
+      <button class="tab-btn" data-cat="side">サイド</button>
+      <button class="tab-btn" data-cat="drink">ドリンク</button>
+      <button class="tab-btn" data-cat="dessert">デザート</button>
+    </div>
+  </nav>
 </header>
 
-<div class="allergen-section">
-  <button class="allergen-toggle-btn" id="allergenToggleBtn">
-    <span class="left">⚠️ アレルギーフィルター</span>
-    <span class="arrow">▼</span>
-  </button>
-  <div class="allergen-filters" id="allergenFilters">
-    <button class="allergen-chip" data-allergen="gluten">🌾 小麦</button>
-    <button class="allergen-chip" data-allergen="egg">🥚 卵</button>
-    <button class="allergen-chip" data-allergen="dairy">🥛 乳製品</button>
-    <button class="allergen-chip" data-allergen="shrimp">🦐 えび</button>
-    <button class="allergen-chip" data-allergen="peanut">🥜 ピーナッツ</button>
-    <button class="allergen-chip" data-allergen="soy">🫘 大豆</button>
+<details class="guest-allergen">
+  <summary>アレルギーで絞り込む</summary>
+  <div class="allergen-filters open" id="allergenFilters">
+    <button class="allergen-chip" data-allergen="gluten" type="button">小麦</button>
+    <button class="allergen-chip" data-allergen="egg" type="button">卵</button>
+    <button class="allergen-chip" data-allergen="dairy" type="button">乳製品</button>
+    <button class="allergen-chip" data-allergen="shrimp" type="button">えび</button>
+    <button class="allergen-chip" data-allergen="peanut" type="button">ピーナッツ</button>
+    <button class="allergen-chip" data-allergen="soy" type="button">大豆</button>
   </div>
-</div>
-
-<nav class="category-tabs">
-  <div class="tabs-inner">
-    <button class="tab-btn active" data-cat="all">🍽️ すべて</button>
-    <button class="tab-btn" data-cat="rice">🍚 ご飯もの</button>
-    <button class="tab-btn" data-cat="noodle">🍜 めん類</button>
-    <button class="tab-btn" data-cat="side">🥗 サイド</button>
-    <button class="tab-btn" data-cat="drink">🥤 ドリンク</button>
-    <button class="tab-btn" data-cat="dessert">🍮 デザート</button>
-  </div>
-</nav>
+</details>
 
 <main class="menu-main">
   <div class="menu-list" id="menuList"></div>
 </main>
 
 <div class="cart-bar" id="cartBar">
-  <button class="cart-bar-btn" id="cartBarBtn">
+  <button class="cart-bar-btn" id="cartBarBtn" type="button">
     <div class="cart-bar-left">
       <span>カートを見る</span>
       <span class="cart-count-pill">0点</span>
