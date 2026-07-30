@@ -21,17 +21,12 @@ PUBLISH="$ROOT/.cf-publish"
 rm -rf "$PUBLISH"
 mkdir -p "$PUBLISH"
 
-rsync -a \
-  --exclude '.git' \
-  --exclude '.github' \
-  --exclude 'node_modules' \
-  --exclude 'attached_assets' \
-  --exclude '.cf-publish' \
-  --exclude '.firebaserc' \
-  --exclude 'firebase.json' \
-  --exclude 'firestore.rules' \
-  --exclude 'scripts' \
-  "$ROOT/" "$PUBLISH/"
+# Prefer portable copy (no rsync dependency in CI/cloud agents)
+for item in admin.html cart.html index.html status.html lp.html favicon.svg css js .nojekyll; do
+  if [[ -e "$ROOT/$item" ]]; then
+    cp -a "$ROOT/$item" "$PUBLISH/"
+  fi
+done
 
 cd "$ROOT"
 npx --yes wrangler@4 pages deploy "$PUBLISH" \
@@ -39,4 +34,5 @@ npx --yes wrangler@4 pages deploy "$PUBLISH" \
   --branch="$BRANCH_NAME" \
   --commit-dirty=true
 
+rm -rf "$PUBLISH"
 echo "Deploy requested for project: $PROJECT_NAME"
