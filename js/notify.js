@@ -24,6 +24,7 @@ const LEGACY = {
 };
 
 export const NOTIFY_EVENTS = [
+  { id: 'system_load', label: 'システム負荷・混雑状況', defaultOn: true },
   { id: 'lead_new', label: '見込み契約利益（問い合わせ）', defaultOn: true },
   { id: 'lead_won', label: '成約利益（リード成約）', defaultOn: true },
   { id: 'contract_activated', label: '契約収益（課金開始・MRR）', defaultOn: true },
@@ -35,6 +36,7 @@ export const NOTIFY_EVENTS = [
 ];
 
 const EVENT_COLORS = {
+  system_load: 0xfaa61a,
   lead_new: 0x5865f2,
   lead_won: 0xfee75c,
   contract_activated: 0x57f287,
@@ -350,6 +352,23 @@ export async function testSlackNotify() {
 }
 
 const ALL_EVENT_SAMPLES = [
+  {
+    event: 'system_load',
+    title: 'システム負荷: 混雑',
+    emoji: '🟠',
+    fields: {
+      内容: '負荷レベルが変化: やや混雑 → 混雑',
+      店舗: 'テスト焼肉',
+      レベル: '🟠 混雑',
+      予想待ち: '22分',
+      未完了注文: 7,
+      受付中: 3,
+      調理中: 4,
+      '15分超滞留': 1,
+      未対応呼出: 2,
+      種別: 'テスト通知',
+    },
+  },
   {
     event: 'lead_new',
     title: '見込み契約利益（問い合わせ）',

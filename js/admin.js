@@ -16,16 +16,19 @@ import {
   notifyLeadWon,
   notifyPlanChanged,
 } from './notify.js';
+import { maybeNotifySystemLoad } from './load-monitor.js';
 
 const AdminPage = {
   filter: 'received',
   view: 'orders',
   orders: [],
   leads: [],
+  requests: [],
   menuDraft: null,
   unlocked: false,
   knownOrderIds: new Set(),
   soundReady: false,
+  _loadNotifyTimer: null,
 
   async init() {
     resolveShopId();
@@ -175,6 +178,18 @@ const AdminPage = {
     } catch (_) {}
   },
 
+  scheduleLoadNotify() {
+    clearTimeout(this._loadNotifyTimer);
+    this._loadNotifyTimer = setTimeout(() => {
+      maybeNotifySystemLoad({
+        shopId: getShopId(),
+        shopName: getShop()?.name || '',
+        orders: this.orders || [],
+        requests: this.requests || [],
+      }).catch(() => {});
+    }, 1200);
+  },
+
   subscribeToOrders() {
     if (!this.unlocked && getShop().adminPin) return;
     const shopId = getShopId();
@@ -191,6 +206,7 @@ const AdminPage = {
       this.renderOrders();
       this.renderBilling();
       this.renderAnalytics();
+      this.scheduleLoadNotify();
     };
 
     const scoped = query(
@@ -213,6 +229,8 @@ const AdminPage = {
   subscribeRequests() {
     if (!this.unlocked && getShop().adminPin) return;
     subscribeServiceRequests(getShopId(), (rows) => {
+      this.requests = rows || [];
+      this.scheduleLoadNotify();
       const open = rows.filter(r => r.status === 'open');
       let host = document.getElementById('adminRequestsBanner');
       if (!host) {

@@ -21,6 +21,7 @@ import {
   getNotifySettings,
   NOTIFY_EVENTS,
 } from './notify.js';
+import { maybeNotifySystemLoad, notifySystemLoadNow, assessSystemLoad } from './load-monitor.js';
 
 const OpsPage = {
   shops: [],
@@ -29,6 +30,7 @@ const OpsPage = {
   surveys: [],
   requests: [],
   unsubReq: null,
+  _loadNotifyTimer: null,
 
   async init() {
     if (!isOpsAuthed()) {
@@ -311,6 +313,30 @@ const OpsPage = {
     document.getElementById('opsNotifyTestAll')?.addEventListener('click', (e) => runAllEventTests(e.currentTarget));
     document.getElementById('opsNotifyTestAllBottom')?.addEventListener('click', (e) => runAllEventTests(e.currentTarget));
 
+    document.getElementById('opsNotifyLoadNow')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsNotifyStatus');
+      st.hidden = false;
+      st.textContent = '負荷状況を送信中...';
+      if (btn) btn.disabled = true;
+      const shopId = document.getElementById('labShop')?.value || this.shops[0]?.id || DEFAULT_SHOP_ID;
+      const shop = this.shops.find(s => s.id === shopId) || { id: shopId, name: shopId };
+      const orders = (this.orders || []).filter(o => (o.shopId || DEFAULT_SHOP_ID) === shopId);
+      const requests = (this.requests || []).filter(r => (r.shopId || DEFAULT_SHOP_ID) === shopId);
+      const res = await notifySystemLoadNow({
+        shopId,
+        shopName: shop.name || shopId,
+        orders,
+        requests,
+      });
+      if (res.ok) {
+        st.textContent = `負荷「${res.assessment?.emoji || ''} ${res.assessment?.label || ''}」を Discord に送信しました（待ち${res.assessment?.waitMin || 0}分）`;
+      } else {
+        st.textContent = '送信失敗: ' + (res.data?.error || res.error || res.status || 'unknown');
+      }
+      if (btn) btn.disabled = false;
+    });
+
     document.getElementById('opsNotifySaveEvents')?.addEventListener('click', async () => {
       const st = document.getElementById('opsNotifyStatus');
       st.hidden = false;
@@ -450,11 +476,29 @@ const OpsPage = {
     });
   },
 
+  scheduleLoadNotify() {
+    clearTimeout(this._loadNotifyTimer);
+    this._loadNotifyTimer = setTimeout(() => {
+      const shops = this.shops?.length ? this.shops : [{ id: DEFAULT_SHOP_ID, name: DEFAULT_SHOP_ID }];
+      shops.forEach(shop => {
+        const orders = (this.orders || []).filter(o => (o.shopId || DEFAULT_SHOP_ID) === shop.id);
+        const requests = (this.requests || []).filter(r => (r.shopId || DEFAULT_SHOP_ID) === shop.id);
+        maybeNotifySystemLoad({
+          shopId: shop.id,
+          shopName: shop.name || shop.id,
+          orders,
+          requests,
+        }).catch(() => {});
+      });
+    }, 1500);
+  },
+
   subscribeGlobal() {
     onSnapshot(query(collection(db, 'orders'), orderBy('timestamp', 'desc')), snap => {
       this.orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       this.renderHq();
       this.renderLabs();
+      this.scheduleLoadNotify();
     }, () => {});
 
     onSnapshot(query(collection(db, 'leads'), orderBy('createdAt', 'desc')), snap => {
@@ -473,6 +517,7 @@ const OpsPage = {
       this.requests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       this.renderRequests();
       this.renderHq();
+      this.scheduleLoadNotify();
     }, () => {});
   },
 
@@ -500,12 +545,25 @@ const OpsPage = {
       byShop[id].orders += 1;
       byShop[id].gmv += o.total || 0;
     });
+    // include shops that have open load even without today sales
+    (this.shops || []).forEach(s => {
+      if (!byShop[s.id]) byShop[s.id] = { orders: 0, gmv: 0 };
+    });
     const rows = document.getElementById('hqShopRows');
     if (rows) {
       rows.innerHTML = Object.entries(byShop).map(([id, v]) => {
         const shop = this.shops.find(s => s.id === id);
-        return `<tr><td>${escapeHtml(shop?.name || id)}</td><td>${v.orders}</td><td>¥${yen(v.gmv)}</td><td>${estimateWaitMinutes(this.orders.filter(o => (o.shopId || DEFAULT_SHOP_ID) === id && (o.status || '') !== 'done'))}分</td></tr>`;
-      }).join('') || '<tr><td colspan="4">本日の注文なし</td></tr>';
+        const shopOrders = this.orders.filter(o => (o.shopId || DEFAULT_SHOP_ID) === id);
+        const shopReqs = this.requests.filter(r => (r.shopId || DEFAULT_SHOP_ID) === id);
+        const load = assessSystemLoad({ orders: shopOrders, requests: shopReqs });
+        return `<tr>
+          <td>${escapeHtml(shop?.name || id)}</td>
+          <td>${v.orders}</td>
+          <td>¥${yen(v.gmv)}</td>
+          <td>${load.waitMin}分</td>
+          <td>${load.emoji} ${escapeHtml(load.label)}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="5">本日の注文なし</td></tr>';
     }
 
     const mrr = this.shops.reduce((s, shop) => s + estimateMrr({
