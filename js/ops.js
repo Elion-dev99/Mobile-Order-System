@@ -30,6 +30,14 @@ import {
   listPendingOrders,
 } from './health.js';
 import { runFullLoadTest, ensureWebhookReady, cleanupLoadTestShops } from './load-test.js';
+import {
+  startCardinal,
+  runCardinalCycle,
+  runCardinalDrill,
+  getCardinalSnapshot,
+  cardinalApi,
+} from './cardinal.js';
+import { escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
 
 const OpsPage = {
   shops: [],
@@ -40,7 +48,9 @@ const OpsPage = {
   unsubReq: null,
   _loadNotifyTimer: null,
   _healthTimer: null,
+  _cardinalTimer: null,
   health: null,
+  cardinal: null,
 
   async init() {
     await this.bootstrapWebhookFromQuery();
@@ -74,13 +84,58 @@ const OpsPage = {
     await this.refreshNotifySetup();
     await this.refreshHealth();
     this.startHealthPolling();
+    startCardinal({ intervalMs: 60_000 });
+    await this.refreshCardinal();
+    this.startCardinalPolling();
     const params = new URLSearchParams(location.search);
     if (params.get('tab') === 'notify') this.switchTab('notify');
+    else if (params.get('tab') === 'cardinal') this.switchTab('cardinal');
     else {
       const status = await getSetupStatus().catch(() => null);
       if (status?.needsSetup) this.switchTab('notify');
     }
     window.scrollTo(0, 0);
+  },
+
+  startCardinalPolling() {
+    clearInterval(this._cardinalTimer);
+    this._cardinalTimer = setInterval(() => {
+      this.refreshCardinal().catch(() => {});
+    }, 30_000);
+  },
+
+  async refreshCardinal() {
+    this.cardinal = getCardinalSnapshot();
+    let api = null;
+    try {
+      api = await cardinalApi('status');
+    } catch (_) {}
+    this.renderCardinal(api);
+  },
+
+  renderCardinal(apiRes = null) {
+    const snap = this.cardinal || getCardinalSnapshot();
+    const fmt = (role) => {
+      const r = snap[role] || {};
+      if (!r.lastHeartbeatAt) return '未受信';
+      const ageMin = Math.round((Date.now() - r.lastHeartbeatAt) / 60000);
+      return `${r.status || 'ok'}（${ageMin}分前）`;
+    };
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('cardinalGuardianStatus', fmt('guardian'));
+    set('cardinalExecutorStatus', fmt('executor'));
+    set('cardinalCycles', String(snap.cycles || 0));
+    set('cardinalDispatches', String(snap.dispatches || 0));
+    set('cardinalHealStreak', String(snap.autoHeal?.consecutiveFails ?? getAutoHealState().consecutiveFails ?? 0));
+    if (apiRes?.data?.configured) {
+      const c = apiRes.data.configured;
+      const ok = c.guardianWebhook || c.executorWebhook || c.apiKey;
+      set('cardinalApiStatus', ok ? '設定あり' : '未設定');
+    } else if (apiRes?.ok === false) {
+      set('cardinalApiStatus', '到達不可');
+    } else {
+      set('cardinalApiStatus', '確認中');
+    }
   },
 
   startHealthPolling() {
@@ -126,6 +181,7 @@ const OpsPage = {
     const book = document.getElementById('opsHealthPlaybook');
     const list = document.getElementById('opsHealthPlaybookList');
     const pending = listPendingOrders().length;
+    const heal = getAutoHealState();
     if (banner) {
       if (h.status === 'ok') {
         banner.hidden = true;
@@ -133,8 +189,11 @@ const OpsPage = {
       } else {
         banner.hidden = false;
         banner.dataset.level = h.status;
+        const healHint = heal.consecutiveFails
+          ? ` · Cardinal/AutoHeal ${heal.consecutiveFails}`
+          : '';
         banner.innerHTML = `<strong>${h.emoji || ''} サーバー状態: ${escapeHtml(h.label || h.status)}</strong>
-          <span>注文DB: ${h.firestore?.ok ? 'OK' : (h.firestore?.soft ? '応答遅延' : '障害')} · 通知API: ${h.notifyApi?.functionReady ? 'OK' : '障害'}${pending ? ` · 保留注文 ${pending}件` : ''}${h.firestore?.error && !h.firestore?.ok ? ` · ${escapeHtml(String(h.firestore.error).slice(0, 40))}` : ''}</span>
+          <span>注文DB: ${h.firestore?.ok ? 'OK' : (h.firestore?.soft ? '応答遅延' : '障害')} · 通知API: ${h.notifyApi?.functionReady ? 'OK' : '障害'}${pending ? ` · 保留注文 ${pending}件` : ''}${healHint}${h.firestore?.error && !h.firestore?.ok ? ` · ${escapeHtml(String(h.firestore.error).slice(0, 40))}` : ''}</span>
           <span class="ops-health-hint">※定期チェック結果です。店舗作成や注文が動いていれば実害はないことが多いです</span>`;
       }
     }
@@ -427,6 +486,90 @@ const OpsPage = {
       this.health = health;
       this.renderHealth();
       if (st) st.textContent = `送信しました（${health?.emoji || ''} ${health?.label || ''}）`;
+    });
+
+    const requestAutoFix = async (btn) => {
+      const st = document.getElementById('opsHealthStatus') || document.createElement('p');
+      st.id = 'opsHealthStatus';
+      st.hidden = false;
+      st.textContent = 'Cardinal Executor（自動対処）を起動中...';
+      if (btn) btn.disabled = true;
+      const cycle = await runAutoHealCycle({ escalateAfterFails: 1, escalateCooldownMs: 0 });
+      const res = await escalateToCursor({
+        status: this.health?.status || cycle.health?.status || 'manual',
+        severity: 'critical',
+        summary: 'Opsから手動で Cardinal Executor を依頼',
+        message: 'ユーザーが「Cursorに自動対処を依頼」を押しました。Executor として健康状態を調査し、直せる箇所は draft PR を作成してください。',
+        firestoreOk: !!(this.health?.firestore?.ok ?? cycle.health?.firestore?.ok),
+        notifyApiOk: !!(this.health?.notifyApi?.functionReady ?? cycle.health?.notifyApi?.functionReady),
+        cardinalRole: 'executor',
+        flush: cycle.flush,
+      });
+      if (res.ok) {
+        const agentOk = res.data?.cursor?.agent?.ok || res.data?.cursor?.automation?.ok;
+        st.textContent = agentOk
+          ? 'Executor 起動を依頼しました。cursor.com/agents を確認してください。'
+          : (res.data?.hint || '受付ました。CURSOR_API_KEY / Cardinal Automations 未設定なら Cloudflare secrets を追加してください。');
+        const host = document.getElementById('opsHealthPlaybook');
+        if (host && !host.contains(st)) host.appendChild(st);
+      } else {
+        st.textContent = '起動失敗: ' + (res.error || res.data?.error || 'unknown');
+      }
+      if (btn) btn.disabled = false;
+      await this.refreshCardinal();
+    };
+    document.getElementById('opsHealthAutoFix')?.addEventListener('click', (e) => requestAutoFix(e.currentTarget));
+
+    document.getElementById('opsCardinalRefresh')?.addEventListener('click', () => this.refreshCardinal());
+    document.getElementById('opsCardinalCycle')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = 'Cardinal サイクル実行中...'; }
+      try {
+        const result = await runCardinalCycle({ escalateAfterFails: 2 });
+        this.health = result.health;
+        this.renderHealth();
+        await this.refreshCardinal();
+        if (log) {
+          log.hidden = false;
+          log.textContent = JSON.stringify({
+            health: result.health?.status,
+            actions: result.actions,
+            cycles: result.state?.cycles,
+            dispatches: result.state?.dispatches,
+          }, null, 2);
+        }
+        if (st) st.textContent = `完了: health=${result.health?.status} / actions=${result.actions?.length || 0}`;
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
+    });
+    document.getElementById('opsCardinalDrill')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      if (!confirm('Guardian と Executor のドリル起動を送ります。CURSOR secrets が無い場合は Discord/ヒントのみになります。続行しますか？')) return;
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = '2体ドリル起動中...'; }
+      try {
+        const result = await runCardinalDrill();
+        await this.refreshCardinal();
+        if (log) {
+          log.hidden = false;
+          log.textContent = JSON.stringify(result, null, 2);
+        }
+        if (st) {
+          const g = result.guardian?.ok || result.guardian?.data?.launched;
+          const x = result.executor?.ok || result.executor?.data?.launched;
+          st.textContent = `ドリル送信: Guardian=${g ? 'OK' : '未起動/設定不足'} / Executor=${x ? 'OK' : '未起動/設定不足'}`;
+        }
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
     });
 
     document.getElementById('opsLoadTestRun')?.addEventListener('click', async (e) => {

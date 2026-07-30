@@ -1,0 +1,63 @@
+name: Configure Cursor Cardinal
+
+on:
+  workflow_dispatch:
+    inputs:
+      cursor_api_key:
+        description: "Shared Cursor API key (CURSOR_API_KEY). Optional if role webhooks are set."
+        required: false
+        type: string
+      guardian_webhook_url:
+        description: "Guardian Automations webhook URL"
+        required: false
+        type: string
+      guardian_api_key:
+        description: "Guardian Automations webhook API key"
+        required: false
+        type: string
+      executor_webhook_url:
+        description: "Executor Automations webhook URL"
+        required: false
+        type: string
+      executor_api_key:
+        description: "Executor Automations webhook API key"
+        required: false
+        type: string
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Put Cloudflare Pages secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
+          CURSOR_GUARDIAN_WEBHOOK_URL: ${{ inputs.guardian_webhook_url }}
+          CURSOR_GUARDIAN_API_KEY: ${{ inputs.guardian_api_key }}
+          CURSOR_EXECUTOR_WEBHOOK_URL: ${{ inputs.executor_webhook_url }}
+          CURSOR_EXECUTOR_API_KEY: ${{ inputs.executor_api_key }}
+        run: |
+          put_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "skip $name (empty)"
+              return 0
+            fi
+            printf '%s' "$value" | npx --yes wrangler@4 pages secret put "$name" --project-name=mobile-order-system
+            echo "put $name"
+          }
+          put_secret CURSOR_API_KEY "$CURSOR_API_KEY"
+          put_secret CURSOR_GUARDIAN_WEBHOOK_URL "$CURSOR_GUARDIAN_WEBHOOK_URL"
+          put_secret CURSOR_GUARDIAN_API_KEY "$CURSOR_GUARDIAN_API_KEY"
+          put_secret CURSOR_EXECUTOR_WEBHOOK_URL "$CURSOR_EXECUTOR_WEBHOOK_URL"
+          put_secret CURSOR_EXECUTOR_API_KEY "$CURSOR_EXECUTOR_API_KEY"
