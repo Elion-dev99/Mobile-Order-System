@@ -1,6 +1,7 @@
 import {
   isOpsAuthed, verifyOpsPassword, setOpsRole, clearOpsAuth, getOpsRole, setCustomOpsPassword
 } from './ops-auth.js';
+import { getOpsApiSecret, setOpsApiSecret, clearOpsApiSecret } from './ops-secret.js';
 import {
   listShops, upsertShop, deleteShop, ensureSeedShops
 } from './shop.js';
@@ -56,11 +57,11 @@ const OpsPage = {
   cardinal: null,
 
   async init() {
-    await this.bootstrapWebhookFromQuery();
     if (!isOpsAuthed()) {
       this.showGate();
       return;
     }
+    await this.bootstrapWebhookFromQuery();
     await this.enterApp();
   },
 
@@ -228,15 +229,6 @@ const OpsPage = {
       const input = document.getElementById('opsPassword');
       if (input) input.type = e.target.checked ? 'text' : 'password';
     });
-    document.querySelectorAll('[data-fill]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const input = document.getElementById('opsPassword');
-        if (input) input.value = btn.dataset.fill;
-        // ワンタップ入室（入力だけで終わらないようにする）
-        await this.tryLogin(btn.dataset.fill, btn);
-      });
-    });
-
     const form = document.getElementById('opsLoginForm');
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -273,7 +265,7 @@ const OpsPage = {
     if (!res.ok) {
       if (err) {
         err.hidden = false;
-        err.textContent = 'パスワードが違います（Cursor: cursor2026 / Owner: owner2026）';
+        err.textContent = 'パスワードが違います';
       }
       if (btn) { btn.disabled = false; btn.textContent = original || '入室'; }
       return;
@@ -368,6 +360,36 @@ const OpsPage = {
         st.textContent = String(err.message || err);
       }
     });
+
+    document.getElementById('opsSecretForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const secret = document.getElementById('opsApiSecret')?.value || '';
+      const persist = !!document.getElementById('opsSecretPersist')?.checked;
+      const st = document.getElementById('opsSecretStatus');
+      if (secret.trim().length < 8) {
+        if (st) { st.hidden = false; st.textContent = '8文字以上のシークレットを入力してください'; }
+        return;
+      }
+      setOpsApiSecret(secret, { persist });
+      if (st) {
+        st.hidden = false;
+        st.textContent = persist
+          ? 'OPS_API_SECRET をこのブラウザに保存しました'
+          : 'OPS_API_SECRET をセッションに保存しました';
+      }
+      const input = document.getElementById('opsApiSecret');
+      if (input) input.value = '';
+    });
+    document.getElementById('opsSecretClear')?.addEventListener('click', () => {
+      clearOpsApiSecret();
+      const st = document.getElementById('opsSecretStatus');
+      if (st) { st.hidden = false; st.textContent = 'シークレットを消去しました'; }
+    });
+    // Prefill indicator only (never echo secret into DOM as text)
+    const secretInput = document.getElementById('opsApiSecret');
+    if (secretInput && getOpsApiSecret()) {
+      secretInput.placeholder = '（保存済み — 変更する場合のみ入力）';
+    }
 
     document.getElementById('opsNotifyForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();

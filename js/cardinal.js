@@ -25,6 +25,7 @@ import {
   getAutoHealState,
   startAutoHeal,
 } from './auto-heal.js';
+import { opsAuthHeaders } from './ops-secret.js';
 
 const STATE_KEY = 'mos_cardinal_state';
 const CARDINAL_PATH = '/api/cardinal';
@@ -98,7 +99,7 @@ export async function cardinalApi(action, payload = {}) {
   try {
     const res = await fetch(CARDINAL_PATH, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: opsAuthHeaders(),
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));

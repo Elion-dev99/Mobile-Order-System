@@ -3,8 +3,7 @@
  * SaaS contract revenue (QuickOrder に入る利益) を含むオペレーション通知。
  */
 
-import { db } from './firebase.js';
-import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { opsAuthHeaders } from './ops-secret.js';
 import { getPlan, estimateMrr, estimateSetup, estimateArr, planPrice, yen } from './plans.js';
 
 const STORAGE_KEY = 'mos_discord_webhook';
@@ -165,32 +164,8 @@ export function getNotifySettings() {
 export async function loadNotifySettings() {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
-    const local = readLocalSettings();
-    settingsCache = local;
-    try {
-      const snap = await getDoc(doc(db, 'ops', 'settings'));
-      if (snap.exists()) {
-        const data = snap.data() || {};
-        let webhook = String(data.discordWebhook || data.slackWebhook || '').trim();
-        if (webhook && !isLikelyDiscordWebhook(webhook)) webhook = '';
-        const remote = {
-          webhook: webhook || local.webhook,
-          enabled: data.discordEnabled != null ? data.discordEnabled !== false
-            : (data.slackEnabled !== false),
-          channel: String(data.discordChannel || data.slackChannel || local.channel || '').trim(),
-          setupDone: !!(data.discordSetupDone || data.slackSetupDone || local.setupDone),
-          events: { ...defaultEvents(), ...(data.discordEvents || data.slackEvents || {}) },
-          updatedAt: data.updatedAt || null,
-          source: 'firestore',
-        };
-        if (remote.webhook || (remote.updatedAt && (!local.webhook || (remote.updatedAt > (local.updatedAt || 0))))) {
-          settingsCache = remote;
-          writeLocalSettings(settingsCache);
-        }
-      }
-    } catch (e) {
-      console.warn('loadNotifySettings firestore failed', e);
-    }
+    // Local only — do not pull webhooks from world-readable Firestore
+    settingsCache = readLocalSettings();
     return settingsCache;
   })();
   try {
@@ -217,22 +192,9 @@ export async function saveNotifySettings(partial = {}) {
 
   writeLocalSettings(next);
 
-  try {
-    await setDoc(doc(db, 'ops', 'settings'), {
-      discordWebhook: next.webhook,
-      discordEnabled: next.enabled,
-      discordChannel: next.channel,
-      discordSetupDone: next.setupDone,
-      discordEvents: next.events,
-      // clear stale slack fields so UI doesn't think Slack is configured
-      slackWebhook: '',
-      updatedAt: next.updatedAt,
-    }, { merge: true });
-    settingsCache = { ...next, source: 'firestore' };
-  } catch (e) {
-    console.warn('saveNotifySettings firestore failed; kept local', e);
-    settingsCache = { ...next, source: 'local' };
-  }
+  // Security: never write Discord webhook (or any secret) to Firestore.
+  // Rules deny ops/*; keep settings browser-local + Cloudflare DISCORD_WEBHOOK_URL.
+  settingsCache = { ...next, source: 'local' };
   return settingsCache;
 }
 
@@ -319,12 +281,14 @@ export async function notifyDiscord(opts = {}) {
     embeds,
     event: opts.event || '',
   };
+  // Client webhook only accepted by API when X-Ops-Secret is present;
+  // otherwise Cloudflare DISCORD_WEBHOOK_URL is used.
   if (webhook && isLikelyDiscordWebhook(webhook)) body.webhook = webhook;
 
   try {
     const res = await fetch(API_PATH, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: opsAuthHeaders(),
       body: JSON.stringify(body),
     });
     let data = null;

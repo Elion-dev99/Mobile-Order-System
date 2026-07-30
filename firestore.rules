@@ -1,30 +1,74 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Demo / MVP: open read-write. Tighten before real production.
+    function isValidOrder() {
+      return request.resource.data.keys().hasAll(['id', 'shopId', 'timestamp'])
+        && request.resource.data.id is string
+        && request.resource.data.shopId is string
+        && request.resource.data.timestamp is number
+        && request.resource.data.id.size() < 80
+        && request.resource.data.shopId.size() < 64;
+    }
+
+    function isValidLeadCreate() {
+      return request.resource.data.keys().hasAll(['createdAt'])
+        && request.resource.data.createdAt is number
+        && (!('email' in request.resource.data)
+          || request.resource.data.email is string
+            && request.resource.data.email.size() < 200);
+    }
+
+    // Orders: open for guest create + kitchen lifecycle (no Firebase Auth yet).
+    // Create payload is lightly validated; prefer Firebase Auth before production scale.
     match /orders/{id} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isValidOrder();
+      allow update, delete: if true;
     }
+
+    // Legacy single-tenant settings
     match /shop/{doc} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
     }
+
+    // Multi-tenant shops — no anonymous wipe
     match /shops/{shopId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
     }
+
     match /shopMenus/{shopId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
     }
+
+    // Leads: public create (LP), read/update for Ops UI; no delete
     match /leads/{id} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isValidLeadCreate();
+      allow update: if true;
+      allow delete: if false;
     }
+
     match /serviceRequests/{id} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
     }
+
     match /surveys/{id} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false;
     }
+
+    // Ops settings (webhooks etc.) — never client-accessible
     match /ops/{doc} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

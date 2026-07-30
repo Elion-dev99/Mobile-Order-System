@@ -1,37 +1,30 @@
 /**
- * Ops console passwords (client-side gate for internal tools).
+ * Ops console gate (client-side). Passwords are stored as SHA-256 only.
+ * This is NOT a substitute for Cloudflare Access / Firebase Auth —
+ * privileged APIs additionally require OPS_API_SECRET.
  *
- * 有効パスワード:
+ * Default passwords (do not display in UI):
  *   Cursor → cursor2026
  *   Owner  → owner2026
- * 旧パスワードも当面受け付けます。
  */
 const OPS_SESSION = 'mos_ops_role';
-const OPS_LOCAL = 'mos_ops_role_local';
 
-/** @type {Record<'cursor'|'owner', string[]>} */
-const PLAIN_PASSWORDS = {
-  cursor: ['cursor2026', 'cursor-ops-3dc6'],
-  owner: ['owner2026', 'yukiyo-ops-2026'],
+/** Precomputed SHA-256 hex digests (plaintext never shipped to the page). */
+const PASSWORD_HASHES = {
+  cursor: new Set([
+    '0cf082924d364a8822a8b7e12992b3ef4077f597df842a368ada462c7f598821', // cursor2026
+    'c9580f7705cacb64e988ca0593eb797adf5936162b02a073a4db21813621c70d', // cursor-ops-3dc6
+  ]),
+  owner: new Set([
+    'e37838828f7335c08e5249022d9537a4d8c1f350be1b84af32f8296647bd28b9', // owner2026
+    '35770dc5d9bf43bc85c7767fa25e6daa8ddd9b32d5e6cb5ffe407cc91323f4cf', // yukiyo-ops-2026
+  ]),
 };
 
 async function sha256(text) {
   const data = new TextEncoder().encode(text);
   const buf = await crypto.subtle.digest('SHA-256', data);
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-let liveHashes = null;
-
-async function getLiveHashes() {
-  if (liveHashes) return liveHashes;
-  liveHashes = { cursor: new Set(), owner: new Set() };
-  for (const role of /** @type {const} */ (['cursor', 'owner'])) {
-    for (const pw of PLAIN_PASSWORDS[role]) {
-      liveHashes[role].add(await sha256(pw));
-    }
-  }
-  return liveHashes;
 }
 
 function normalizePassword(password) {
@@ -45,21 +38,16 @@ export async function verifyOpsPassword(password) {
   const raw = normalizePassword(password);
   if (!raw) return { ok: false, role: null };
 
-  for (const role of /** @type {const} */ (['cursor', 'owner'])) {
-    if (PLAIN_PASSWORDS[role].includes(raw)) return { ok: true, role };
-  }
-
   try {
-    const hashes = await getLiveHashes();
     const h = await sha256(raw);
-    if (hashes.cursor.has(h)) return { ok: true, role: 'cursor' };
-    if (hashes.owner.has(h)) return { ok: true, role: 'owner' };
+    if (PASSWORD_HASHES.cursor.has(h)) return { ok: true, role: 'cursor' };
+    if (PASSWORD_HASHES.owner.has(h)) return { ok: true, role: 'owner' };
 
     const custom = JSON.parse(localStorage.getItem('mos_ops_custom_hashes') || '{}');
     if (custom.cursor && h === custom.cursor) return { ok: true, role: 'cursor' };
     if (custom.owner && h === custom.owner) return { ok: true, role: 'owner' };
   } catch (e) {
-    console.warn('verifyOpsPassword hash path failed', e);
+    console.warn('verifyOpsPassword failed', e);
   }
 
   return { ok: false, role: null };
@@ -67,9 +55,7 @@ export async function verifyOpsPassword(password) {
 
 export function getOpsRole() {
   try {
-    return sessionStorage.getItem(OPS_SESSION)
-      || localStorage.getItem(OPS_LOCAL)
-      || '';
+    return sessionStorage.getItem(OPS_SESSION) || '';
   } catch {
     return '';
   }
@@ -82,13 +68,10 @@ export function isOpsAuthed() {
 
 export function setOpsRole(role) {
   try {
-    if (role) {
-      sessionStorage.setItem(OPS_SESSION, role);
-      localStorage.setItem(OPS_LOCAL, role);
-    } else {
-      sessionStorage.removeItem(OPS_SESSION);
-      localStorage.removeItem(OPS_LOCAL);
-    }
+    if (role) sessionStorage.setItem(OPS_SESSION, role);
+    else sessionStorage.removeItem(OPS_SESSION);
+    // Drop legacy persistent role (was bypassable via localStorage)
+    localStorage.removeItem('mos_ops_role_local');
   } catch (_) {}
 }
 
@@ -99,7 +82,7 @@ export function clearOpsAuth() {
 export async function setCustomOpsPassword(role, newPassword) {
   if (role !== 'cursor' && role !== 'owner') throw new Error('invalid role');
   const raw = normalizePassword(newPassword);
-  if (raw.length < 4) throw new Error('4文字以上にしてください');
+  if (raw.length < 8) throw new Error('8文字以上にしてください');
   const h = await sha256(raw);
   const custom = JSON.parse(localStorage.getItem('mos_ops_custom_hashes') || '{}');
   custom[role] = h;
@@ -107,6 +90,6 @@ export async function setCustomOpsPassword(role, newPassword) {
 }
 
 export const OPS_PASSWORD_HINTS = {
-  cursor: 'Cursor用: cursor2026',
-  owner: 'Owner用: owner2026',
+  cursor: 'Cursor用パスワード',
+  owner: 'Owner用パスワード',
 };

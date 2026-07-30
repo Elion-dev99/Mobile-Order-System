@@ -9,6 +9,7 @@ import {
   getLastHealthState,
 } from './health.js';
 import { getDiscordWebhook, isLikelyDiscordWebhook } from './notify.js';
+import { opsAuthHeaders } from './ops-secret.js';
 
 const ESCALATE_KEY = 'mos_autoheal_escalated_at';
 const FAIL_STREAK_KEY = 'mos_autoheal_fail_streak';
@@ -60,7 +61,7 @@ export async function escalateToCursor(incident = {}) {
   try {
     const res = await fetch(INCIDENT_PATH, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: opsAuthHeaders(),
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
