@@ -23,6 +23,7 @@
 
 <div class="admin-tabs" id="adminViewTabs">
   <button class="admin-tab active" data-view="orders">注文</button>
+  <button class="admin-tab" data-view="analytics">分析</button>
   <button class="admin-tab" data-view="menu">メニュー</button>
   <button class="admin-tab" data-view="leads">リード</button>
   <button class="admin-tab" data-view="billing">収益</button>
@@ -68,34 +69,57 @@
   </div>
 </div>
 
+<div id="analyticsPanel" class="admin-panel hidden">
+  <div class="admin-panel-inner">
+    <h2>売上分析</h2>
+    <p class="admin-muted" id="analyticsPlanHint">Growth以上で利用可能</p>
+    <div class="billing-cards" id="analyticsCards">
+      <div class="billing-card"><div class="billing-label">本日売上</div><div class="billing-value" id="anTodayGmv">¥0</div><div class="billing-sub">税込合計</div></div>
+      <div class="billing-card"><div class="billing-label">本日注文</div><div class="billing-value" id="anTodayOrders">0</div><div class="billing-sub">件数</div></div>
+      <div class="billing-card"><div class="billing-label">客単価</div><div class="billing-value" id="anAov">¥0</div><div class="billing-sub">平均</div></div>
+    </div>
+    <h3 class="admin-subhead">人気メニュー（直近）</h3>
+    <div id="analyticsTopItems"></div>
+    <h3 class="admin-subhead">時間帯別</h3>
+    <div id="analyticsHours"></div>
+  </div>
+</div>
+
 <div id="billingPanel" class="admin-panel hidden">
   <div class="admin-panel-inner">
     <h2>収益ダッシュボード</h2>
-    <p class="admin-muted">目標: Cursor月額以上を店舗契約1件でカバー</p>
+    <p class="admin-muted">Lite〜Chain の階段価格で ARPU を最大化。Growth を主力にアップセル。</p>
     <div class="billing-cards">
       <div class="billing-card">
-        <div class="billing-label">プラン単価</div>
-        <div class="billing-value" id="billingPrice">¥3,980</div>
-        <div class="billing-sub">/月 · 税別</div>
+        <div class="billing-label">この店舗プラン</div>
+        <div class="billing-value" id="billingPlanName">Growth</div>
+        <div class="billing-sub" id="billingPrice">¥14,800/月</div>
       </div>
       <div class="billing-card">
         <div class="billing-label">新規リード</div>
         <div class="billing-value" id="billingLeads">0</div>
-        <div class="billing-sub">未対応の問い合わせ</div>
+        <div class="billing-sub">未対応</div>
       </div>
       <div class="billing-card">
-        <div class="billing-label">MRR見込み</div>
+        <div class="billing-label">パイプライン MRR</div>
         <div class="billing-value" id="billingMrr">¥0</div>
-        <div class="billing-sub">契約店舗 × 月額</div>
+        <div class="billing-sub">成約+自店舗</div>
+      </div>
+      <div class="billing-card">
+        <div class="billing-label">ARR 見込み</div>
+        <div class="billing-value" id="billingArr">¥0</div>
+        <div class="billing-sub">×12</div>
       </div>
     </div>
+    <h3 class="admin-subhead">プランカタログ（税別）</h3>
+    <div id="billingCatalog" class="billing-catalog"></div>
     <div class="billing-steps">
-      <h3>今日やること（最短で¥3,980）</h3>
+      <h3>収益アクション</h3>
       <ol>
-        <li>近隣の飲食店に <a href="lp.html">lp.html</a> を見せる / QRで送る</li>
-        <li>リードが来たら電話 or メールでクローズ</li>
-        <li><code>js/config.js</code> の <code>stripePaymentLink</code> に Stripe Payment Link を貼る</li>
-        <li>契約後「課金を有効化」を押す（または決済戻りURL）</li>
+        <li><a href="lp.html">販売LP</a>で4プラン比較・ROIシミュレータを見せる</li>
+        <li>リードの希望プランを確認し、Growth以上へアップセル</li>
+        <li>年払いでキャッシュ回収（実質2ヶ月無料）</li>
+        <li>Business/Chainは初期費用も同時クローズ</li>
       </ol>
       <button class="admin-save-btn" id="activateSubBtn">この店舗の課金を有効化</button>
       <p class="admin-muted" id="subStatus"></p>
@@ -112,8 +136,26 @@
     <label class="admin-field">サブタイトル
       <input id="settingSubtitle" type="text" placeholder="モバイルオーダー">
     </label>
+    <label class="admin-field">契約プラン
+      <select id="settingPlan"></select>
+    </label>
+    <label class="admin-field">支払いサイクル
+      <select id="settingCycle">
+        <option value="monthly">月払い</option>
+        <option value="annual">年払い</option>
+      </select>
+    </label>
+    <label class="admin-field">店舗数
+      <input id="settingStores" type="number" min="1" max="200" value="1">
+    </label>
     <label class="admin-field">テーブル数の目安
       <input id="settingTables" type="number" min="1" max="200" value="12">
+    </label>
+    <label class="admin-field">客席デフォルト言語
+      <select id="settingLocale">
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+      </select>
     </label>
     <label class="admin-field">管理者PIN（任意）
       <input id="settingAdminPin" type="password" placeholder="空なら未設定" autocomplete="new-password">

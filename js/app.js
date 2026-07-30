@@ -1,5 +1,6 @@
 import { TablePin } from './pin.js';
 import { loadShop, loadMenu, getShop, getMenu } from './shop.js';
+import { featureEnabled } from './plans.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -11,6 +12,27 @@ export function showToast(msg) {
   setTimeout(() => el.remove(), 2600);
 }
 
+const I18N = {
+  ja: {
+    search: 'メニューを検索...',
+    cart: 'カートを見る',
+    popular: '人気',
+    tax: '(税込)',
+    add: 'カートに追加',
+    note: '特別リクエスト（任意）',
+    notePh: 'アレルギーや特別なご要望があればお知らせください',
+  },
+  en: {
+    search: 'Search menu...',
+    cart: 'View cart',
+    popular: 'Popular',
+    tax: '(tax in)',
+    add: 'Add to cart',
+    note: 'Special request (optional)',
+    notePh: 'Allergies or special requests',
+  },
+};
+
 const App = {
   cart: [],
   selectedCategory: 'all',
@@ -21,6 +43,7 @@ const App = {
   modalCustomizations: {},
   modalToggles: {},
   tableNumber: null,
+  locale: 'ja',
 
   async init() {
     this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
@@ -29,12 +52,45 @@ const App = {
     const shop = getShop();
     document.querySelectorAll('.nav-large-title').forEach(el => { el.textContent = shop.name || 'QuickOrder'; });
     document.title = `${shop.name || 'モバイルオーダー'}`;
+    this.locale = shop.locale || 'ja';
+    this.setupLangToggle();
+    this.applyLocaleChrome();
     this.renderPinControl();
     if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.renderMenu();
     this.bindEvents();
     this.updateCartBar();
+  },
+
+  setupLangToggle() {
+    const wrap = document.getElementById('langToggle');
+    if (!wrap) return;
+    if (!featureEnabled(getShop(), 'multiLang')) {
+      wrap.classList.add('hidden');
+      return;
+    }
+    wrap.classList.remove('hidden');
+    wrap.querySelectorAll('button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.lang === this.locale);
+      btn.addEventListener('click', () => {
+        this.locale = btn.dataset.lang;
+        wrap.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+        this.applyLocaleChrome();
+        this.renderMenu();
+      });
+    });
+  },
+
+  t(key) {
+    return (I18N[this.locale] || I18N.ja)[key] || I18N.ja[key] || key;
+  },
+
+  applyLocaleChrome() {
+    const search = document.getElementById('searchInput');
+    if (search) search.placeholder = this.t('search');
+    const cartLabel = document.querySelector('.cart-bar-left span');
+    if (cartLabel) cartLabel.textContent = this.t('cart');
   },
 
   renderPinControl() {
@@ -120,7 +176,7 @@ const App = {
         item.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
         (item.description || '').toLowerCase().includes(this.searchQuery.toLowerCase());
       return catMatch && allergenMatch && searchMatch;
-    });
+    }).sort((a, b) => Number(!!b.popular) - Number(!!a.popular));
 
     if (filtered.length === 0) {
       container.innerHTML = `
@@ -165,12 +221,12 @@ const App = {
         <div class="menu-card-body">
           <div class="menu-card-header">
             <div class="menu-card-name">${item.name}</div>
-            ${item.popular ? '<span class="popular-badge">人気</span>' : ''}
+            ${item.popular ? `<span class="popular-badge">${this.t('popular')}</span>` : ''}
           </div>
           <div class="menu-card-desc">${item.description}</div>
           ${allergenHTML ? `<div class="allergen-tags">${allergenHTML}</div>` : ''}
           <div class="menu-card-footer">
-            <div class="menu-card-price">¥${item.price.toLocaleString()}<span>(税込)</span></div>
+            <div class="menu-card-price">¥${item.price.toLocaleString()}<span>${this.t('tax')}</span></div>
             <button class="add-btn" aria-label="${item.name}を追加">＋</button>
           </div>
         </div>
@@ -253,11 +309,11 @@ const App = {
         <button class="qty-btn plus" id="qtyPlus">＋</button>
       </div>
       <div class="modal-note-area">
-        <div class="note-label">📝 特別リクエスト（任意）</div>
-        <textarea class="note-input" id="itemNote" rows="2" placeholder="アレルギーや特別なご要望があればお知らせください"></textarea>
+        <div class="note-label">📝 ${this.t('note')}</div>
+        <textarea class="note-input" id="itemNote" rows="2" placeholder="${this.t('notePh')}"></textarea>
       </div>
       <button class="modal-add-btn" id="modalAddBtn">
-        🛒 カートに追加 <span id="modalAddPrice">¥${item.price.toLocaleString()}</span>
+        🛒 ${this.t('add')} <span id="modalAddPrice">¥${item.price.toLocaleString()}</span>
       </button>
     `;
     this.bindModalEvents(item);

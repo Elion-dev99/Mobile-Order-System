@@ -1371,11 +1371,97 @@ img { max-width: 100%; }
   font-weight: 600;
   padding: 6px 8px;
 }
+.admin-subhead {
+  font-size: 15px;
+  margin: 18px 0 10px;
+  color: #EBEBF5;
+}
 .billing-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin: 16px 0 24px;
+}
+.billing-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.catalog-card {
+  background: #2C2C2E;
+  border-radius: 14px;
+  padding: 14px;
+  border: 1px solid transparent;
+}
+.catalog-card.active { border-color: #0A84FF; }
+.catalog-name { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.catalog-price { font-size: 22px; font-weight: 700; }
+.catalog-price span { font-size: 12px; color: #8E8E93; font-weight: 500; }
+.catalog-setup, .catalog-meta { font-size: 11px; color: #8E8E93; margin-top: 4px; }
+.analytics-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #2C2C2E;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.hour-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 120px;
+  padding: 8px 4px;
+  background: #2C2C2E;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+.hour-bar {
+  flex: 1;
+  min-width: 10px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+.hour-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #0A84FF, #5E5CE6);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+.hour-bar span { font-size: 8px; color: #636366; }
+.admin-order-card.sla-warn { outline: 1px solid rgba(255,159,10,0.55); }
+.admin-order-card.sla-late { outline: 1px solid rgba(255,69,58,0.7); }
+.lang-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 8px;
+}
+.lang-toggle button {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--fill-tertiary);
+  color: var(--label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.lang-toggle button.active {
+  background: var(--blue);
+  color: #fff;
+}
+.admin-field select {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #2C2C2E;
+  color: #fff;
+  font: inherit;
 }
 .billing-card {
   background: #2C2C2E;

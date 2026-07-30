@@ -1,21 +1,185 @@
-/** QuickOrder 商用設定 — Stripe Payment Link を貼ると課金が有効になります */
+/**
+ * QuickOrder 商用プラン設計
+ * 大手モバイルオーダー（定額＋初期費用＋席数制限）に対抗しつつ
+ * Growth を主力にアップセルしやすい階段構造。
+ */
 export const PRODUCT = {
   name: 'QuickOrder',
-  tagline: '席で注文、厨房で受信。スマホ1台ではじめるモバイルオーダー',
-  /** 月額（税別）。1店舗で Cursor Pro 月額を上回る */
-  priceMonthly: 3980,
-  /** 初期導入（任意・税別） */
-  priceSetup: 19800,
+  tagline: '席のQRから厨房まで。飲食店の注文オペレーションを一本化',
   currency: 'JPY',
   trialDays: 14,
-  /**
-   * Stripe Dashboard → Payment Links で月額サブスクを作り、URLを貼る
-   * 例: https://buy.stripe.com/xxxx
-   */
+  /** 年払い割引（月額×10 = 2ヶ月分無料） */
+  annualMultiplier: 10,
+  /** 追加店舗（Growth以上） */
+  extraStoreMonthly: 9800,
   stripePaymentLink: '',
-  /** 決済成功後の戻り先（Payment Link の after_completion に設定） */
   successPath: 'admin.html?billing=success',
+  competitorNote: '大手は月額1〜3万円＋初期10万円超が一般的。QuickOrderは機能段階で最適化。',
 };
+
+/**
+ * @typedef {'lite'|'growth'|'business'|'chain'} PlanId
+ */
+
+/** @type {Array<{
+ *  id: PlanId,
+ *  name: string,
+ *  badge?: string,
+ *  tagline: string,
+ *  priceMonthly: number,
+ *  priceSetup: number,
+ *  maxTables: number | null,
+ *  maxStores: number | null,
+ *  orderFeePercent: number,
+ *  highlights: string[],
+ *  features: Record<string, boolean|string|number>,
+ *  cta: string,
+ *  recommended?: boolean,
+ * }>} */
+export const PLANS = [
+  {
+    id: 'lite',
+    name: 'Lite',
+    tagline: '個人店・はじめてのモバイルオーダー',
+    priceMonthly: 6980,
+    priceSetup: 29800,
+    maxTables: 15,
+    maxStores: 1,
+    orderFeePercent: 0,
+    highlights: [
+      '客席QR注文・カート・ステータス',
+      '厨房リアルタイムモニター',
+      'メニュー編集（基本）',
+      'テーブルPIN',
+      'メールサポート',
+    ],
+    features: {
+      menuEdit: true,
+      kitchenMonitor: true,
+      tablePin: true,
+      allergenFilter: true,
+      analytics: false,
+      multiLang: false,
+      brandCustom: false,
+      soundAlert: false,
+      slaTimer: false,
+      multiStore: false,
+      prioritySupport: false,
+      exportCsv: false,
+    },
+    cta: 'Liteで相談する',
+  },
+  {
+    id: 'growth',
+    name: 'Growth',
+    badge: '一番選ばれています',
+    tagline: '回転率と客単価を伸ばす標準プラン',
+    priceMonthly: 14800,
+    priceSetup: 49800,
+    maxTables: 50,
+    maxStores: 1,
+    orderFeePercent: 0,
+    recommended: true,
+    highlights: [
+      'Liteの全機能',
+      '売上・時間帯分析',
+      '人気メニュー自動ハイライト',
+      '日英メニュー切替',
+      '音付き厨房アラート',
+      'チャット優先サポート',
+    ],
+    features: {
+      menuEdit: true,
+      kitchenMonitor: true,
+      tablePin: true,
+      allergenFilter: true,
+      analytics: true,
+      multiLang: true,
+      brandCustom: false,
+      soundAlert: true,
+      slaTimer: false,
+      multiStore: false,
+      prioritySupport: true,
+      exportCsv: true,
+    },
+    cta: 'Growthで始める',
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    tagline: '繁忙店・複数端末・ブランド統制',
+    priceMonthly: 29800,
+    priceSetup: 98000,
+    maxTables: null,
+    maxStores: 3,
+    orderFeePercent: 0,
+    highlights: [
+      'Growthの全機能',
+      'テーブル数無制限',
+      '最大3店舗まで',
+      '配膳SLAタイマー',
+      '店舗ブランディング',
+      '導入マネージャー付き',
+    ],
+    features: {
+      menuEdit: true,
+      kitchenMonitor: true,
+      tablePin: true,
+      allergenFilter: true,
+      analytics: true,
+      multiLang: true,
+      brandCustom: true,
+      soundAlert: true,
+      slaTimer: true,
+      multiStore: true,
+      prioritySupport: true,
+      exportCsv: true,
+    },
+    cta: 'Businessを見積もる',
+  },
+  {
+    id: 'chain',
+    name: 'Chain',
+    badge: '多店舗',
+    tagline: 'チェーン・FC・本部一括管理',
+    priceMonthly: 49800,
+    priceSetup: 198000,
+    maxTables: null,
+    maxStores: null,
+    orderFeePercent: 0.8,
+    highlights: [
+      'Businessの全機能',
+      '店舗数無制限（追加店舗¥0）',
+      '本部ダッシュボード',
+      '注文手数料 0.8%（決済なしでも利用可）',
+      'SLA・専任サポート',
+      'カスタム導入・研修',
+    ],
+    features: {
+      menuEdit: true,
+      kitchenMonitor: true,
+      tablePin: true,
+      allergenFilter: true,
+      analytics: true,
+      multiLang: true,
+      brandCustom: true,
+      soundAlert: true,
+      slaTimer: true,
+      multiStore: true,
+      prioritySupport: true,
+      exportCsv: true,
+      hqDashboard: true,
+    },
+    cta: 'Chainを相談する',
+  },
+];
+
+export const ADDONS = [
+  { id: 'setup_rush', name: '特急導入（5営業日）', price: 19800, unit: '一式' },
+  { id: 'menu_photo', name: 'メニュー撮影・入稿代行', price: 39800, unit: '一式' },
+  { id: 'staff_training', name: 'スタッフ研修（現地2時間）', price: 24800, unit: '回' },
+  { id: 'extra_store', name: '追加店舗', price: 9800, unit: '月' },
+];
 
 export const DEFAULT_SHOP = {
   name: 'QuickOrder',
@@ -24,6 +188,17 @@ export const DEFAULT_SHOP = {
   adminPin: '',
   subscribed: false,
   subscribedAt: null,
+  planId: 'growth',
+  billingCycle: 'monthly',
   ownerEmail: '',
   ownerPhone: '',
+  stores: 1,
+  locale: 'ja',
+};
+
+/** @deprecated 互換用。Growth 月額を返す */
+export const PRODUCT_LEGACY = {
+  ...PRODUCT,
+  priceMonthly: PLANS.find(p => p.id === 'growth').priceMonthly,
+  priceSetup: PLANS.find(p => p.id === 'growth').priceSetup,
 };
