@@ -10,7 +10,7 @@ import { yen, getPlan, estimateMrr } from './plans.js';
 import {
   collection, onSnapshot, query, orderBy
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-import { resolveServiceRequest, estimateWaitMinutes } from './guest-features.js';
+import { resolveServiceRequest } from './guest-features.js';
 import {
   testDiscordNotify,
   testAllDiscordEvents,
