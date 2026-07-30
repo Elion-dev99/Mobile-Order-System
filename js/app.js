@@ -19,11 +19,13 @@ import { placeGuestOrder } from './place-order.js';
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
   if (!container) return;
+  // Collapse rapid toasts so + spam does not pile up work
+  container.querySelectorAll('.toast').forEach((el, i) => { if (i < 2) el.remove(); });
   const el = document.createElement('div');
   el.className = 'toast';
   el.textContent = msg;
   container.appendChild(el);
-  setTimeout(() => el.remove(), 2200);
+  setTimeout(() => el.remove(), 1600);
 }
 
 const App = {
@@ -120,7 +122,7 @@ const App = {
         document.body.classList.remove('ordering-locked-bill');
         this.mountOrderGateBanner();
         document.querySelectorAll('#menuList .menu-card').forEach(card => {
-          this.updateCard(card.dataset.id);
+          this.patchCardControls(card.dataset.id);
         });
         this.updateCartBar();
         if (this.view === 'cart') this.renderSpaCart();
@@ -136,9 +138,8 @@ const App = {
     document.body.classList.add('ordering-locked-bill');
     this.closeModal();
     this.mountOrderGateBanner();
-    // Patch visible cards only — do not rebuild the whole menu
     document.querySelectorAll('#menuList .menu-card').forEach(card => {
-      this.updateCard(card.dataset.id);
+      this.patchCardControls(card.dataset.id);
     });
     this.updateCartBar();
     if (this.view === 'cart') this.renderSpaCart();
@@ -384,23 +385,84 @@ const App = {
     if (!line) return;
     line.qty += delta;
     if (line.qty <= 0) this.cart = this.cart.filter(e => e !== line);
-    this.saveCart();
+    // Paint first, persist next frame — keeps taps realtime on mobile
+    this.patchCardControls(item.id);
     this.updateCartBar();
-    this.updateCard(item.id);
+    this.scheduleSaveCart();
   },
 
-  /** Replace a single card in-place (SPA realtime — no full menu rebuild). */
+  scheduleSaveCart() {
+    if (this._saveCartRaf) return;
+    this._saveCartRaf = requestAnimationFrame(() => {
+      this._saveCartRaf = 0;
+      this.saveCart();
+    });
+  },
+
+  findCard(itemId) {
+    const id = String(itemId);
+    return [...document.querySelectorAll('#menuList .menu-card')]
+      .find(el => el.dataset.id === id) || null;
+  },
+
+  /** Update qty controls only — never rebuild the whole card (avoids animation jank). */
+  patchCardControls(itemId) {
+    const id = String(itemId);
+    const item = getMenu().items.find(i => i.id === id);
+    const card = this.findCard(id);
+    if (!item || !card) return;
+
+    const soldOut = isItemSoldOut(id);
+    const blocked = !this.canOrder();
+    const qty = this.qtyForItem(id);
+    const customizable = this.isCustomizable(item);
+    const text = this.itemText(item);
+    const footer = card.querySelector('.menu-card-footer');
+    if (!footer) {
+      this.updateCard(id);
+      return;
+    }
+
+    card.classList.toggle('in-cart', qty > 0);
+    card.classList.toggle('sold-out', soldOut || blocked);
+
+    let controls = footer.querySelector('.add-btn, .qty-stepper, .soldout-pill');
+    const html = soldOut || blocked
+      ? `<span class="soldout-pill">${soldOut
+        ? (this.locale === 'en' ? 'Sold out' : '品切れ')
+        : (this.locale === 'en' ? 'Unavailable' : '注文不可')}</span>`
+      : customizable
+        ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : '＋'}</button>`
+        : qty > 0
+          ? `<div class="qty-stepper" data-id="${item.id}">
+               <button type="button" data-action="minus" aria-label="minus">−</button>
+               <span>${qty}</span>
+               <button type="button" data-action="plus" aria-label="plus">＋</button>
+             </div>`
+          : `<button class="add-btn" type="button" data-action="plus" aria-label="${text.name}">＋</button>`;
+
+    if (controls) {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = html.trim();
+      const next = wrap.firstElementChild;
+      controls.replaceWith(next);
+    } else {
+      footer.insertAdjacentHTML('beforeend', html);
+    }
+  },
+
+  /** Full card replace (rare — lock/soldout layout changes). No enter animation. */
   updateCard(itemId) {
     const id = String(itemId);
     const item = getMenu().items.find(i => i.id === id);
-    if (!item) return;
-    const card = [...document.querySelectorAll('#menuList .menu-card')]
-      .find(el => el.dataset.id === id);
-    if (!card) return;
+    const card = this.findCard(id);
+    if (!item || !card) return;
     const tmp = document.createElement('div');
     tmp.innerHTML = this.renderCard(item).trim();
     const next = tmp.firstElementChild;
-    if (next) card.replaceWith(next);
+    if (!next) return;
+    next.classList.remove('menu-card-enter');
+    card.replaceWith(next);
   },
 
   ensureMenuDelegation() {
@@ -409,7 +471,8 @@ const App = {
     if (!container) return;
     this.menuDelegated = true;
 
-    container.addEventListener('click', (e) => {
+    // pointerup feels snappier than click on iOS; still handle click as fallback
+    const onAct = (e) => {
       const card = e.target.closest('.menu-card');
       if (!card || !container.contains(card)) return;
       const itemId = card.dataset.id;
@@ -420,6 +483,8 @@ const App = {
       if (actionBtn) {
         e.preventDefault();
         e.stopPropagation();
+        if (this._lastActAt && performance.now() - this._lastActAt < 40) return;
+        this._lastActAt = performance.now();
         if (isItemSoldOut(itemId)) return;
         const action = actionBtn.dataset.action;
         if (action === 'minus') {
@@ -436,7 +501,11 @@ const App = {
         }
         if (action === 'plus') {
           this.bumpPlain(item, 1);
-          showToast(`${this.itemText(item).name} ${this.t('added')}`);
+          // Toast only occasionally — every tap toast was janky on mobile
+          if (!this._toastQuietUntil || performance.now() > this._toastQuietUntil) {
+            showToast(`${this.itemText(item).name} ${this.t('added')}`);
+            this._toastQuietUntil = performance.now() + 700;
+          }
         }
         return;
       }
@@ -444,7 +513,9 @@ const App = {
       if (e.target.closest('.qty-stepper')) return;
       if (isItemSoldOut(itemId) || !this.canOrder()) return;
       this.openModal(itemId);
-    });
+    };
+
+    container.addEventListener('click', onAct);
   },
 
   filteredItems() {
@@ -502,6 +573,10 @@ const App = {
     this.ensureMenuDelegation();
     this.setupScrollSpy();
     if (scrollY != null) window.scrollTo(0, scrollY);
+    // Drop enter animation class after first paint so later patches never re-animate
+    requestAnimationFrame(() => {
+      container.querySelectorAll('.menu-card-enter').forEach(el => el.classList.remove('menu-card-enter'));
+    });
   },
 
   renderCard(item) {
@@ -540,7 +615,7 @@ const App = {
       : `<div class="menu-card-price">¥${unit.toLocaleString()}<span>${this.t('tax')}</span></div>`;
 
     return `
-      <article class="menu-card ${qty > 0 ? 'in-cart' : ''} ${soldOut || blocked ? 'sold-out' : ''} ${onSale ? 'on-sale' : ''}" data-id="${item.id}">
+      <article class="menu-card menu-card-enter ${qty > 0 ? 'in-cart' : ''} ${soldOut || blocked ? 'sold-out' : ''} ${onSale ? 'on-sale' : ''}" data-id="${item.id}">
         <div class="menu-card-emoji" aria-hidden="true">${item.emoji || ''}</div>
         <div class="menu-card-body">
           <div class="menu-card-header">
@@ -781,7 +856,7 @@ const App = {
     });
     this.saveCart();
     this.updateCartBar();
-    this.updateCard(item.id);
+    this.patchCardControls(item.id);
     showToast(`${text.name} ${this.t('added')}`);
   },
 
@@ -999,7 +1074,7 @@ const App = {
           note: '',
         });
         this.saveCart();
-        this.updateCard(item.id);
+        this.patchCardControls(item.id);
         this.updateCartBar();
         this.renderSpaCart();
         showToast(`${item.name} を追加しました`);
@@ -1021,7 +1096,7 @@ const App = {
       if (this.cart[idx].qty <= 0) this.cart.splice(idx, 1);
     } else if (action === 'remove') this.cart.splice(idx, 1);
     this.saveCart();
-    this.updateCard(itemId);
+    this.patchCardControls(itemId);
     this.updateCartBar();
     this.renderSpaCart();
   },
