@@ -11,6 +11,7 @@ import fs from 'fs';
 const BASE = process.env.BASE_URL || 'https://mobile-order-system.pages.dev';
 const SHOP_COUNT = Number(process.env.SHOP_COUNT || 25);
 const ORDERS = Number(process.env.ORDERS_PER_SHOP || 10);
+const AUTO_CLEANUP = process.env.AUTO_CLEANUP !== '0';
 let webhook = (process.env.DISCORD_WEBHOOK_URL || '').trim();
 if (!webhook) {
   for (const p of ['.discord-webhook', '/workspace/.discord-webhook', '/tmp/discord-webhook.txt']) {
@@ -24,7 +25,7 @@ if (!webhook) {
 }
 
 const chrome = process.env.CHROME_PATH || '/usr/bin/google-chrome-stable';
-console.log(JSON.stringify({ BASE, SHOP_COUNT, ORDERS, hasWebhook: !!webhook }, null, 2));
+console.log(JSON.stringify({ BASE, SHOP_COUNT, ORDERS, AUTO_CLEANUP, hasWebhook: !!webhook }, null, 2));
 
 const browser = await puppeteer.launch({
   executablePath: chrome,
@@ -75,14 +76,16 @@ if (webhook) {
 // Lab tab + run load test
 await page.click('[data-ops-tab="lab"]');
 await new Promise((r) => setTimeout(r, 500));
-await page.evaluate((shopCount, orders, wh) => {
+await page.evaluate((shopCount, orders, wh, autoCleanup) => {
   const a = document.getElementById('loadTestShops');
   const b = document.getElementById('loadTestOrders');
   const c = document.getElementById('loadTestWebhook');
+  const d = document.getElementById('loadTestAutoCleanup');
   if (a) a.value = String(shopCount);
   if (b) b.value = String(orders);
   if (c && wh) c.value = wh;
-}, SHOP_COUNT, ORDERS, webhook);
+  if (d) d.checked = !!autoCleanup;
+}, SHOP_COUNT, ORDERS, webhook, AUTO_CLEANUP);
 
 const runBtn = await page.$('#opsLoadTestRun');
 if (!runBtn) {

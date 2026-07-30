@@ -29,7 +29,7 @@ import {
   playbookFor,
   listPendingOrders,
 } from './health.js';
-import { runFullLoadTest, ensureWebhookReady } from './load-test.js';
+import { runFullLoadTest, ensureWebhookReady, cleanupLoadTestShops } from './load-test.js';
 
 const OpsPage = {
   shops: [],
@@ -459,11 +459,13 @@ const OpsPage = {
         }
         if (st) st.textContent = msg;
       };
+      const autoCleanup = document.getElementById('loadTestAutoCleanup')?.checked !== false;
       try {
         const summary = await runFullLoadTest({
           shopCount,
           ordersPerShop,
           webhook,
+          cleanup: autoCleanup,
           onProgress: (msg, meta) => {
             if (this._loadTestAbort) throw new Error('aborted');
             pushLog(msg, meta);
@@ -472,12 +474,15 @@ const OpsPage = {
         pushLog('=== 完了 ===', {
           shops: summary.shopsCreated,
           orders: summary.ordersCreated,
+          cleaned: summary.cleanedShops,
           discordOk: summary.discordOk,
           discordFail: summary.discordFail,
           sec: summary.elapsedSec,
         });
         if (st) {
-          st.textContent = `完了: 店舗${summary.shopsCreated} / 注文${summary.ordersCreated} / Discord成功${summary.discordOk} 失敗${summary.discordFail}（${summary.elapsedSec}s）`;
+          st.textContent = `完了: 店舗${summary.shopsCreated} / 注文${summary.ordersCreated}`
+            + (autoCleanup ? ` / 自動削除${summary.cleanedShops || 0}` : '')
+            + ` / Discord成功${summary.discordOk} 失敗${summary.discordFail}（${summary.elapsedSec}s）`;
         }
         await this.refreshShops();
       } catch (err) {
@@ -491,6 +496,47 @@ const OpsPage = {
       this._loadTestAbort = true;
       const st = document.getElementById('opsLoadTestStatus');
       if (st) { st.hidden = false; st.textContent = '停止リクエスト中...'; }
+    });
+    document.getElementById('opsLoadTestCleanup')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsLoadTestStatus');
+      const log = document.getElementById('opsLoadTestLog');
+      if (!confirm('負荷テスト用店舗（load-* / loadTest）をすべて削除します。よろしいですか？')) return;
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = 'クリーンアップ中...'; }
+      if (log) { log.hidden = false; log.textContent = ''; }
+      const lines = [];
+      const pushLog = (msg, meta) => {
+        const line = meta ? `${msg} ${typeof meta === 'object' ? JSON.stringify(meta) : meta}` : msg;
+        lines.push(line);
+        if (log) {
+          log.textContent = lines.slice(-80).join('\n');
+          log.scrollTop = log.scrollHeight;
+        }
+        if (st) st.textContent = msg;
+      };
+      try {
+        const result = await cleanupLoadTestShops({
+          deleteRelated: true,
+          onProgress: pushLog,
+        });
+        pushLog('=== 削除完了 ===', {
+          deleted: result.shopsDeleted,
+          failed: result.shopsFailed,
+          orders: result.ordersDeleted,
+          requests: result.requestsDeleted,
+        });
+        if (st) {
+          st.textContent = `削除完了: 店舗${result.shopsDeleted}件`
+            + (result.shopsFailed ? ` / 失敗${result.shopsFailed}` : '')
+            + ` / 注文${result.ordersDeleted} / リクエスト${result.requestsDeleted}`;
+        }
+        await this.refreshShops();
+      } catch (err) {
+        pushLog('エラー: ' + (err?.message || err));
+        if (st) st.textContent = '削除失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
     });
 
     document.getElementById('opsNotifySaveEvents')?.addEventListener('click', async () => {

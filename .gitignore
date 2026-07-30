@@ -7,3 +7,6 @@
 
 .discord-webhook
 *.discord-webhook
+node_modules/
+package.json
+package-lock.json

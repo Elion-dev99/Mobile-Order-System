@@ -3,10 +3,10 @@
  * and Discord notifications for every event class.
  */
 
-import { upsertShop } from './shop.js';
+import { upsertShop, deleteShop, listShops } from './shop.js';
 import { db } from './firebase.js';
 import {
-  doc, setDoc, updateDoc, collection, addDoc
+  doc, setDoc, updateDoc, collection, addDoc, getDocs, deleteDoc, query, where
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import {
   notifyDiscord,
@@ -107,18 +107,197 @@ async function writeServiceRequest(payload) {
   }
 }
 
+/** Load-test shop: id `load-*` and/or `loadTest: true`. Never touches seed/default shops. */
+export function isLoadTestShop(shop) {
+  if (!shop) return false;
+  const id = String(shop.id || '');
+  if (!id || id === 'default') return false;
+  if (shop.loadTest === true) return true;
+  return id.startsWith('load-');
+}
+
+async function deleteCollectionDocsByShopIds(collectionName, shopIds, { loadTestOnly = false } = {}) {
+  const ids = [...new Set((shopIds || []).filter(Boolean))];
+  let deleted = 0;
+  const errors = [];
+  // Prefer loadTest flag when available; fall back to shopId batches.
+  if (loadTestOnly) {
+    try {
+      const snap = await getDocs(query(collection(db, collectionName), where('loadTest', '==', true)));
+      for (const d of snap.docs) {
+        try {
+          await deleteDoc(d.ref);
+          deleted++;
+        } catch (e) {
+          errors.push(`${collectionName}/${d.id}: ${e?.message || e}`);
+        }
+      }
+      return { deleted, errors };
+    } catch (_) {
+      // fall through to shopId queries
+    }
+  }
+  for (let i = 0; i < ids.length; i += 10) {
+    const batch = ids.slice(i, i + 10);
+    for (const shopId of batch) {
+      try {
+        const snap = await getDocs(query(collection(db, collectionName), where('shopId', '==', shopId)));
+        for (const d of snap.docs) {
+          try {
+            await deleteDoc(d.ref);
+            deleted++;
+          } catch (e) {
+            errors.push(`${collectionName}/${d.id}: ${e?.message || e}`);
+          }
+        }
+      } catch (e) {
+        errors.push(`${collectionName}@${shopId}: ${e?.message || e}`);
+      }
+    }
+  }
+  return { deleted, errors };
+}
+
+function scrubLocalLoadArtifacts(shopIds = []) {
+  try {
+    const key = 'mos_load_orders';
+    const all = JSON.parse(localStorage.getItem(key) || '[]');
+    const idSet = new Set(shopIds);
+    const next = all.filter((o) => !(o?.loadTest || idSet.has(o?.shopId) || String(o?.id || '').startsWith('LOAD-')));
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch (_) {}
+  try {
+    const key = 'mos_local_requests';
+    const all = JSON.parse(localStorage.getItem(key) || '[]');
+    const idSet = new Set(shopIds);
+    const next = all.filter((r) => !(r?.loadTest || idSet.has(r?.shopId)));
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch (_) {}
+  for (const id of shopIds) {
+    try { localStorage.removeItem(`mos_shop_settings_${id}`); } catch (_) {}
+    try { localStorage.removeItem(`mos_local_menu_${id}`); } catch (_) {}
+  }
+}
+
+async function deleteAllLoadTestOrders() {
+  let deleted = 0;
+  const errors = [];
+  try {
+    const snap = await getDocs(collection(db, 'orders'));
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      const isLoad = data.loadTest === true
+        || String(d.id).startsWith('LOAD-')
+        || String(data.shopId || '').startsWith('load-');
+      if (!isLoad) continue;
+      try {
+        await deleteDoc(d.ref);
+        deleted++;
+      } catch (e) {
+        errors.push(`orders/${d.id}: ${e?.message || e}`);
+      }
+    }
+  } catch (e) {
+    errors.push(`orders scan: ${e?.message || e}`);
+  }
+  return { deleted, errors };
+}
+
+/**
+ * Delete all load-test shops (and related orders / service requests when possible).
+ * @param {object} [opts]
+ * @param {string[]} [opts.shopIds] — limit to these ids (still filtered to load-test)
+ * @param {boolean} [opts.deleteRelated=true] — also delete orders/serviceRequests
+ * @param {(msg: string, meta?: object) => void} [opts.onProgress]
+ */
+export async function cleanupLoadTestShops(opts = {}) {
+  const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
+  const deleteRelated = opts.deleteRelated !== false;
+  const shops = await listShops().catch(() => []);
+  let targets = shops.filter(isLoadTestShop);
+  if (Array.isArray(opts.shopIds) && opts.shopIds.length) {
+    const allow = new Set(opts.shopIds.map(String));
+    // Include explicit ids even if listShops couldn't see Firestore shops
+    const known = new Map(targets.map((s) => [s.id, s]));
+    for (const id of allow) {
+      if (!known.has(id) && (String(id).startsWith('load-') || id !== 'default')) {
+        known.set(id, { id, loadTest: true, name: id });
+      }
+    }
+    targets = [...known.values()].filter((s) => allow.has(s.id) && isLoadTestShop(s));
+  }
+  const shopIds = targets.map((s) => s.id);
+  const result = {
+    found: shopIds.length,
+    shopsDeleted: 0,
+    shopsFailed: 0,
+    ordersDeleted: 0,
+    requestsDeleted: 0,
+    shopIds: [],
+    errors: [],
+  };
+  onProgress(`負荷テスト店舗クリーンアップ開始（店舗候補 ${shopIds.length}件）`, { shopIds: shopIds.slice(0, 30) });
+
+  if (deleteRelated) {
+    onProgress('負荷テスト注文を削除中…');
+    // Full scan first — works even when shops collection is permission-denied
+    const scanned = await deleteAllLoadTestOrders();
+    result.ordersDeleted += scanned.deleted;
+    result.errors.push(...scanned.errors);
+
+    if (shopIds.length) {
+      const orders2 = await deleteCollectionDocsByShopIds('orders', shopIds, { loadTestOnly: false });
+      result.ordersDeleted += orders2.deleted;
+      result.errors.push(...orders2.errors);
+
+      onProgress('関連リクエストを削除中…');
+      const reqs = await deleteCollectionDocsByShopIds('serviceRequests', shopIds, { loadTestOnly: true });
+      result.requestsDeleted += reqs.deleted;
+      result.errors.push(...reqs.errors);
+      const reqs2 = await deleteCollectionDocsByShopIds('serviceRequests', shopIds, { loadTestOnly: false });
+      result.requestsDeleted += reqs2.deleted;
+      result.errors.push(...reqs2.errors);
+    } else {
+      // Still try loadTest-flagged service requests
+      onProgress('負荷テストリクエストを削除中…');
+      const reqs = await deleteCollectionDocsByShopIds('serviceRequests', [], { loadTestOnly: true });
+      result.requestsDeleted += reqs.deleted;
+      result.errors.push(...reqs.errors);
+    }
+  }
+
+  for (let i = 0; i < targets.length; i++) {
+    const shop = targets[i];
+    onProgress(`店舗削除 ${i + 1}/${targets.length}`, { id: shop.id, name: shop.name });
+    try {
+      await deleteShop(shop.id);
+      result.shopsDeleted++;
+      result.shopIds.push(shop.id);
+    } catch (e) {
+      result.shopsFailed++;
+      result.errors.push(`shop ${shop.id}: ${e?.message || e}`);
+    }
+    await sleep(80);
+  }
+
+  scrubLocalLoadArtifacts(shopIds);
+  onProgress('クリーンアップ完了', result);
+  return result;
+}
+
 /**
  * @param {object} opts
  * @param {number} [opts.shopCount=20]
  * @param {number} [opts.ordersPerShop=8]
  * @param {string} [opts.webhook]
  * @param {(msg: string, meta?: object) => void} [opts.onProgress]
- * @param {boolean} [opts.cleanup=false] — delete load-test shops from local list only
+ * @param {boolean} [opts.cleanup=true] — after test, auto-delete load-test shops (+ related docs)
  */
 export async function runFullLoadTest(opts = {}) {
   const shopCount = Math.max(1, Math.min(Number(opts.shopCount) || 20, 80));
   const ordersPerShop = Math.max(1, Math.min(Number(opts.ordersPerShop) || 8, 40));
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
+  const autoCleanup = opts.cleanup !== false;
   const started = Date.now();
   const stats = {
     shopsCreated: 0,
@@ -132,6 +311,7 @@ export async function runFullLoadTest(opts = {}) {
     discordOk: 0,
     discordFail: 0,
     discordSkipped: 0,
+    cleanedShops: 0,
     errors: [],
   };
 
@@ -374,6 +554,31 @@ export async function runFullLoadTest(opts = {}) {
     stats.discordFail += catalog.failed || 0;
   }
 
+  let cleanupResult = null;
+  if (autoCleanup && shops.length) {
+    onProgress('テスト店舗を自動削除中…', { count: shops.length });
+    try {
+      cleanupResult = await cleanupLoadTestShops({
+        shopIds: shops.map((s) => s.id),
+        deleteRelated: true,
+        onProgress: (msg, meta) => onProgress(msg, meta),
+      });
+      stats.cleanedShops = cleanupResult.shopsDeleted || 0;
+      if (cleanupResult.errors?.length) {
+        stats.errors.push(...cleanupResult.errors.slice(0, 20));
+      }
+      await trackDiscord(notifyLoadTestProgress({
+        phase: 'cleanup',
+        deleted: cleanupResult.shopsDeleted,
+        failed: cleanupResult.shopsFailed,
+        ordersDeleted: cleanupResult.ordersDeleted,
+        requestsDeleted: cleanupResult.requestsDeleted,
+      }));
+    } catch (e) {
+      stats.errors.push(`cleanup: ${e?.message || e}`);
+    }
+  }
+
   const elapsedMs = Date.now() - started;
   const summary = {
     ...stats,
@@ -382,7 +587,10 @@ export async function runFullLoadTest(opts = {}) {
     elapsedMs,
     elapsedSec: Math.round(elapsedMs / 1000),
     canDiscord,
+    autoCleanup,
+    cleanedShops: stats.cleanedShops,
     shopIds: shops.map((s) => s.id),
+    cleanup: cleanupResult,
   };
 
   onProgress('完了', summary);
