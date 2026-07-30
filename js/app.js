@@ -16,6 +16,7 @@ import {
 import { mountGuestOrderHistory } from './order-history.js';
 import { placeGuestOrder, computeOrderTotals } from './place-order.js';
 import { validateCoupon, setAppliedCoupon, getAppliedCoupon } from './coupons.js';
+// loadShop already imported — refresh before validate so Store-saved coupons apply
 import {
   applyBrandTheme, mountQuickFilters, mountPartySizePrompt, mountShareTableLink,
   loadFavorites, toggleFavorite, isFavorite, itemHasTag, confirmAlcoholAge,
@@ -1408,22 +1409,39 @@ const App = {
   },
 
   bindCheckoutExtras() {
-    document.getElementById('couponApplyBtn')?.addEventListener('click', () => {
+    const applyCoupon = async () => {
+      const msg = document.getElementById('couponMsg');
+      try { await loadShop(); } catch (_) {}
       const code = document.getElementById('couponInput')?.value || '';
       const subtotal = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
       const v = validateCoupon(code, subtotal, getShop());
-      const msg = document.getElementById('couponMsg');
       if (!v.ok) {
         setAppliedCoupon(getShopId(), null);
-        if (msg) { msg.hidden = false; msg.textContent = v.error; }
+        if (msg) { msg.hidden = false; msg.textContent = v.error; msg.classList.add('is-error'); }
         this.renderSpaCartSummary();
         this.updateCartBar();
         return;
       }
       setAppliedCoupon(getShopId(), v.coupon);
-      if (msg) { msg.hidden = false; msg.textContent = `${v.coupon.label || v.coupon.code} を適用しました`; }
+      const off = Math.floor(
+        v.coupon.type === 'fixed'
+          ? Math.min(subtotal, v.coupon.value)
+          : subtotal * (v.coupon.value / 100)
+      );
+      if (msg) {
+        msg.hidden = false;
+        msg.classList.remove('is-error');
+        msg.textContent = `${v.coupon.label || v.coupon.code} を適用（-¥${off.toLocaleString()}）`;
+      }
       this.renderSpaCartSummary();
       this.updateCartBar();
+    };
+    document.getElementById('couponApplyBtn')?.addEventListener('click', () => { applyCoupon(); });
+    document.getElementById('couponInput')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyCoupon();
+      }
     });
     document.getElementById('tipRow')?.querySelectorAll('[data-tip]').forEach((btn) => {
       btn.addEventListener('click', () => {

@@ -1071,6 +1071,7 @@ body.spa-cart-open .cart-bar { display: none !important; }
   font-size: 12px;
   color: var(--g-accent);
 }
+.coupon-msg.is-error { color: #c0392b; }
 .tip-row {
   display: flex;
   gap: 8px;

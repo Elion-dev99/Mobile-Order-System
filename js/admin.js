@@ -38,7 +38,7 @@ import {
 import { maybeNotifySystemLoad } from './load-monitor.js';
 import { ordersToCsv, downloadCsv, applyBrandTheme, filterOrdersByDateRange } from './guest-extras.js';
 import { notifyOrderStatus } from './notify-orders.js';
-import { listCoupons, normalizeCoupon, saveCoupons } from './coupons.js';
+import { listCoupons, normalizeCoupon, saveCoupons, createCouponDraft } from './coupons.js';
 import {
   getStaffRole, setStaffRole, verifyStaffPin, staffCan, staffRoleLabel,
 } from './staff-auth.js';
@@ -306,7 +306,8 @@ const AdminPage = {
       });
     });
     document.getElementById('addCouponBtn')?.addEventListener('click', () => {
-      this.couponDraft.push(normalizeCoupon({ code: 'NEW', type: 'percent', value: 10, label: '新規クーポン' }));
+      this.syncCouponDraftFromDom();
+      this.couponDraft.push(createCouponDraft({ type: 'percent', value: 10, label: '新規クーポン' }));
       this.renderCouponEditor();
     });
     // default CSV range = today

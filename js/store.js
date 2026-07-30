@@ -11,7 +11,7 @@ import {
 import { resolveShopId, guestEntryUrl } from './tenant.js';
 import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
 import { orderDetailHtml, bindOrderHistoryToggles } from './order-history.js';
-import { listCoupons, normalizeCoupon, saveCoupons } from './coupons.js';
+import { listCoupons, normalizeCoupon, saveCoupons, createCouponDraft } from './coupons.js';
 import {
   subscribeReservations, subscribeWaitlist, updateReservationStatus, updateWaitlistStatus,
 } from './reservations.js';
@@ -72,18 +72,24 @@ const StorePage = {
     });
     document.getElementById('regenTables')?.addEventListener('click', () => this.renderTables());
     document.getElementById('addStoreCoupon')?.addEventListener('click', () => {
-      this.couponDraft.push(normalizeCoupon({ code: 'WELCOME', type: 'percent', value: 10, label: 'Welcome' }));
+      this.syncStoreCouponsFromDom();
+      this.couponDraft.push(createCouponDraft({ type: 'percent', value: 10, label: 'クーポン' }));
       this.renderCoupons();
     });
     document.getElementById('saveStoreCoupons')?.addEventListener('click', async () => {
       this.syncStoreCouponsFromDom();
+      const btn = document.getElementById('saveStoreCoupons');
+      if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
       try {
         await saveCoupons(this.couponDraft);
-        this.renderCoupons();
+        this._couponsHydrated = false;
+        this.renderCoupons({ reload: true });
         alert('クーポンを保存しました');
       } catch (e) {
         console.error(e);
-        alert('保存に失敗しました');
+        alert('保存に失敗しました: ' + (e?.message || e));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'クーポンを保存'; }
       }
     });
     document.getElementById('printQrSheet')?.addEventListener('click', () => this.printQrSheet());
@@ -298,27 +304,42 @@ const StorePage = {
     });
   },
 
-  renderCoupons() {
+  renderCoupons({ reload = false } = {}) {
     const panel = document.getElementById('couponPanel');
     if (!panel) return;
     const on = shopCanUse('coupons');
     panel.hidden = !on;
-    if (!on) return;
-    this.couponDraft = listCoupons(getShop()).map((c) => ({ ...c }));
+    if (!on) {
+      panel.hidden = false;
+      const list = document.getElementById('storeCouponList');
+      if (list) {
+        list.innerHTML = '<p class="store-muted">クーポンは Growth 以上（またはトライアル中）で利用できます。</p>';
+      }
+      document.getElementById('addStoreCoupon')?.toggleAttribute('hidden', true);
+      document.getElementById('saveStoreCoupons')?.toggleAttribute('hidden', true);
+      return;
+    }
+    document.getElementById('addStoreCoupon')?.removeAttribute('hidden');
+    document.getElementById('saveStoreCoupons')?.removeAttribute('hidden');
+    // Only hydrate from cloud/local shop once — re-render must keep in-progress drafts
+    if (reload || !this._couponsHydrated) {
+      this.couponDraft = listCoupons(getShop()).map((c) => ({ ...c }));
+      this._couponsHydrated = true;
+    }
     const list = document.getElementById('storeCouponList');
     if (!list) return;
     if (!this.couponDraft.length) {
-      list.innerHTML = '<p class="store-muted">クーポン未設定</p>';
+      list.innerHTML = '<p class="store-muted">クーポン未設定。「追加」で作成してください。</p>';
       return;
     }
     list.innerHTML = this.couponDraft.map((c, i) => `
       <div class="store-coupon-row" data-ci="${i}">
-        <input class="sc-code" value="${c.code}" placeholder="CODE" maxlength="24">
-        <select class="sc-type">
+        <input class="sc-code" value="${escapeHtml(c.code)}" placeholder="CODE" maxlength="24" aria-label="コード">
+        <select class="sc-type" aria-label="種別">
           <option value="percent" ${c.type === 'percent' ? 'selected' : ''}>%</option>
           <option value="fixed" ${c.type === 'fixed' ? 'selected' : ''}>¥</option>
         </select>
-        <input class="sc-value" type="number" min="0" value="${c.value}">
+        <input class="sc-value" type="number" min="0" value="${Number(c.value) || 0}" aria-label="値">
         <label class="store-check"><input type="checkbox" class="sc-on" ${c.enabled !== false ? 'checked' : ''}><span>有効</span></label>
         <button type="button" data-del-c="${i}">削除</button>
       </div>
@@ -335,13 +356,17 @@ const StorePage = {
   syncStoreCouponsFromDom() {
     const rows = document.querySelectorAll('#storeCouponList .store-coupon-row');
     if (!rows.length) return;
-    this.couponDraft = [...rows].map((row) => normalizeCoupon({
-      ...this.couponDraft[Number(row.dataset.ci)],
-      code: row.querySelector('.sc-code')?.value,
-      type: row.querySelector('.sc-type')?.value,
-      value: row.querySelector('.sc-value')?.value,
-      enabled: !!row.querySelector('.sc-on')?.checked,
-    }));
+    this.couponDraft = [...rows].map((row) => {
+      const idx = Number(row.dataset.ci);
+      const prev = this.couponDraft[idx] || {};
+      return normalizeCoupon({
+        ...prev,
+        code: row.querySelector('.sc-code')?.value,
+        type: row.querySelector('.sc-type')?.value,
+        value: row.querySelector('.sc-value')?.value,
+        enabled: !!row.querySelector('.sc-on')?.checked,
+      });
+    });
   },
 
   subscribeFoh() {
