@@ -24,16 +24,28 @@ SAO のカーディナルシステムに着想した、**監視体（Guardian）
 
 お互いのハートビート（SLA 既定 90分）が途切れたら、相手側を起こして状況整理します。
 
-## リポジトリ内の部品（このPR）
+## リポジトリ内の部品
 
 | パス | 役割 |
 |------|------|
 | `js/cardinal.js` | Ops 上の神経系（サイクル・ハートビート・ディスパッチ） |
+| `js/cardinal-features.js` | 機能スイッチ・静穏時間・タイムライン・自己診断・異常スキャン・日次ダイジェスト |
 | `js/auto-heal.js` | ヘルス異常時の自動復旧・エスカレーション |
-| `functions/api/cardinal.js` | Cursor Automations / Cloud Agents 起動バス |
+| `functions/api/cardinal.js` | Cursor Automations / Cloud Agents 起動バス（`tick` / `diagnose` / `digest` 含む） |
 | `functions/api/incident.js` | レガシー障害エスカレーション |
 | `.cursor/rules/cardinal-*.mdc` | 各ロールの行動規範 |
-| Ops → **Cardinal** タブ | 状態表示・ドリル起動・設定チェックリスト |
+| Ops → **Cardinal** タブ | 状態・機能スイッチ・診断・ダイジェスト・ドリル |
+
+## Ops 側の追加機能
+
+| 機能 | 内容 |
+|------|------|
+| **機能スイッチ** | 自動メンテ / Executor起動 / ウォッチドッグ / 異常スキャン / 日次ダイジェスト / 静穏時間 / 履歴（ブラウザ `localStorage`） |
+| **静穏時間** | 既定 JST 23:00–08:00。warning 以下の Discord・ウォッチドッグ起動を抑制（`down` / `critical` は通す） |
+| **自己診断** | Firestore・通知API・Ops鍵・メンテ・保留注文などを一括チェック。サーバー側 `action: diagnose` も併用可 |
+| **異常スキャン** | 営業中店舗の注文ゼロ（履歴あり）・保留キュー過多・メンテ中を検知し Discord 通知 |
+| **日次ダイジェスト** | 設定した JST 時刻に 1日1回、注文数/GMV/ヘルスを Discord へ（手動強制送信あり） |
+| **アクション履歴** | サイクル・起動・診断などの判断ログを Ops に表示 |
 
 ## いま動いている常駐ルート（推奨・設定済み）
 

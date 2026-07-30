@@ -42,6 +42,16 @@ import {
   runCardinalDrill,
   getCardinalSnapshot,
   cardinalApi,
+  loadCardinalPrefs,
+  saveCardinalPrefs,
+  CARDINAL_CAPABILITIES,
+  listCardinalTimeline,
+  clearCardinalTimeline,
+  pushCardinalTimeline,
+  runCardinalDiagnose,
+  scanBusinessAnomalies,
+  maybeNotifyAnomalies,
+  maybeSendDailyDigest,
 } from './cardinal.js';
 import { escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
 import { ordersToCsv, downloadCsv } from './guest-extras.js';
@@ -117,7 +127,10 @@ const OpsPage = {
     await this.refreshMaintenance();
     subscribeMaintenance(() => this.renderMaintenancePanel());
     this.startHealthPolling();
-    startCardinal({ intervalMs: 60_000 });
+    startCardinal({
+      intervalMs: 60_000,
+      getContext: () => ({ shops: this.shops || [], orders: this.orders || [] }),
+    });
     await this.refreshCardinal();
     this.startCardinalPolling();
     const params = new URLSearchParams(location.search);
@@ -149,6 +162,7 @@ const OpsPage = {
 
   renderCardinal(apiRes = null) {
     const snap = this.cardinal || getCardinalSnapshot();
+    const prefs = snap.prefs || loadCardinalPrefs();
     const fmt = (role) => {
       const r = snap[role] || {};
       if (!r.lastHeartbeatAt) return '未受信';
@@ -161,6 +175,9 @@ const OpsPage = {
     set('cardinalCycles', String(snap.cycles || 0));
     set('cardinalDispatches', String(snap.dispatches || 0));
     set('cardinalHealStreak', String(snap.autoHeal?.consecutiveFails ?? getAutoHealState().consecutiveFails ?? 0));
+    set('cardinalQuietStatus', snap.quiet ? '静穏中' : '通常');
+    const capsOn = CARDINAL_CAPABILITIES.filter((c) => prefs.capabilities?.[c.id] !== false).length;
+    set('cardinalCapsOn', `${capsOn}/${CARDINAL_CAPABILITIES.length}`);
     if (apiRes?.data?.configured) {
       const c = apiRes.data.configured;
       const ok = c.guardianWebhook || c.executorWebhook || c.apiKey;
@@ -170,6 +187,62 @@ const OpsPage = {
     } else {
       set('cardinalApiStatus', '確認中');
     }
+    this.renderCardinalCaps(prefs);
+    this.renderCardinalTimeline(snap.timeline || listCardinalTimeline(20));
+  },
+
+  renderCardinalCaps(prefs = loadCardinalPrefs(), { force = false } = {}) {
+    const host = document.getElementById('opsCardinalCaps');
+    if (!host) return;
+    // Avoid wiping unsaved toggles on 30s refresh
+    if (force || !host.dataset.built) {
+      host.innerHTML = CARDINAL_CAPABILITIES.map((c) => `
+      <label class="ops-event-item">
+        <input type="checkbox" data-cardinal-cap="${c.id}" ${prefs.capabilities?.[c.id] !== false ? 'checked' : ''}>
+        <span><strong>${escapeHtml(c.label)}</strong><br><em class="ops-muted" style="font-style:normal;font-size:12px;">${escapeHtml(c.description)}</em></span>
+      </label>`).join('');
+      host.dataset.built = '1';
+    }
+    const qs = document.getElementById('opsCardinalQuietStart');
+    const qe = document.getElementById('opsCardinalQuietEnd');
+    const dh = document.getElementById('opsCardinalDigestHour');
+    const zh = document.getElementById('opsCardinalZeroHours');
+    if (qs && document.activeElement !== qs) qs.value = prefs.quietStart || '23:00';
+    if (qe && document.activeElement !== qe) qe.value = prefs.quietEnd || '08:00';
+    if (dh && document.activeElement !== dh) dh.value = String(prefs.digestHourJst ?? 9);
+    if (zh && document.activeElement !== zh) zh.value = String(prefs.anomalyZeroOrderHours ?? 3);
+  },
+
+  renderCardinalTimeline(rows = []) {
+    const host = document.getElementById('opsCardinalTimeline');
+    if (!host) return;
+    if (!rows.length) {
+      host.innerHTML = '<p>まだ履歴がありません。サイクルや診断を実行するとここに残ります。</p>';
+      return;
+    }
+    host.innerHTML = `<ul class="ops-checklist">${rows.map((r) => {
+      const when = new Date(r.at || Date.now()).toLocaleString('ja-JP');
+      return `<li><strong>${escapeHtml(r.type || 'event')}</strong> · ${escapeHtml(r.summary || '')} <span class="ops-muted">(${escapeHtml(when)})</span></li>`;
+    }).join('')}</ul>`;
+  },
+
+  saveCardinalPrefsFromForm() {
+    const capabilities = {};
+    document.querySelectorAll('[data-cardinal-cap]').forEach((el) => {
+      capabilities[el.dataset.cardinalCap] = !!el.checked;
+    });
+    saveCardinalPrefs({
+      capabilities,
+      quietStart: document.getElementById('opsCardinalQuietStart')?.value || '23:00',
+      quietEnd: document.getElementById('opsCardinalQuietEnd')?.value || '08:00',
+      digestHourJst: Number(document.getElementById('opsCardinalDigestHour')?.value) || 9,
+      anomalyZeroOrderHours: Number(document.getElementById('opsCardinalZeroHours')?.value) || 3,
+    });
+    const st = document.getElementById('opsCardinalPrefsStatus');
+    if (st) { st.hidden = false; st.textContent = 'Cardinal 設定を保存しました'; }
+    this.cardinal = getCardinalSnapshot();
+    this.renderCardinalCaps(loadCardinalPrefs(), { force: true });
+    this.renderCardinal();
   },
 
   startHealthPolling() {
@@ -819,7 +892,11 @@ const OpsPage = {
       btn.disabled = true;
       if (st) { st.hidden = false; st.textContent = 'Cardinal サイクル実行中...'; }
       try {
-        const result = await runCardinalCycle({ escalateAfterFails: 2 });
+        const result = await runCardinalCycle({
+          escalateAfterFails: 2,
+          shops: this.shops || [],
+          orders: this.orders || [],
+        });
         this.health = result.health;
         this.renderHealth();
         await this.refreshCardinal();
@@ -837,6 +914,113 @@ const OpsPage = {
         if (st) st.textContent = '失敗: ' + (err?.message || err);
       }
       btn.disabled = false;
+    });
+    document.getElementById('opsCardinalDiagnose')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = '自己診断中...'; }
+      try {
+        const report = await runCardinalDiagnose({
+          shops: this.shops || [],
+          orders: this.orders || [],
+        });
+        let server = null;
+        try { server = await cardinalApi('diagnose', { notify: false }); } catch (_) {}
+        await this.refreshCardinal();
+        if (log) {
+          log.hidden = false;
+          log.textContent = JSON.stringify({ client: report, server: server?.data || server }, null, 2);
+        }
+        const lines = (report.checks || [])
+          .map((c) => `${c.ok ? '✓' : '✗'} ${c.label}: ${c.detail}`)
+          .join('\n');
+        const anom = (report.anomalies || [])
+          .map((a) => `· ${a.title}: ${a.detail}`)
+          .join('\n');
+        if (st) {
+          st.textContent = report.ok
+            ? `自己診断 OK · ${report.score}`
+            : `自己診断で問題 · ${report.score}`;
+        }
+        alert(`Cardinal 自己診断 ${report.score}\n\n${lines}${anom ? `\n\n異常\n${anom}` : ''}`);
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
+    });
+    document.getElementById('opsCardinalDigest')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = 'ダイジェスト送信中...'; }
+      try {
+        const result = await maybeSendDailyDigest(
+          { shops: this.shops || [], orders: this.orders || [] },
+          { force: true },
+        );
+        await this.refreshCardinal();
+        if (log) {
+          log.hidden = false;
+          log.textContent = JSON.stringify(result, null, 2);
+        }
+        if (st) {
+          st.textContent = result.ok
+            ? `ダイジェスト送信 · 本日注文 ${result.digest?.ordersToday ?? 0}`
+            : `ダイジェスト: ${result.reason || 'skipped'}`;
+        }
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
+    });
+    document.getElementById('opsCardinalAnomaly')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = '異常スキャン中...'; }
+      try {
+        const findings = scanBusinessAnomalies({
+          shops: this.shops || [],
+          orders: this.orders || [],
+        });
+        const notify = findings.length
+          ? await maybeNotifyAnomalies(findings, { force: true })
+          : { skipped: true, reason: 'none' };
+        pushCardinalTimeline({
+          type: 'anomaly_scan',
+          severity: findings.length ? 'warning' : 'info',
+          summary: findings.length
+            ? `手動スキャン ${findings.length}件`
+            : '手動スキャン: 異常なし',
+        });
+        await this.refreshCardinal();
+        if (log) {
+          log.hidden = false;
+          log.textContent = JSON.stringify({ findings, notify }, null, 2);
+        }
+        if (!findings.length) {
+          if (st) st.textContent = '異常なし';
+        } else {
+          if (st) st.textContent = `異常 ${findings.length}件`;
+          alert(`異常検知（${findings.length}件）\n\n${findings.map((f) => `· ${f.title}: ${f.detail}`).join('\n')}`);
+        }
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
+    });
+    document.getElementById('opsCardinalPrefsSave')?.addEventListener('click', () => {
+      this.saveCardinalPrefsFromForm();
+    });
+    document.getElementById('opsCardinalTimelineClear')?.addEventListener('click', () => {
+      clearCardinalTimeline();
+      const st = document.getElementById('opsCardinalStatus');
+      if (st) { st.hidden = false; st.textContent = 'タイムラインをクリアしました'; }
+      this.refreshCardinal();
     });
     document.getElementById('opsCardinalDrill')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
