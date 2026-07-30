@@ -17,6 +17,7 @@ import {
   notifyPlanChanged,
 } from './notify.js';
 import { maybeNotifySystemLoad } from './load-monitor.js';
+import { startAutoHeal } from './auto-heal.js';
 
 const AdminPage = {
   filter: 'received',
@@ -58,6 +59,7 @@ const AdminPage = {
     this.renderBilling();
     this.renderAnalytics();
     this.renderSettingsForm();
+    startAutoHeal({ intervalMs: 60_000, escalateAfterFails: 4 });
 
     if (params.get('view')) this.setView(params.get('view'));
   },

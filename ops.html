@@ -75,7 +75,20 @@
         <ul id="opsHealthPlaybookList" class="ops-checklist"></ul>
         <button type="button" id="opsHealthRecheck" class="ops-btn-secondary">再チェック</button>
         <button type="button" id="opsHealthNotify" class="ops-btn-secondary">状態をDiscordへ送信</button>
+        <button type="button" id="opsHealthAutoFix" class="ops-btn">Cursorに自動対処を依頼</button>
         <p id="opsHealthStatus" class="ops-status" hidden></p>
+      </div>
+
+      <div class="ops-health-playbook" id="opsAutoHealGuide">
+        <h2>Cursor 自動対処の設定（一度だけ）</h2>
+        <ol class="ops-steps">
+          <li><a href="https://cursor.com/dashboard/api" target="_blank" rel="noopener">Cursor API Keys</a> でキーを作成</li>
+          <li>Cloudflare Pages → Settings → Environment variables に <code>CURSOR_API_KEY</code> を追加（Production）</li>
+          <li>（任意）<a href="https://cursor.com/automations" target="_blank" rel="noopener">Automations</a> で Webhook トリガーを作り、<code>CURSOR_AUTOMATION_WEBHOOK_URL</code> と <code>CURSOR_AUTOMATION_API_KEY</code> も設定</li>
+          <li>再デプロイ後、障害が続くと Cloud Agent が自動で調査・PR作成します</li>
+        </ol>
+        <p class="ops-muted">アプリ側はすでに「検知 → 自動復旧 → だめなら Cursor 起動」まで実装済みです。APIキー設定が自動対処のスイッチです。</p>
+        <button type="button" id="opsHealthAutoFixIdle" class="ops-btn-secondary">今すぐ自動対処をテスト起動</button>
       </div>
       <h2>店舗別きょう</h2>
       <div class="ops-table-wrap">

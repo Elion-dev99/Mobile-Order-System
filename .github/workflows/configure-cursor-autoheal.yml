@@ -1,0 +1,32 @@
+name: Configure Cursor AutoHeal
+
+on:
+  workflow_dispatch:
+    inputs:
+      cursor_api_key:
+        description: "Cursor API key (Dashboard → API Keys). Stored as Cloudflare Pages secret CURSOR_API_KEY"
+        required: true
+        type: string
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Put Cloudflare Pages secret CURSOR_API_KEY
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
+        run: |
+          if [ -z "$CURSOR_API_KEY" ]; then
+            echo "empty key"; exit 1
+          fi
+          printf '%s' "$CURSOR_API_KEY" | npx --yes wrangler@4 pages secret put CURSOR_API_KEY --project-name=mobile-order-system

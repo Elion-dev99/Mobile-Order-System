@@ -27,6 +27,7 @@ import {
   playbookFor,
   listPendingOrders,
 } from './health.js';
+import { startAutoHeal, escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
 
 const OpsPage = {
   shops: [],
@@ -70,6 +71,7 @@ const OpsPage = {
     await this.refreshNotifySetup();
     await this.refreshHealth();
     this.startHealthPolling();
+    startAutoHeal({ intervalMs: 45_000 });
     const params = new URLSearchParams(location.search);
     if (params.get('tab') === 'notify') this.switchTab('notify');
     else {
@@ -122,6 +124,7 @@ const OpsPage = {
     const book = document.getElementById('opsHealthPlaybook');
     const list = document.getElementById('opsHealthPlaybookList');
     const pending = listPendingOrders().length;
+    const heal = getAutoHealState();
     if (banner) {
       if (h.status === 'ok') {
         banner.hidden = true;
@@ -129,8 +132,11 @@ const OpsPage = {
       } else {
         banner.hidden = false;
         banner.dataset.level = h.status;
+        const healHint = heal.consecutiveFails
+          ? ` · 自動対処カウント ${heal.consecutiveFails}`
+          : '';
         banner.innerHTML = `<strong>${h.emoji || ''} サーバー状態: ${escapeHtml(h.label || h.status)}</strong>
-          <span>Firestore: ${h.firestore?.ok ? 'OK' : '障害'} · 通知API: ${h.notifyApi?.functionReady ? 'OK' : '障害'}${pending ? ` · 保留注文 ${pending}件` : ''}</span>`;
+          <span>Firestore: ${h.firestore?.ok ? 'OK' : '障害'} · 通知API: ${h.notifyApi?.functionReady ? 'OK' : '障害'}${pending ? ` · 保留注文 ${pending}件` : ''}${healHint}</span>`;
       }
     }
     if (book && list) {
@@ -423,6 +429,39 @@ const OpsPage = {
       this.renderHealth();
       if (st) st.textContent = `送信しました（${health?.emoji || ''} ${health?.label || ''}）`;
     });
+
+    const requestAutoFix = async (btn) => {
+      const st = document.getElementById('opsHealthStatus') || document.createElement('p');
+      st.hidden = false;
+      st.textContent = 'Cursor自動対処を起動中...';
+      if (btn) btn.disabled = true;
+      const cycle = await runAutoHealCycle({ escalateAfterFails: 1, escalateCooldownMs: 0 });
+      // Force escalate regardless of streak
+      const res = await escalateToCursor({
+        status: this.health?.status || cycle.health?.status || 'manual',
+        severity: 'critical',
+        summary: 'Opsから手動で Cursor 自動対処を依頼',
+        message: 'ユーザーが「Cursorに自動対処を依頼」を押しました。健康状態を調査し、直せる箇所はPRを作成してください。',
+        firestoreOk: !!(this.health?.firestore?.ok ?? cycle.health?.firestore?.ok),
+        notifyApiOk: !!(this.health?.notifyApi?.functionReady ?? cycle.health?.notifyApi?.functionReady),
+        flush: cycle.flush,
+      });
+      if (res.ok) {
+        const agentOk = res.data?.cursor?.agent?.ok || res.data?.cursor?.automation?.ok;
+        st.id = 'opsHealthStatus';
+        st.textContent = agentOk
+          ? 'Cursor Cloud Agent の起動を依頼しました。cursor.com/agents を確認してください。'
+          : (res.data?.hint || '受付ました。CURSOR_API_KEY 未設定の場合は Cloudflare にキーを追加してください。');
+        const host = document.getElementById('opsHealthPlaybook') || document.getElementById('opsAutoHealGuide');
+        if (host && !document.getElementById('opsHealthStatus')) host.appendChild(st);
+      } else {
+        st.textContent = '起動失敗: ' + (res.error || res.data?.error || 'unknown');
+      }
+      if (btn) btn.disabled = false;
+    };
+
+    document.getElementById('opsHealthAutoFix')?.addEventListener('click', (e) => requestAutoFix(e.currentTarget));
+    document.getElementById('opsHealthAutoFixIdle')?.addEventListener('click', (e) => requestAutoFix(e.currentTarget));
 
     document.getElementById('opsNotifySaveEvents')?.addEventListener('click', async () => {
       const st = document.getElementById('opsNotifyStatus');

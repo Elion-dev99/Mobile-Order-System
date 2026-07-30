@@ -95,6 +95,7 @@ export function playbookFor(status) {
   }
   if (status === 'down') {
     return [
+      '自動対処: 保留注文の再送を試行し、連続失敗時は Cursor Cloud Agent を起動します',
       'Firestore（注文DB）と通知APIの両方が応答していません',
       'Cloudflare Pages / Firebase Console の障害情報を確認',
       '客席はデモモードで業務継続可（本番注文は保留キューへ）',
@@ -103,15 +104,17 @@ export function playbookFor(status) {
   }
   if (status === 'degraded') {
     return [
+      '自動対処: 生きている経路でリトライ／保留注文を再送します',
       '一部サービスのみ障害です（DBまたは通知）',
       '注文が失敗する場合は保留キューに入ります',
       'Discord通知だけ落ちている場合、注文自体は継続可能',
-      'Firebase / Cloudflare のステータスを確認',
+      '連続失敗時は Cursor に調査・修正を依頼します',
     ];
   }
   return [
     '各サービスは正常です',
-    '異常時は Discord に障害通知が飛びます（通知APIが生きている場合）',
+    '異常時は自動復旧を試し、直らない場合は Cursor Agent が起動します',
+    'Cloudflare に CURSOR_API_KEY を設定すると自動対処が有効になります',
   ];
 }
 
