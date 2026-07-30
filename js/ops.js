@@ -130,7 +130,8 @@ const OpsPage = {
         banner.hidden = false;
         banner.dataset.level = h.status;
         banner.innerHTML = `<strong>${h.emoji || ''} サーバー状態: ${escapeHtml(h.label || h.status)}</strong>
-          <span>Firestore: ${h.firestore?.ok ? 'OK' : '障害'} · 通知API: ${h.notifyApi?.functionReady ? 'OK' : '障害'}${pending ? ` · 保留注文 ${pending}件` : ''}</span>`;
+          <span>注文DB: ${h.firestore?.ok ? 'OK' : (h.firestore?.soft ? '応答遅延' : '障害')} · 通知API: ${h.notifyApi?.functionReady ? 'OK' : '障害'}${pending ? ` · 保留注文 ${pending}件` : ''}${h.firestore?.error && !h.firestore?.ok ? ` · ${escapeHtml(String(h.firestore.error).slice(0, 40))}` : ''}</span>
+          <span class="ops-health-hint">※定期チェック結果です。店舗作成や注文が動いていれば実害はないことが多いです</span>`;
       }
     }
     if (book && list) {

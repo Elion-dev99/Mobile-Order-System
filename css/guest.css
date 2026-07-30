@@ -745,3 +745,114 @@ body.shop-closed::after {
   margin: 12px; padding: 10px; border-radius: 12px;
   background: #1c1c1e; color: #fff; font-weight: 700;
 }
+
+/* —— Order history / details —— */
+.guest-history {
+  margin: 28px 16px 120px;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--g-surface, #fff);
+  border: 1px solid var(--g-line);
+}
+.guest-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.guest-history-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.guest-history-refresh {
+  border: 1px solid var(--g-line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.oh-list { display: grid; gap: 10px; }
+.oh-card {
+  border: 1px solid var(--g-line);
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+.oh-card-head {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.oh-card-head.is-open { background: rgba(13, 92, 77, 0.06); }
+.oh-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.oh-card-title strong { font-size: 0.9rem; }
+.oh-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--g-muted);
+  font-size: 0.82rem;
+}
+.oh-card-meta strong { color: var(--g-ink, #14201c); font-size: 0.95rem; }
+.oh-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef5f1;
+  color: #0D5C4D;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.oh-card-body {
+  padding: 0 14px 14px;
+  border-top: 1px dashed var(--g-line);
+}
+.oh-lines { display: grid; gap: 8px; padding-top: 12px; }
+.oh-line {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  font-size: 0.88rem;
+}
+.oh-line-meta {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  color: var(--g-muted);
+}
+.oh-totals {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--g-line);
+  display: grid;
+  gap: 4px;
+  font-size: 0.86rem;
+}
+.oh-totals > div {
+  display: flex;
+  justify-content: space-between;
+}
+.oh-totals .oh-total {
+  font-weight: 800;
+  font-size: 0.95rem;
+  margin-top: 4px;
+}
+.oh-empty, .oh-loading {
+  margin: 0;
+  color: var(--g-muted);
+  font-size: 0.88rem;
+}

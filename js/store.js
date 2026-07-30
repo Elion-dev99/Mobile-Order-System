@@ -6,6 +6,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { resolveShopId, guestEntryUrl } from './tenant.js';
 import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
+import { orderDetailHtml, bindOrderHistoryToggles } from './order-history.js';
 
 const StorePage = {
   orders: [],
@@ -253,13 +254,46 @@ const StorePage = {
       </div>
     `).join('') || '<p class="store-muted">現在なし</p>';
     list.querySelectorAll('[data-resolve]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        try {
-          await resolveServiceRequest(btn.dataset.resolve, { tableNumber: btn.dataset.table });
-          document.title = `店舗管理 | ${getShop().name || 'QuickOrder'} (${getShopId()})`;
-        } catch (e) { console.error(e); }
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.resolve;
+        const table = btn.dataset.table;
+        btn.disabled = true;
+        btn.textContent = '済';
+        // Optimistic: drop from list immediately
+        this.requests = this.requests.filter(r => r.id !== id);
+        this.renderRequests();
+        document.title = `店舗管理 | ${getShop().name || 'QuickOrder'} (${getShopId()})`;
+        resolveServiceRequest(id, { tableNumber: table }).catch((e) => {
+          console.error(e);
+          // Snapshot will refresh if write failed
+        });
       });
     });
+  },
+
+  renderOrderHistory() {
+    let host = document.getElementById('storeOrderHistory');
+    if (!host) {
+      host = document.createElement('section');
+      host.id = 'storeOrderHistory';
+      host.className = 'store-card';
+      host.innerHTML = `<div class="store-card-head"><h2>注文履歴・明細</h2><button type="button" class="store-mini-btn" id="storeHistoryRefresh">更新</button></div><div id="storeHistoryList" class="oh-list"></div>`;
+      const soldOut = document.getElementById('soldOutPanel');
+      if (soldOut) soldOut.before(host);
+      else document.querySelector('main')?.appendChild(host);
+      document.getElementById('storeHistoryRefresh')?.addEventListener('click', () => this.renderOrderHistory());
+    }
+    const list = document.getElementById('storeHistoryList');
+    if (!list) return;
+    const rows = [...this.orders]
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, 40);
+    if (!rows.length) {
+      list.innerHTML = '<p class="store-muted">まだ注文はありません</p>';
+      return;
+    }
+    list.innerHTML = rows.map(o => orderDetailHtml(o, { showTable: true })).join('');
+    bindOrderHistoryToggles(list);
   },
 
   renderStats() {
@@ -271,6 +305,7 @@ const StorePage = {
     document.getElementById('statPending').textContent = String(pending);
     document.getElementById('statToday').textContent = String(today.length);
     document.getElementById('statGmv').textContent = `¥${yen(gmv)}`;
+    this.renderOrderHistory();
   },
 };
 

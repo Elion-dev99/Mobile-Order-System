@@ -87,6 +87,8 @@ export function subscribeServiceRequests(shopId, cb) {
 export async function resolveServiceRequest(id, { tableNumber: tableHint } = {}) {
   let tableNumber = tableHint != null ? String(tableHint) : null;
   let shopId = getShopId();
+
+  // Local unlock first so guest/store UI feels instant
   try {
     const all = JSON.parse(localStorage.getItem('mos_local_requests') || '[]');
     const hit = all.find(r => r.id === id);
@@ -98,16 +100,29 @@ export async function resolveServiceRequest(id, { tableNumber: tableHint } = {})
     }
   } catch (_) {}
 
-  try {
-    await updateDoc(doc(db, 'serviceRequests', id), { status: 'done', resolvedAt: Date.now() });
-  } catch (e) {
-    if (!String(id).startsWith('LOCAL-') && !String(id).startsWith('REQ-')) throw e;
-  }
-
   if (tableNumber != null) {
     setTableOrderingLocked(tableNumber, false);
   }
-  return { id, tableNumber, shopId };
+
+  // Fire Firestore update in background; don't block the UI on network RTT
+  const write = (async () => {
+    try {
+      await updateDoc(doc(db, 'serviceRequests', id), { status: 'done', resolvedAt: Date.now() });
+    } catch (e) {
+      if (!String(id).startsWith('LOCAL-') && !String(id).startsWith('REQ-')) {
+        console.warn('resolveServiceRequest firestore', e);
+        throw e;
+      }
+    }
+  })();
+
+  // Give the write a short head start, then return for optimistic UI
+  await Promise.race([
+    write,
+    new Promise(resolve => setTimeout(resolve, 120)),
+  ]);
+
+  return { id, tableNumber, shopId, pendingWrite: write };
 }
 
 /**

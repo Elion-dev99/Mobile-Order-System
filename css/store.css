@@ -300,3 +300,7 @@
   word-break: break-all;
   font-size: 11px;
 }
+
+/* order history uses shared .oh-* from guest.css — store tweaks */
+#storeOrderHistory .oh-card { background: #fff; }
+#storeOrderHistory .oh-card-head.is-open { background: rgba(13,92,77,0.06); }

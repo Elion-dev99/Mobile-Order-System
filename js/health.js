@@ -23,13 +23,48 @@ function withTimeout(promise, ms, label = 'timeout') {
   ]);
 }
 
-export async function probeFirestore(timeoutMs = 4000) {
+export async function probeFirestore(timeoutMs = 5000) {
   const started = Date.now();
+  const refs = [
+    doc(db, 'shops', 'default'),
+    doc(db, 'ops', 'settings'),
+    doc(db, 'shop', 'settings'),
+  ];
+
+  const attempt = async () => {
+    const results = await Promise.all(refs.map(async (ref) => {
+      try {
+        await withTimeout(getDoc(ref), timeoutMs, 'firestore_timeout');
+        return { ok: true };
+      } catch (e) {
+        const msg = String(e?.message || e);
+        // Service answered but rules denied — still counts as reachable
+        if (/permission|insufficient|PERMISSION/i.test(msg)) {
+          return { ok: true, note: 'permission_soft_ok' };
+        }
+        return { ok: false, error: msg };
+      }
+    }));
+    const good = results.find(r => r.ok);
+    if (good) return { ok: true, latencyMs: Date.now() - started, note: good.note };
+    throw new Error(results.find(r => r.error)?.error || 'firestore_unreachable');
+  };
+
   try {
-    await withTimeout(getDoc(doc(db, 'ops', 'settings')), timeoutMs, 'firestore_timeout');
-    return { ok: true, latencyMs: Date.now() - started };
+    return await attempt();
   } catch (e) {
-    return { ok: false, latencyMs: Date.now() - started, error: String(e?.message || e) };
+    try {
+      await new Promise(r => setTimeout(r, 350));
+      return await attempt();
+    } catch (e2) {
+      const err = String(e2?.message || e2);
+      return {
+        ok: false,
+        latencyMs: Date.now() - started,
+        error: err,
+        soft: /timeout/i.test(err),
+      };
+    }
   }
 }
 
@@ -53,13 +88,19 @@ export async function checkSystemHealth() {
   ]);
 
   let status = 'ok';
+  // Soft timeout alone → degraded with clearer label, not full outage panic
   if (!firestore.ok && !notifyApi.functionReady) status = 'down';
   else if (!firestore.ok || !notifyApi.functionReady) status = 'degraded';
 
   const meta = HEALTH[status] || HEALTH.ok;
+  let label = meta.label;
+  if (status === 'degraded' && firestore.soft && notifyApi.functionReady) {
+    label = '応答遅延';
+  }
+
   return {
     status,
-    label: meta.label,
+    label,
     emoji: meta.emoji,
     online: true,
     firestore,
@@ -95,7 +136,7 @@ export function playbookFor(status) {
   }
   if (status === 'down') {
     return [
-      'Firestore（注文DB）と通知APIの両方が応答していません',
+      '注文DB（Firestore）と通知APIの両方が応答していません',
       'Cloudflare Pages / Firebase Console の障害情報を確認',
       '客席はデモモードで業務継続可（本番注文は保留キューへ）',
       '復旧後に Ops で保留注文・負荷状況を確認',
@@ -103,10 +144,10 @@ export function playbookFor(status) {
   }
   if (status === 'degraded') {
     return [
-      '一部サービスのみ障害です（DBまたは通知）',
-      '注文が失敗する場合は保留キューに入ります',
-      'Discord通知だけ落ちている場合、注文自体は継続可能',
-      'Firebase / Cloudflare のステータスを確認',
+      'このバナーは定期ヘルスチェック結果です（業務停止とは限りません）',
+      'Firestore=障害 / 通知API=OK → 注文DBへの疎通が遅い、または一時的に失敗',
+      'モバイル回線の遅延でも出ることがあります。「再チェック」を押してください',
+      '注文が失敗する場合は端末の保留キューに入り、復旧後に自動再送されます',
     ];
   }
   return [

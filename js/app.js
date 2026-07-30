@@ -12,6 +12,7 @@ import {
   mountGuestServiceActions, mountWaitBadge, estimateWaitMinutes,
   subscribeTableBillLock, showBillLockOverlay, hideBillLockOverlay,
 } from './guest-features.js';
+import { mountGuestOrderHistory } from './order-history.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -75,6 +76,20 @@ const App = {
     this.subscribeBillLock();
     this.mountOrderGateBanner();
     this.subscribeKitchenLoad();
+    this.loadGuestHistory();
+    document.getElementById('guestHistoryRefresh')?.addEventListener('click', () => this.loadGuestHistory());
+  },
+
+  loadGuestHistory() {
+    const host = document.getElementById('guestHistoryList');
+    if (!host) return;
+    mountGuestOrderHistory({
+      host,
+      tableNumber: this.tableNumber,
+      locale: this.locale,
+    }).catch(() => {
+      host.innerHTML = `<p class="oh-empty">${this.locale === 'en' ? 'Could not load history' : '履歴を読めませんでした'}</p>`;
+    });
   },
 
   subscribeBillLock() {

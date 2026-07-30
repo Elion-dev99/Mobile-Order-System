@@ -360,6 +360,13 @@ body.ops-body {
   background: rgba(142, 170, 162, 0.12);
 }
 .ops-health-banner[hidden] { display: none !important; }
+.ops-health-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  opacity: 0.85;
+  line-height: 1.4;
+}
 .ops-health-playbook {
   margin: 0 0 18px;
   padding: 14px;
