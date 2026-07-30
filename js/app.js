@@ -4,7 +4,7 @@ import {
   getItemUnitPrice, isSaleActive, getOrderingBlockReason,
 } from './shop.js';
 import { ITEM_I18N, CAT_I18N, ALLERGEN_I18N, UI_I18N } from './i18n-menu.js';
-import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
+import { activateDemoFromUrl, cartStorageKey, ensureDemoBanner, isDemoMode } from './demo.js';
 import { resolveShopId } from './tenant.js';
 import { db } from './firebase.js';
 import { collection, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
