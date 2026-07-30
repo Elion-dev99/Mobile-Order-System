@@ -1186,6 +1186,8 @@ const AdminPage = {
     }
     const posEl = document.getElementById('analyticsPosStatus');
     if (posEl) posEl.textContent = posStatusLabel(shop);
+    const autoPrint = document.getElementById('autoPrintToggle');
+    if (autoPrint) autoPrint.checked = !!shop.autoPrintOnOrder;
   },
 
   subscribeEnterprisePanels() {

@@ -523,10 +523,11 @@ const StorePage = {
       host = document.createElement('section');
       host.id = 'storeRequests';
       host.className = 'store-card';
-      host.innerHTML = `<h2>呼出・会計</h2><div id="storeRequestList"></div>`;
+      host.innerHTML = `<div class="store-card-head"><h2>呼出・会計</h2></div><div id="storeRequestList"></div>`;
       document.querySelector('main')?.prepend(host);
     }
     const list = document.getElementById('storeRequestList');
+    if (!list) return;
     list.innerHTML = this.requests.map(r => {
       const note = (r.note || '').toLowerCase();
       let label = r.type === 'bill' ? '会計' : '店員呼出';
