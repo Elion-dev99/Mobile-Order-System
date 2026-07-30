@@ -216,6 +216,10 @@ export async function runCardinalCycle({
 
   const actions = [];
 
+  if (heal.maintenance && !heal.maintenance.skipped) {
+    actions.push({ type: 'auto_maintenance', result: heal.maintenance });
+  }
+
   // Persistent outage → Executor
   if (health.status === 'down' || (health.status === 'degraded' && (heal.streak || 0) >= escalateAfterFails)) {
     const r = await dispatchRole('executor', {
@@ -223,7 +227,10 @@ export async function runCardinalCycle({
       severity: health.status === 'down' ? 'critical' : 'warning',
       title: '本番ヘルス異常の自動修正',
       summary: `Cardinal検知: ${health.label}（連続${heal.streak || 0}回）`,
-      message: 'Guardian 相当の監視が障害を検知。Executor として原因調査・修正PR・フォールバック強化を行ってください。',
+      message: [
+        'Guardian 相当の監視が障害を検知。Executor として原因調査・修正PR・フォールバック強化を行ってください。',
+        '自動メンテナンスが ON の場合、復旧後に Cardinal が解除します（手動メンテは触らない）。',
+      ].join('\n'),
       status: health.status,
       firestoreOk: !!health.firestore?.ok,
       notifyApiOk: !!health.notifyApi?.functionReady,
@@ -231,6 +238,7 @@ export async function runCardinalCycle({
         '原因を特定して報告',
         '直せるなら draft PR',
         '客席の保留キューと health 監視を壊さない',
+        '自動メンテナンス状態を確認',
       ],
     });
     actions.push({ type: 'dispatch_executor_health', result: r });

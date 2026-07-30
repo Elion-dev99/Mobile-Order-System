@@ -14,6 +14,7 @@
 | Leads / surveys read | Signed-in only (LP may still **create** leads) |
 | Discord | Prefer Cloudflare `DISCORD_WEBHOOK_URL`; client webhook needs Ops secret |
 | `platform/config` | Public **read** (maintenance flag). **Write** = Firebase Auth (Ops). Guest creates (orders/leads/requests/…) denied while `maintenance == true` |
+| `GET /api/maintenance` | Public edge copy of maintenance (Cache API). Cardinal tick / Ops POST with `OPS_API_SECRET` can set it when Firestore is down |
 
 ## Firebase Auth setup (one-shot)
 

@@ -16,8 +16,15 @@
  */
 
 import { requireOpsSecret, corsHeaders, getOpsSecret } from './_ops-auth.js';
+import {
+  readMaintenanceState,
+  writeMaintenanceState,
+  DEFAULT_MESSAGE as MAINT_DEFAULT_MESSAGE,
+} from './_maintenance-store.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
+const FIRESTORE_PROBE =
+  'https://firestore.googleapis.com/v1/projects/mobile-order-system-c7c70/databases/(default)/documents/shops/default';
 
 function json(data, status = 200, request = null) {
   return new Response(JSON.stringify(data), {
@@ -260,12 +267,12 @@ export async function onRequestPost(context) {
     });
   }
 
-  // Hourly/ cron tick: probe site, only wake agents when unhealthy (or force)
+  // Hourly/ cron tick: probe site + Firestore, auto maintenance, wake agents
   if (action === 'tick') {
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
     const force = !!body.force;
     const probes = {};
-    for (const path of ['/', '/api/cardinal', '/api/notify', '/ops.html']) {
+    for (const path of ['/', '/api/cardinal', '/api/notify', '/api/maintenance', '/ops.html']) {
       const started = Date.now();
       try {
         const res = await fetch(`${base}${path}`, {
@@ -278,7 +285,78 @@ export async function onRequestPost(context) {
         probes[path] = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
       }
     }
-    const unhealthy = Object.values(probes).some((p) => !p.ok);
+    // Firestore public REST — detects order-DB outage even when Pages is fine
+    {
+      const started = Date.now();
+      try {
+        const res = await fetch(FIRESTORE_PROBE, {
+          method: 'GET',
+          headers: { 'user-agent': 'QuickOrder-Cardinal-Tick/1.0' },
+        });
+        // 2xx/404 = API reachable; 5xx/network = down
+        probes.firestore = {
+          ok: res.status > 0 && res.status < 500,
+          status: res.status,
+          ms: Date.now() - started,
+        };
+      } catch (e) {
+        probes.firestore = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
+      }
+    }
+
+    const siteDown = ['/', '/ops.html'].some((p) => !probes[p]?.ok);
+    const apiDown = !probes['/api/notify']?.ok || !probes['/api/cardinal']?.ok;
+    const firestoreDown = !probes.firestore?.ok;
+    // Auto-maintenance: order path broken (Firestore) or site/API hard down
+    const shouldMaintain = firestoreDown || siteDown || apiDown;
+    const unhealthy = shouldMaintain || Object.values(probes).some((p) => !p.ok);
+
+    let maintenance = null;
+    try {
+      const prev = await readMaintenanceState(context.caches);
+      if (shouldMaintain) {
+        maintenance = await writeMaintenanceState(context.caches, {
+          maintenance: true,
+          message: MAINT_DEFAULT_MESSAGE,
+          updatedBy: 'cardinal-tick',
+          source: 'cardinal',
+          auto: true,
+        });
+        if (!prev.maintenance) {
+          await postDiscord(env, body, {
+            title: 'Cardinal: 自動メンテナンス開始',
+            color: 0xed4245,
+            fields: [
+              { name: '理由', value: firestoreDown ? 'Firestore障害' : (siteDown ? 'サイト障害' : 'API障害'), inline: true },
+              { name: '案内', value: MAINT_DEFAULT_MESSAGE, inline: false },
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: 'QuickOrder Cardinal' },
+          }).catch(() => {});
+        }
+      } else if (prev.maintenance && (prev.auto || prev.source === 'cardinal')) {
+        maintenance = await writeMaintenanceState(context.caches, {
+          maintenance: false,
+          updatedBy: 'cardinal-tick',
+          source: 'cardinal',
+          auto: true,
+        });
+        await postDiscord(env, body, {
+          title: 'Cardinal: 自動メンテナンス解除',
+          color: 0x57f287,
+          fields: [
+            { name: '状態', value: 'プローブ正常のため解除', inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+          footer: { text: 'QuickOrder Cardinal' },
+        }).catch(() => {});
+      } else {
+        maintenance = prev;
+      }
+    } catch (e) {
+      maintenance = { ok: false, error: String(e?.message || e) };
+    }
+
     let dispatch = null;
     if (unhealthy || force) {
       const role = unhealthy ? 'executor' : 'guardian';
@@ -291,15 +369,15 @@ export async function onRequestPost(context) {
           : '定期監視（強制）。Guardian として短く健全性を報告してください。',
         message: [
           unhealthy
-            ? 'あなたは Cardinal Executor です。プローブ結果を見て原因調査し、直せるなら draft PR を作成。'
+            ? 'あなたは Cardinal Executor です。プローブ結果を見て原因調査し、直せるなら draft PR を作成。自動メンテナンスが ON の場合は復旧後に解除されるか確認。'
             : 'あなたは Cardinal Guardian です。プローブ結果を確認し短く報告。大きなコード変更は不要。',
           '',
           '```json',
-          JSON.stringify({ base, probes }, null, 2).slice(0, 4000),
+          JSON.stringify({ base, probes, maintenance }, null, 2).slice(0, 4000),
           '```',
         ].join('\n'),
         acceptance: unhealthy
-          ? ['原因特定', 'draft PR または外部障害の説明', '客席フォールバックを壊さない']
+          ? ['原因特定', 'draft PR または外部障害の説明', '客席フォールバックを壊さない', '自動メンテ状態を確認']
           : ['健全性の短報', 'コード変更なしで可'],
       }, body);
     } else {
@@ -308,7 +386,7 @@ export async function onRequestPost(context) {
         color: 0x57f287,
         fields: Object.entries(probes).map(([path, p]) => ({
           name: path,
-          value: p.ok ? `OK ${p.status} (${p.ms}ms)` : `NG ${p.error || p.status}`,
+          value: p.ok ? `OK ${p.status || ''} (${p.ms}ms)` : `NG ${p.error || p.status}`,
           inline: true,
         })),
         timestamp: new Date().toISOString(),
@@ -320,7 +398,9 @@ export async function onRequestPost(context) {
       ok: true,
       action: 'tick',
       unhealthy,
+      shouldMaintain,
       probes,
+      maintenance,
       dispatched: !!dispatch?.launched,
       dispatch,
     });
