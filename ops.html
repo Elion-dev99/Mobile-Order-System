@@ -53,6 +53,7 @@
     <button type="button" data-ops-tab="requests">呼出</button>
     <button type="button" data-ops-tab="surveys">アンケート</button>
     <button type="button" data-ops-tab="lab">テスト</button>
+    <button type="button" data-ops-tab="cardinal">Cardinal</button>
     <button type="button" data-ops-tab="security">鍵</button>
   </nav>
 
@@ -75,6 +76,7 @@
         <ul id="opsHealthPlaybookList" class="ops-checklist"></ul>
         <button type="button" id="opsHealthRecheck" class="ops-btn-secondary">再チェック</button>
         <button type="button" id="opsHealthNotify" class="ops-btn-secondary">状態をDiscordへ送信</button>
+        <button type="button" id="opsHealthAutoFix" class="ops-btn">Cursorに自動対処を依頼</button>
         <p id="opsHealthStatus" class="ops-status" hidden></p>
       </div>
       <h2>店舗別きょう</h2>
@@ -209,6 +211,46 @@
           <thead><tr><th>機能</th><th>状態</th><th>根拠</th></tr></thead>
           <tbody id="featureMatrix"></tbody>
         </table>
+      </div>
+    </section>
+
+    <section data-ops-panel="cardinal" hidden>
+      <h2>Cardinal — 双AI相互監視</h2>
+      <p class="ops-muted">SAOのカーディナルに着想した <strong>Guardian（監視）</strong> と <strong>Executor（実行）</strong> の2体構成です。お互いの心拍を監視し、障害時は人の手を借りず調査・修正・再起動判断まで回します。</p>
+
+      <div class="ops-cards" id="cardinalCards">
+        <div class="ops-card"><span>Guardian</span><strong id="cardinalGuardianStatus">—</strong></div>
+        <div class="ops-card"><span>Executor</span><strong id="cardinalExecutorStatus">—</strong></div>
+        <div class="ops-card"><span>サイクル</span><strong id="cardinalCycles">0</strong></div>
+        <div class="ops-card"><span>ディスパッチ</span><strong id="cardinalDispatches">0</strong></div>
+        <div class="ops-card"><span>AutoHeal連続失敗</span><strong id="cardinalHealStreak">0</strong></div>
+        <div class="ops-card"><span>API</span><strong id="cardinalApiStatus">確認中</strong></div>
+      </div>
+
+      <div class="ops-health-playbook">
+        <h2>いま動いていること</h2>
+        <ul class="ops-checklist">
+          <li>Ops を開いている間、クライアント側 Cardinal が 60秒ごとにヘルス＋心拍を回します</li>
+          <li>障害が続くと Executor（修正AI）を起動、相手の心拍が途切れると監視側を起こします</li>
+          <li>常駐の「本当の2体」は Cursor Automations（cron / webhook）です — 下の設定を一度だけ</li>
+        </ul>
+        <button type="button" id="opsCardinalCycle" class="ops-btn-secondary">今すぐ1サイクル実行</button>
+        <button type="button" id="opsCardinalDrill" class="ops-btn">2体ドリル起動</button>
+        <button type="button" id="opsCardinalRefresh" class="ops-btn-secondary">状態更新</button>
+        <p id="opsCardinalStatus" class="ops-status" hidden></p>
+        <pre id="opsCardinalLog" class="ops-muted" style="white-space:pre-wrap;max-height:220px;overflow:auto;margin-top:12px;padding:12px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
+      </div>
+
+      <div class="ops-health-playbook" id="opsCardinalSetup">
+        <h2>一度だけの設定（人間ゲート）</h2>
+        <ol class="ops-steps">
+          <li><a href="https://cursor.com/automations" target="_blank" rel="noopener">Cursor Automations</a> で <strong>Guardian</strong> と <strong>Executor</strong> を作成</li>
+          <li>各 Automation の Webhook URL / API key を控える（または Cursor API Key を1つ）</li>
+          <li>GitHub Actions「Configure Cursor Cardinal」で Cloudflare Pages secrets に投入</li>
+          <li>Discord Webhook は通知タブで保存済みなら流用されます</li>
+          <li>詳細プロトコル: <code>docs/cardinal.md</code></li>
+        </ol>
+        <p class="ops-muted">マージ判断だけは当面人間が残します。検知・調査・修正PR・相互監視は Cardinal が担います。</p>
       </div>
     </section>
 

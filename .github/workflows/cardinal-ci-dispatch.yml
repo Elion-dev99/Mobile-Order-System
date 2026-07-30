@@ -1,0 +1,44 @@
+name: Cardinal CI → Guardian signal
+
+# When CI fails on main/PRs, post a lightweight Discord notice.
+# Full Cursor dispatch still goes through /api/cardinal once secrets are set;
+# this workflow is the GitHub-side watchdog half of Cardinal.
+
+on:
+  workflow_run:
+    workflows: ["Deploy to Cloudflare Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  signal:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Notify failure (optional Discord)
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "No DISCORD_WEBHOOK_URL secret — skip"
+            exit 0
+          fi
+          CONCLUSION="${{ github.event.workflow_run.conclusion || 'manual' }}"
+          RUN_URL="${{ github.event.workflow_run.html_url || github.server_url }}/${{ github.repository }}/actions"
+          BODY=$(printf '%s' "{
+            \"username\": \"QuickOrder Cardinal\",
+            \"embeds\": [{
+              \"title\": \"Guardian信号: CI/Deploy = ${CONCLUSION}\",
+              \"description\": \"Executor に調査を回す候補です。Ops Cardinal タブまたは Automations を確認してください。\",
+              \"color\": 15158332,
+              \"fields\": [
+                {\"name\": \"repo\", \"value\": \"${{ github.repository }}\", \"inline\": true},
+                {\"name\": \"ref\", \"value\": \"${{ github.event.workflow_run.head_branch || github.ref_name }}\", \"inline\": true}
+              ],
+              \"url\": \"${RUN_URL}\"
+            }]
+          }")
+          curl -sS -X POST -H 'content-type: application/json' -d "$BODY" "$DISCORD_WEBHOOK_URL" >/dev/null || true
