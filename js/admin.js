@@ -252,10 +252,15 @@ const AdminPage = {
         </div>
       `).join('');
       host.querySelectorAll('[data-resolve]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          try {
-            await resolveServiceRequest(btn.dataset.resolve, { tableNumber: btn.dataset.table });
-          } catch (e) { console.error(e); }
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.resolve;
+          const table = btn.dataset.table;
+          btn.disabled = true;
+          btn.textContent = '…';
+          // Optimistic hide this chip
+          btn.closest('.admin-req-chip')?.remove();
+          if (!host.querySelector('.admin-req-chip')) host.hidden = true;
+          resolveServiceRequest(id, { tableNumber: table }).catch((e) => console.error(e));
         });
       });
     });
@@ -351,7 +356,7 @@ const AdminPage = {
             }).join('')}
           </div>
           <div style="font-size:13px;font-weight:700;color:#A0AEC0;margin-bottom:10px;">
-            合計: ¥${(order.total || 0).toLocaleString()}
+            小計 ¥${(order.subtotal || 0).toLocaleString()} · 税 ¥${(order.tax || 0).toLocaleString()} · 合計 ¥${(order.total || 0).toLocaleString()}
           </div>
           <div class="admin-action-row">${actionBtns}</div>
         </div>`;

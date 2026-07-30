@@ -5,6 +5,7 @@ import { activateDemoFromUrl, withDemo, ensureDemoBanner, isDemoMode } from './d
 import { resolveShopId } from './tenant.js';
 import { loadShop } from './shop.js';
 import { mountSurveyCard } from './guest-features.js';
+import { mountGuestOrderHistory } from './order-history.js';
 
 const StatusPage = {
   order: null,
@@ -46,6 +47,19 @@ const StatusPage = {
     if (isDemoMode()) this.runDemoOrder();
     else this.subscribeToOrder();
     this.startETA();
+    this.loadTableHistory();
+  },
+
+  loadTableHistory() {
+    const host = document.getElementById('statusTableHistory');
+    if (!host) return;
+    mountGuestOrderHistory({
+      host,
+      tableNumber: this.tableNumber,
+      locale: 'ja',
+    }).catch(() => {
+      host.innerHTML = '<p class="oh-empty">履歴を読めませんでした</p>';
+    });
   },
 
   ensurePinAccess() {
