@@ -1547,3 +1547,30 @@ img { max-width: 100%; }
   .billing-cards { grid-template-columns: 1fr; }
 }
 
+
+.admin-requests-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #1c2a28;
+}
+.admin-req-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #2c3f3b;
+  color: #e8fff6;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.admin-req-chip button {
+  border: 0;
+  border-radius: 999px;
+  background: #3dcf9a;
+  color: #06261b;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+}

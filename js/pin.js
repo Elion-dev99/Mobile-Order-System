@@ -1,5 +1,10 @@
-const PIN_STORAGE_KEY = 'mos_table_pins';
+import { scopedKey, resolveShopId } from './tenant.js';
+
 const PIN_AUTH_KEY = 'mos_table_pin_auth';
+
+function pinStorageKey() {
+  return scopedKey('mos_table_pins');
+}
 
 function safeParse(value) {
   try {
@@ -11,11 +16,14 @@ function safeParse(value) {
 
 export const TablePin = {
   loadPins() {
-    return safeParse(localStorage.getItem(PIN_STORAGE_KEY));
+    const scoped = safeParse(localStorage.getItem(pinStorageKey()));
+    if (Object.keys(scoped).length) return scoped;
+    // legacy global fallback
+    return safeParse(localStorage.getItem('mos_table_pins'));
   },
 
   savePins(pins) {
-    localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pins));
+    localStorage.setItem(pinStorageKey(), JSON.stringify(pins));
     return pins;
   },
 
@@ -51,11 +59,11 @@ export const TablePin = {
   },
 
   loadAuth() {
-    return safeParse(sessionStorage.getItem(PIN_AUTH_KEY));
+    return safeParse(sessionStorage.getItem(scopedKey(PIN_AUTH_KEY)));
   },
 
   saveAuth(auth) {
-    sessionStorage.setItem(PIN_AUTH_KEY, JSON.stringify(auth));
+    sessionStorage.setItem(scopedKey(PIN_AUTH_KEY), JSON.stringify(auth));
     return auth;
   },
 
@@ -75,5 +83,9 @@ export const TablePin = {
     const auth = this.loadAuth();
     delete auth[tableNumber];
     this.saveAuth(auth);
+  },
+
+  shopId() {
+    return resolveShopId();
   },
 };

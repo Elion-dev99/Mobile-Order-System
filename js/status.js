@@ -2,6 +2,9 @@ import { db } from './firebase.js';
 import { TablePin } from './pin.js';
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { activateDemoFromUrl, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
+import { resolveShopId } from './tenant.js';
+import { loadShop } from './shop.js';
+import { mountSurveyCard } from './guest-features.js';
 
 const StatusPage = {
   order: null,
@@ -20,9 +23,11 @@ const StatusPage = {
 
   statusToStep: { received: 0, cooking: 1, finishing: 2, done: 3 },
 
-  init() {
+  async init() {
     activateDemoFromUrl();
+    resolveShopId();
     ensureDemoBanner();
+    await loadShop();
     const params = new URLSearchParams(location.search);
     this.orderId = params.get('order');
     this.tableNumber = params.get('table') || (isDemoMode() ? 'デモ' : '1');
@@ -81,7 +86,6 @@ const StatusPage = {
     this.renderOrderSummary();
     this.updateTimeline(order.status || 'received');
 
-    // Auto-advance demo kitchen flow
     this.demoTimers.push(setTimeout(() => this.applyDemoStatus('cooking'), 2500));
     this.demoTimers.push(setTimeout(() => this.applyDemoStatus('finishing'), 5500));
     this.demoTimers.push(setTimeout(() => this.applyDemoStatus('done'), 8500));
@@ -146,6 +150,7 @@ const StatusPage = {
       this.etaMinutes = 0;
       this.updateETA();
       if (this.unsubscribe) this.unsubscribe();
+      mountSurveyCard({ orderId: this.orderId, locale: 'ja' });
     }
   },
 
@@ -160,9 +165,9 @@ const StatusPage = {
   },
 
   updateETA() {
-    const el = document.getElementById('etaTime');
+    const el = document.getElementById('etaTime') || document.getElementById('etaMinutes');
     if (!el) return;
-    el.textContent = this.etaMinutes === 0 ? '完成！' : `約${this.etaMinutes}分`;
+    el.textContent = this.etaMinutes > 0 ? `約${this.etaMinutes}分` : '完成！';
   },
 };
 

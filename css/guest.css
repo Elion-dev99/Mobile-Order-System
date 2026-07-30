@@ -537,3 +537,96 @@ body.guest .status-action-bar {
   }
   body.guest .guest-allergen { margin-left: auto; margin-right: auto; width: calc(100% - 32px); }
 }
+
+/* —— Tenant / industry guest features —— */
+.guest-service-bar {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 10px;
+}
+.guest-service-bar button {
+  flex: 1;
+  border: 1px solid var(--g-line);
+  background: rgba(255,255,255,0.7);
+  color: var(--g-ink);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.guest-wait-badge {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--g-muted);
+  font-weight: 600;
+}
+.menu-card.sold-out { opacity: 0.55; }
+.soldout-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #efe6df;
+  color: #8a4b2d;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.cart-upsells {
+  margin: 16px 0 8px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+}
+.cart-upsells h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+.cart-upsell-list { display: grid; gap: 8px; }
+.cart-upsell-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--g-line);
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.guest-survey {
+  margin: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-line);
+  animation: guestRise 0.45s ease both;
+}
+.guest-survey h3 { margin: 0 0 4px; }
+.guest-survey p { margin: 0 0 10px; color: var(--g-muted); font-size: 0.85rem; }
+.guest-survey-scores { display: flex; gap: 8px; margin-bottom: 10px; }
+.guest-survey-scores button {
+  width: 40px; height: 40px; border-radius: 12px;
+  border: 1px solid var(--g-line); background: #fff; font: inherit; cursor: pointer;
+}
+.guest-survey-scores button.active {
+  background: var(--g-accent); color: #fff; border-color: var(--g-accent);
+}
+.guest-survey textarea {
+  width: 100%; border-radius: 12px; border: 1px solid var(--g-line);
+  padding: 10px; font: inherit; margin-bottom: 10px; resize: vertical;
+}
+.guest-survey-send {
+  width: 100%; padding: 12px; border: 0; border-radius: 12px;
+  background: var(--g-accent); color: #fff; font-weight: 700; cursor: pointer;
+}
+.guest-survey-thanks { margin: 0; font-weight: 700; color: var(--g-accent); }
+body.shop-closed::after {
+  content: "現在準備中です";
+  position: sticky; bottom: 80px; display: block; text-align: center;
+  margin: 12px; padding: 10px; border-radius: 12px;
+  background: #1c1c1e; color: #fff; font-weight: 700;
+}

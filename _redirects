@@ -1,0 +1,10 @@
+/s/:shop /index.html?shop=:shop 200
+/s/:shop/ /index.html?shop=:shop 200
+/s/:shop/cart /cart.html?shop=:shop 200
+/s/:shop/cart.html /cart.html?shop=:shop 200
+/s/:shop/status /status.html?shop=:shop 200
+/s/:shop/status.html /status.html?shop=:shop 200
+/s/:shop/admin /admin.html?shop=:shop 200
+/s/:shop/admin.html /admin.html?shop=:shop 200
+/s/:shop/store /store.html?shop=:shop 200
+/s/:shop/store.html /store.html?shop=:shop 200

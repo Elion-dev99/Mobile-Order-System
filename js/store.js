@@ -1,22 +1,41 @@
-import { loadShop, saveShop, getShop, isSubscribed } from './shop.js';
+import { loadShop, saveShop, getShop, isSubscribed, getShopId, getMenu, loadMenu, setItemSoldOut, isItemSoldOut } from './shop.js';
 import { getPlan, yen } from './plans.js';
 import { db } from './firebase.js';
 import {
-  collection, onSnapshot, query, orderBy
+  collection, onSnapshot, query, where, orderBy
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { resolveShopId, guestEntryUrl } from './tenant.js';
+import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
 
 const StorePage = {
   orders: [],
+  requests: [],
 
   async init() {
-    await loadShop();
+    resolveShopId();
+    await Promise.all([loadShop(), loadMenu()]);
     this.bind();
+    this.patchNav();
     this.renderProfile();
     this.renderTables();
     this.renderMeta();
+    this.renderSoldOut();
     this.subscribeOrders();
+    this.subscribeRequests();
     setInterval(() => this.tickClock(), 1000);
     this.tickClock();
+  },
+
+  patchNav() {
+    const id = getShopId();
+    const set = (sel, href) => {
+      const el = document.querySelector(sel);
+      if (el) el.setAttribute('href', href);
+    };
+    set('#navAdmin', `admin.html?shop=${encodeURIComponent(id)}`);
+    set('#navMenu', `admin.html?shop=${encodeURIComponent(id)}&view=menu`);
+    set('#navAnalytics', `admin.html?shop=${encodeURIComponent(id)}&view=analytics`);
+    set('#navGuest', guestEntryUrl(id, 1));
   },
 
   bind() {
@@ -64,8 +83,9 @@ const StorePage = {
     const shop = getShop();
     const plan = getPlan(shop.planId);
     document.getElementById('storeTitle').textContent = shop.name || 'QuickOrder';
-    document.title = `店舗管理 | ${shop.name || 'QuickOrder'}`;
+    document.title = `店舗管理 | ${shop.name || 'QuickOrder'} (${getShopId()})`;
     const sub = [
+      getShopId(),
       plan.name,
       shop.hoursNote || '営業時間未設定',
       isSubscribed() ? '課金中' : '未課金',
@@ -93,9 +113,7 @@ const StorePage = {
   },
 
   tableUrl(n) {
-    const u = new URL('index.html', location.href);
-    u.searchParams.set('table', String(n));
-    return u.href;
+    return new URL(guestEntryUrl(getShopId(), n), location.href).href;
   },
 
   renderTables() {
@@ -129,13 +147,76 @@ const StorePage = {
     });
   },
 
+  renderSoldOut() {
+    let host = document.getElementById('soldOutPanel');
+    if (!host) {
+      host = document.createElement('section');
+      host.id = 'soldOutPanel';
+      host.className = 'store-card';
+      host.innerHTML = `<h2>品切れ管理</h2><div id="soldOutList"></div>`;
+      document.querySelector('main')?.appendChild(host)
+        || document.body.appendChild(host);
+    }
+    const list = document.getElementById('soldOutList');
+    const items = getMenu().items || [];
+    list.innerHTML = items.map(item => `
+      <label class="store-soldout-row">
+        <input type="checkbox" data-soldout="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}>
+        <span>${item.emoji || ''} ${item.name}</span>
+      </label>
+    `).join('');
+    list.querySelectorAll('[data-soldout]').forEach(input => {
+      input.addEventListener('change', async () => {
+        await setItemSoldOut(input.dataset.soldout, input.checked);
+      });
+    });
+  },
+
   subscribeOrders() {
-    const q = query(collection(db, 'orders'), orderBy('timestamp', 'desc'));
+    const q = query(
+      collection(db, 'orders'),
+      where('shopId', '==', getShopId()),
+      orderBy('timestamp', 'desc')
+    );
     onSnapshot(q, snap => {
       this.orders = snap.docs.map(d => d.data());
       this.renderStats();
     }, () => {
-      this.renderStats();
+      // fallback: all orders filtered client-side (missing index)
+      onSnapshot(query(collection(db, 'orders'), orderBy('timestamp', 'desc')), snap => {
+        this.orders = snap.docs.map(d => d.data()).filter(o => (o.shopId || 'default') === getShopId());
+        this.renderStats();
+      }, () => this.renderStats());
+    });
+  },
+
+  subscribeRequests() {
+    this.unsubReq = subscribeServiceRequests(getShopId(), (rows) => {
+      this.requests = rows.filter(r => r.status === 'open');
+      this.renderRequests();
+    });
+  },
+
+  renderRequests() {
+    let host = document.getElementById('storeRequests');
+    if (!host) {
+      host = document.createElement('section');
+      host.id = 'storeRequests';
+      host.className = 'store-card';
+      host.innerHTML = `<h2>呼出・会計</h2><div id="storeRequestList"></div>`;
+      document.querySelector('main')?.prepend(host);
+    }
+    const list = document.getElementById('storeRequestList');
+    list.innerHTML = this.requests.map(r => `
+      <div class="store-req-row">
+        <span><strong>${r.type === 'bill' ? '会計' : '店員'}</strong> 席${r.tableNumber}</span>
+        <button type="button" data-resolve="${r.id}">対応済</button>
+      </div>
+    `).join('') || '<p class="store-muted">現在なし</p>';
+    list.querySelectorAll('[data-resolve]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try { await resolveServiceRequest(btn.dataset.resolve); } catch (e) { console.error(e); }
+      });
     });
   },
 

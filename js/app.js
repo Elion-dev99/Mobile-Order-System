@@ -1,7 +1,13 @@
 import { TablePin } from './pin.js';
-import { loadShop, loadMenu, getShop, getMenu } from './shop.js';
+import { loadShop, loadMenu, getShop, getMenu, getShopId, isItemSoldOut } from './shop.js';
 import { ITEM_I18N, CAT_I18N, ALLERGEN_I18N, UI_I18N } from './i18n-menu.js';
 import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
+import { resolveShopId } from './tenant.js';
+import { db } from './firebase.js';
+import { collection, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import {
+  mountGuestServiceActions, mountWaitBadge, estimateWaitMinutes
+} from './guest-features.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -28,13 +34,19 @@ const App = {
 
   async init() {
     activateDemoFromUrl();
+    resolveShopId();
     ensureDemoBanner();
     this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
     await Promise.all([loadShop(), loadMenu()]);
     const shop = getShop();
+    if (shop.isOpen === false && !isDemoMode()) {
+      document.body.classList.add('shop-closed');
+    }
     const brand = isDemoMode() ? `${shop.name || 'QuickOrder'}（デモ）` : (shop.name || 'QuickOrder');
     document.querySelectorAll('.nav-large-title').forEach(el => { el.textContent = brand; });
-    document.title = isDemoMode() ? `${shop.name || 'QuickOrder'} | テストモード` : (shop.name || 'Menu');
+    document.title = isDemoMode()
+      ? `${shop.name || 'QuickOrder'} | テストモード`
+      : `${shop.name || 'Menu'} | ${getShopId()}`;
 
     try {
       this.locale = localStorage.getItem('mos_locale') || shop.locale || 'ja';
@@ -50,6 +62,34 @@ const App = {
     this.renderMenu();
     this.bindEvents();
     this.updateCartBar();
+    mountGuestServiceActions({
+      tableNumber: this.tableNumber,
+      locale: this.locale,
+      onToast: showToast,
+    });
+    this.subscribeKitchenLoad();
+  },
+
+  subscribeKitchenLoad() {
+    if (isDemoMode()) {
+      mountWaitBadge(5, this.locale);
+      return;
+    }
+    try {
+      const q = query(
+        collection(db, 'orders'),
+        where('shopId', '==', getShopId()),
+        orderBy('timestamp', 'desc')
+      );
+      onSnapshot(q, snap => {
+        const orders = snap.docs.map(d => d.data());
+        mountWaitBadge(estimateWaitMinutes(orders), this.locale);
+      }, () => {
+        mountWaitBadge(8, this.locale);
+      });
+    } catch (_) {
+      mountWaitBadge(8, this.locale);
+    }
   },
 
   t(key) {
@@ -239,6 +279,7 @@ const App = {
   filteredItems() {
     const MENU_DATA = getMenu();
     return MENU_DATA.items.filter(item => {
+      if (isItemSoldOut(item.id)) return true; // still show, marked sold out
       const allergenMatch = this.activeAllergens.length === 0 ||
         !this.activeAllergens.some(a => (item.allergens || []).includes(a));
       const text = this.itemText(item);
@@ -294,6 +335,7 @@ const App = {
 
   renderCard(item) {
     const text = this.itemText(item);
+    const soldOut = isItemSoldOut(item.id);
     const qty = this.qtyForItem(item.id);
     const customizable = this.isCustomizable(item);
     const allergenHTML = (item.allergens || []).map(a => {
@@ -301,7 +343,9 @@ const App = {
       return `<span class="allergen-tag ${matched ? 'matched' : ''}">${this.allergenLabel(a)}</span>`;
     }).join('');
 
-    const controls = customizable
+    const controls = soldOut
+      ? `<span class="soldout-pill">${this.locale === 'en' ? 'Sold out' : '品切れ'}</span>`
+      : customizable
       ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : '＋'}</button>`
       : qty > 0
         ? `<div class="qty-stepper" data-id="${item.id}">
@@ -312,7 +356,7 @@ const App = {
         : `<button class="add-btn" type="button" data-action="plus" aria-label="${text.name}">＋</button>`;
 
     return `
-      <article class="menu-card ${qty > 0 ? 'in-cart' : ''}" data-id="${item.id}">
+      <article class="menu-card ${qty > 0 ? 'in-cart' : ''} ${soldOut ? 'sold-out' : ''}" data-id="${item.id}">
         <div class="menu-card-emoji" aria-hidden="true">${item.emoji || ''}</div>
         <div class="menu-card-body">
           <div class="menu-card-header">
@@ -321,7 +365,7 @@ const App = {
           </div>
           <div class="menu-card-desc">${text.description}</div>
           ${allergenHTML ? `<div class="allergen-tags">${allergenHTML}</div>` : ''}
-          ${customizable ? `<div class="custom-hint">${this.t('customize')}</div>` : ''}
+          ${customizable && !soldOut ? `<div class="custom-hint">${this.t('customize')}</div>` : ''}
           <div class="menu-card-footer">
             <div class="menu-card-price">¥${item.price.toLocaleString()}<span>${this.t('tax')}</span></div>
             ${controls}
@@ -337,6 +381,7 @@ const App = {
       if (!item) return;
 
       card.addEventListener('click', e => {
+        if (isItemSoldOut(itemId)) return;
         if (e.target.closest('button') || e.target.closest('.qty-stepper')) return;
         this.openModal(itemId);
       });
@@ -344,6 +389,7 @@ const App = {
       card.querySelectorAll('[data-action]').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
+          if (isItemSoldOut(itemId)) return;
           const action = btn.dataset.action;
           if (action === 'customize' || (action === 'plus' && this.isCustomizable(item))) {
             this.openModal(itemId);

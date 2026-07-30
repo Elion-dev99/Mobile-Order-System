@@ -1,13 +1,15 @@
 import { db } from './firebase.js';
 import {
-  loadShop, saveShop, ensureMenuSeeded, saveMenu, getMenu, getShop,
-  isSubscribed, markSubscribed
+  loadShop, saveShop, ensureMenuSeeded, saveMenu, getMenu, getShop, getShopId,
+  isSubscribed, markSubscribed, setItemSoldOut, isItemSoldOut
 } from './shop.js';
 import { PLANS } from './config.js';
 import { getPlan, yen, estimateMrr, estimateArr, featureEnabled } from './plans.js';
+import { resolveShopId, scopedKey, withShop, guestEntryUrl } from './tenant.js';
 import {
-  collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy
+  collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, where
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
 
 const AdminPage = {
   filter: 'received',
@@ -20,13 +22,14 @@ const AdminPage = {
   soundReady: false,
 
   async init() {
+    resolveShopId();
     this.updateClock();
     setInterval(() => this.updateClock(), 1000);
 
     const params = new URLSearchParams(location.search);
     if (params.get('billing') === 'success') {
       await markSubscribed();
-      history.replaceState({}, '', 'admin.html');
+      history.replaceState({}, '', withShop('admin.html'));
       alert('課金が有効になりました。ありがとうございます。');
     }
 
@@ -34,17 +37,32 @@ const AdminPage = {
     this.menuDraft = await ensureMenuSeeded();
     this.applyShopBranding();
     this.bindChrome();
+    this.patchNavLinks();
 
     if (!this.ensureAdminAccess()) return;
 
     this.subscribeToOrders();
     this.subscribeToLeads();
+    this.subscribeRequests();
     this.renderMenuEditor();
     this.renderBilling();
     this.renderAnalytics();
     this.renderSettingsForm();
 
     if (params.get('view')) this.setView(params.get('view'));
+  },
+
+  patchNavLinks() {
+    document.querySelectorAll('a[href]').forEach(a => {
+      const href = a.getAttribute('href') || '';
+      if (!href || href.startsWith('http') || href.startsWith('#') || href.startsWith('mailto:')) return;
+      if (href.includes('lp.html')) return;
+      try {
+        a.setAttribute('href', withShop(href));
+      } catch (_) {}
+    });
+    const guest = document.querySelector('a[href*="index.html"]');
+    if (guest) guest.setAttribute('href', guestEntryUrl(getShopId(), 1));
   },
 
   ensureAdminAccess() {
@@ -54,7 +72,7 @@ const AdminPage = {
       return true;
     }
     try {
-      if (sessionStorage.getItem('mos_admin_ok') === '1') {
+      if (sessionStorage.getItem(scopedKey('mos_admin_ok')) === '1') {
         this.unlocked = true;
         return true;
       }
@@ -64,11 +82,12 @@ const AdminPage = {
     document.getElementById('adminPinSubmit')?.addEventListener('click', () => {
       const val = document.getElementById('adminPinInput')?.value || '';
       if (val === shop.adminPin) {
-        try { sessionStorage.setItem('mos_admin_ok', '1'); } catch (_) {}
+        try { sessionStorage.setItem(scopedKey('mos_admin_ok'), '1'); } catch (_) {}
         document.getElementById('adminGate')?.classList.add('hidden');
         this.unlocked = true;
         this.subscribeToOrders();
         this.subscribeToLeads();
+        this.subscribeRequests();
         this.renderMenuEditor();
         this.renderBilling();
         this.renderAnalytics();
@@ -85,7 +104,7 @@ const AdminPage = {
     const plan = getPlan(shop.planId);
     const title = document.getElementById('adminShopName');
     if (title) title.textContent = `${shop.name} · ${plan.name}`;
-    document.title = `管理画面 | ${shop.name}`;
+    document.title = `管理画面 | ${shop.name} (${getShopId()})`;
   },
 
   updateClock() {
@@ -147,9 +166,8 @@ const AdminPage = {
 
   subscribeToOrders() {
     if (!this.unlocked && getShop().adminPin) return;
-    const q = query(collection(db, 'orders'), orderBy('timestamp', 'desc'));
-    onSnapshot(q, snap => {
-      const next = snap.docs.map(d => d.data());
+    const shopId = getShopId();
+    const apply = (next) => {
       if (this.knownOrderIds.size) {
         next.forEach(o => {
           if (o.id && !this.knownOrderIds.has(o.id) && (o.status || 'received') === 'received') {
@@ -162,6 +180,53 @@ const AdminPage = {
       this.renderOrders();
       this.renderBilling();
       this.renderAnalytics();
+    };
+
+    const scoped = query(
+      collection(db, 'orders'),
+      where('shopId', '==', shopId),
+      orderBy('timestamp', 'desc')
+    );
+    onSnapshot(scoped, snap => {
+      apply(snap.docs.map(d => d.data()));
+    }, () => {
+      onSnapshot(query(collection(db, 'orders'), orderBy('timestamp', 'desc')), snap => {
+        apply(
+          snap.docs.map(d => d.data())
+            .filter(o => (o.shopId || 'default') === shopId)
+        );
+      });
+    });
+  },
+
+  subscribeRequests() {
+    if (!this.unlocked && getShop().adminPin) return;
+    subscribeServiceRequests(getShopId(), (rows) => {
+      const open = rows.filter(r => r.status === 'open');
+      let host = document.getElementById('adminRequestsBanner');
+      if (!host) {
+        host = document.createElement('div');
+        host.id = 'adminRequestsBanner';
+        host.className = 'admin-requests-banner';
+        document.querySelector('.admin-header')?.after(host);
+      }
+      if (!open.length) {
+        host.innerHTML = '';
+        host.hidden = true;
+        return;
+      }
+      host.hidden = false;
+      host.innerHTML = open.map(r => `
+        <div class="admin-req-chip">
+          <span>${r.type === 'bill' ? '会計' : '呼出'} · 席${r.tableNumber}</span>
+          <button type="button" data-resolve="${r.id}">済</button>
+        </div>
+      `).join('');
+      host.querySelectorAll('[data-resolve]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { await resolveServiceRequest(btn.dataset.resolve); } catch (e) { console.error(e); }
+        });
+      });
     });
   },
 
@@ -293,6 +358,7 @@ const AdminPage = {
           ).join('')}
         </select>
         <label class="me-pop"><input type="checkbox" class="me-popular" ${item.popular ? 'checked' : ''}>人気</label>
+        <label class="me-pop"><input type="checkbox" class="me-soldout" data-id="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}>品切れ</label>
         <button type="button" class="me-del" data-idx="${idx}">削除</button>
       </div>
     `).join('');
@@ -302,6 +368,11 @@ const AdminPage = {
         this.syncMenuDraftFromDom();
         this.menuDraft.items.splice(Number(btn.dataset.idx), 1);
         this.renderMenuEditor();
+      });
+    });
+    list.querySelectorAll('.me-soldout').forEach(input => {
+      input.addEventListener('change', async () => {
+        await setItemSoldOut(input.dataset.id, input.checked);
       });
     });
   },

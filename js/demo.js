@@ -1,6 +1,6 @@
+import { resolveShopId, withShop, scopedKey } from './tenant.js';
+
 const DEMO_FLAG = 'mos_demo';
-const DEMO_CART = 'mos_cart_demo';
-const PROD_CART = 'mos_cart';
 
 function readDemoFlag() {
   try {
@@ -29,6 +29,7 @@ export function clearDemoMode() {
 }
 
 export function activateDemoFromUrl() {
+  resolveShopId();
   const q = new URLSearchParams(location.search);
   if (q.get('demo') === '0') {
     writeDemoFlag(false);
@@ -42,11 +43,12 @@ export function activateDemoFromUrl() {
 }
 
 export function cartStorageKey() {
-  return isDemoMode() ? DEMO_CART : PROD_CART;
+  const base = isDemoMode() ? 'mos_cart_demo' : 'mos_cart';
+  return scopedKey(base);
 }
 
 export function withDemo(url) {
-  const u = new URL(url, location.href);
+  const u = new URL(withShop(url), location.href);
   if (isDemoMode()) u.searchParams.set('demo', '1');
   else u.searchParams.delete('demo');
   return `${u.pathname}${u.search}${u.hash}`;
@@ -59,10 +61,11 @@ export function ensureDemoBanner() {
   const bar = document.createElement('div');
   bar.id = 'demoBanner';
   bar.className = 'demo-banner';
+  const shop = resolveShopId();
   bar.innerHTML = `
     <div class="demo-banner-inner">
       <strong>テストモード</strong>
-      <span>注文は本番に入りません。体験用の動作です。</span>
+      <span>店舗 <code>${shop}</code> · 注文は本番に入りません</span>
       <a href="lp.html" id="demoExitLink">LPへ戻る</a>
     </div>`;
   document.body.prepend(bar);

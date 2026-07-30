@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#10231f">
+  <title>Ops | QuickOrder</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/ops.css">
+</head>
+<body class="ops-body">
+
+<section id="opsGate" class="ops-gate" hidden>
+  <div class="ops-gate-card">
+    <p class="ops-eyebrow">Internal</p>
+    <h1>QuickOrder Ops</h1>
+    <p>テスト画面と総合管理。Cursor用 / オーナー用パスワードで入室。</p>
+    <form id="opsLoginForm">
+      <label>パスワード
+        <input type="password" id="opsPassword" autocomplete="current-password" required autofocus>
+      </label>
+      <button type="submit">入室</button>
+      <p id="opsLoginError" class="ops-error" hidden></p>
+    </form>
+  </div>
+</section>
+
+<div id="opsApp" hidden>
+  <header class="ops-top">
+    <div>
+      <p class="ops-eyebrow">QuickOrder Ops</p>
+      <h1>総合管理</h1>
+    </div>
+    <div class="ops-top-actions">
+      <span class="ops-role" id="opsRoleBadge">—</span>
+      <button type="button" id="opsLogout">ログアウト</button>
+    </div>
+  </header>
+
+  <nav class="ops-tabs">
+    <button type="button" data-ops-tab="hq" class="active">HQ</button>
+    <button type="button" data-ops-tab="shops">店舗</button>
+    <button type="button" data-ops-tab="requests">呼出</button>
+    <button type="button" data-ops-tab="surveys">アンケート</button>
+    <button type="button" data-ops-tab="lab">テスト</button>
+    <button type="button" data-ops-tab="security">鍵</button>
+  </nav>
+
+  <main class="ops-main">
+    <section data-ops-panel="hq">
+      <div class="ops-cards">
+        <div class="ops-card"><span>店舗数</span><strong id="hqShops">0</strong></div>
+        <div class="ops-card"><span>本日注文</span><strong id="hqOrders">0</strong></div>
+        <div class="ops-card"><span>本日GMV</span><strong id="hqGmv">¥0</strong></div>
+        <div class="ops-card"><span>想定MRR</span><strong id="hqMrr">¥0</strong></div>
+        <div class="ops-card"><span>新規リード</span><strong id="hqLeads">0</strong></div>
+        <div class="ops-card"><span>未対応呼出</span><strong id="hqRequests">0</strong></div>
+        <div class="ops-card"><span>平均満足度</span><strong id="hqNps">—</strong></div>
+      </div>
+      <h2>店舗別きょう</h2>
+      <div class="ops-table-wrap">
+        <table>
+          <thead><tr><th>店舗</th><th>注文</th><th>売上</th><th>混雑ETA</th></tr></thead>
+          <tbody id="hqShopRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section data-ops-panel="shops" hidden>
+      <h2>店舗一覧・作成</h2>
+      <form id="createShopForm" class="ops-form-grid">
+        <label>店舗ID（英数）<input id="newShopId" required pattern="[a-z0-9_-]{2,48}" placeholder="hanako-sushi"></label>
+        <label>店名<input id="newShopName" required placeholder="はなこ寿司"></label>
+        <label>サブタイトル<input id="newShopSubtitle" placeholder="江戸前"></label>
+        <label>席数<input id="newShopTables" type="number" min="1" max="200" value="12"></label>
+        <label>プラン
+          <select id="newShopPlan">
+            <option value="lite">Lite</option>
+            <option value="growth" selected>Growth</option>
+            <option value="business">Business</option>
+            <option value="chain">Chain</option>
+          </select>
+        </label>
+        <button type="submit">店舗を作成</button>
+      </form>
+      <p id="createShopStatus" class="ops-status" hidden></p>
+      <div id="shopsList" class="ops-shop-grid"></div>
+    </section>
+
+    <section data-ops-panel="requests" hidden>
+      <h2>店員呼出・会計リクエスト</h2>
+      <div id="requestsList"></div>
+    </section>
+
+    <section data-ops-panel="surveys" hidden>
+      <h2>来店アンケート</h2>
+      <div id="surveysList"></div>
+    </section>
+
+    <section data-ops-panel="lab" hidden>
+      <h2>テストラボ</h2>
+      <label class="ops-inline">対象店舗
+        <select id="labShop"></select>
+      </label>
+      <div id="labLinks" class="ops-lab-links"></div>
+      <h3>チェックリスト</h3>
+      <ul id="labChecklist" class="ops-checklist"></ul>
+      <h3>業界機能マトリクス</h3>
+      <div class="ops-table-wrap">
+        <table>
+          <thead><tr><th>機能</th><th>状態</th><th>根拠</th></tr></thead>
+          <tbody id="featureMatrix"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section data-ops-panel="security" hidden>
+      <h2>パスワード更新</h2>
+      <p class="ops-muted">このブラウザにカスタムハッシュを保存します。既定: Cursor / Owner の2系統。</p>
+      <form id="opsPwForm" class="ops-form-grid">
+        <label>対象
+          <select id="opsPwRole">
+            <option value="cursor">Cursor</option>
+            <option value="owner">Owner</option>
+          </select>
+        </label>
+        <label>新しいパスワード<input id="opsPwNew" type="password" required minlength="8"></label>
+        <button type="submit">更新</button>
+      </form>
+      <p id="opsPwStatus" class="ops-status" hidden></p>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="js/ops.js"></script>
+</body>
+</html>

@@ -1,10 +1,12 @@
 import { TablePin } from './pin.js';
-import { loadMenu, getMenu } from './shop.js';
+import { loadMenu, getMenu, getShopId, loadShop, isItemSoldOut } from './shop.js';
 import { db } from './firebase.js';
 import {
   collection, doc, setDoc, getDocs, query, where, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
+import { resolveShopId } from './tenant.js';
+import { recommendUpsells } from './guest-features.js';
 
 function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -23,11 +25,12 @@ const CartPage = {
 
   async init() {
     activateDemoFromUrl();
+    resolveShopId();
     ensureDemoBanner();
     this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
     if (isDemoMode()) document.title = 'カート | テストモード';
-    await loadMenu();
+    await Promise.all([loadShop(), loadMenu()]);
     if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.render();
@@ -120,7 +123,54 @@ const CartPage = {
     }).join('') + '</div>';
 
     container.querySelectorAll('.cart-qty-btn').forEach(btn => {
-      btn.addEventListener('click', () => this.updateQty(parseInt(btn.dataset.id), btn.dataset.action));
+      btn.addEventListener('click', () => this.updateQty(btn.dataset.id, btn.dataset.action));
+    });
+    this.renderUpsells(container);
+  },
+
+  renderUpsells(container) {
+    const wrapId = 'cartUpsells';
+    let wrap = document.getElementById(wrapId);
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = wrapId;
+      wrap.className = 'cart-upsells';
+      container.after(wrap);
+    }
+    const recs = recommendUpsells(this.cart, 3).filter(i => !isItemSoldOut(i.id));
+    if (!recs.length || this.cart.length === 0) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = `
+      <h3>あわせていかがですか</h3>
+      <div class="cart-upsell-list">
+        ${recs.map(item => `
+          <button type="button" class="cart-upsell-item" data-upsell="${item.id}">
+            <span>${item.emoji || ''} ${item.name}</span>
+            <strong>¥${item.price.toLocaleString()}</strong>
+          </button>
+        `).join('')}
+      </div>`;
+    wrap.querySelectorAll('[data-upsell]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = getMenu().items.find(i => i.id === btn.dataset.upsell);
+        if (!item || isItemSoldOut(item.id)) return;
+        this.cart.push({
+          id: Date.now() + Math.random(),
+          itemId: item.id,
+          name: item.name,
+          emoji: item.emoji,
+          price: item.price,
+          qty: 1,
+          customizations: {},
+          toggles: {},
+          note: '',
+        });
+        this.saveCart();
+        this.render();
+        showToast(`${item.name} を追加しました`);
+      });
     });
   },
 
@@ -140,6 +190,7 @@ const CartPage = {
     try {
       const q = query(
         collection(db, 'orders'),
+        where('shopId', '==', getShopId()),
         where('tableNumber', '==', this.tableNumber),
         orderBy('timestamp', 'desc'),
         limit(1)
@@ -222,6 +273,7 @@ const CartPage = {
     const tax = Math.floor(subtotal * 0.1);
     const order = {
       id: orderId,
+      shopId: getShopId(),
       tableNumber: this.tableNumber,
       items: this.cart,
       subtotal,
@@ -241,7 +293,7 @@ const CartPage = {
       }
       await setDoc(doc(db, 'orders', orderId), order);
       localStorage.removeItem(cartStorageKey());
-      location.href = `status.html?order=${orderId}&table=${this.tableNumber}`;
+      location.href = withDemo(`status.html?order=${orderId}&table=${encodeURIComponent(this.tableNumber)}`);
     } catch (e) {
       console.error(e);
       btn.textContent = 'エラーが発生しました。再度お試しください';

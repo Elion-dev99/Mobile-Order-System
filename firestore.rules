@@ -8,7 +8,19 @@ service cloud.firestore {
     match /shop/{doc} {
       allow read, write: if true;
     }
+    match /shops/{shopId} {
+      allow read, write: if true;
+    }
+    match /shopMenus/{shopId} {
+      allow read, write: if true;
+    }
     match /leads/{id} {
+      allow read, write: if true;
+    }
+    match /serviceRequests/{id} {
+      allow read, write: if true;
+    }
+    match /surveys/{id} {
       allow read, write: if true;
     }
   }
