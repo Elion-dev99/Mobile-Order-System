@@ -128,6 +128,38 @@ export async function saveShop(partial, shopId = getShopId()) {
   return shopCache;
 }
 
+function localMenuKey(shopId) {
+  return `mos_local_menu_${shopId}`;
+}
+
+function readLocalMenu(shopId) {
+  try {
+    const raw = localStorage.getItem(localMenuKey(shopId));
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data?.items) || !data.items.length) return null;
+    return {
+      categories: data.categories?.length ? data.categories : DEFAULT_MENU.categories,
+      allergens: data.allergens?.length ? data.allergens : DEFAULT_MENU.allergens,
+      items: data.items,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeLocalMenu(menu, shopId) {
+  try {
+    localStorage.setItem(localMenuKey(shopId), JSON.stringify({
+      categories: menu.categories,
+      allergens: menu.allergens,
+      items: menu.items,
+      updatedAt: Date.now(),
+      shopId,
+    }));
+  } catch (_) {}
+}
+
 export async function loadMenu(shopId = resolveShopId()) {
   try {
     const snap = await getDoc(menuRef(shopId));
@@ -138,6 +170,7 @@ export async function loadMenu(shopId = resolveShopId()) {
         allergens: data.allergens?.length ? data.allergens : DEFAULT_MENU.allergens,
         items: data.items,
       };
+      writeLocalMenu(menuCache, shopId);
       return menuCache;
     }
     if (shopId === DEFAULT_SHOP_ID) {
@@ -149,6 +182,7 @@ export async function loadMenu(shopId = resolveShopId()) {
           allergens: data.allergens?.length ? data.allergens : DEFAULT_MENU.allergens,
           items: data.items,
         };
+        writeLocalMenu(menuCache, shopId);
         try { await saveMenu(menuCache, shopId); } catch (_) {}
         return menuCache;
       }
@@ -156,19 +190,39 @@ export async function loadMenu(shopId = resolveShopId()) {
   } catch (e) {
     console.warn('menu load failed', e);
   }
+  const local = readLocalMenu(shopId);
+  if (local) {
+    menuCache = local;
+    return menuCache;
+  }
   menuCache = cloneMenu();
   return menuCache;
 }
 
 export async function saveMenu(menu, shopId = getShopId()) {
   menuCache = menu;
-  await setDoc(menuRef(shopId), {
-    categories: menu.categories,
-    allergens: menu.allergens,
-    items: menu.items,
-    updatedAt: Date.now(),
-    shopId,
-  });
+  writeLocalMenu(menu, shopId);
+  try {
+    await setDoc(menuRef(shopId), {
+      categories: menu.categories,
+      allergens: menu.allergens,
+      items: menu.items,
+      updatedAt: Date.now(),
+      shopId,
+    });
+  } catch (e) {
+    console.warn('menu cloud save failed; kept local copy', e);
+    if (shopId === DEFAULT_SHOP_ID) {
+      try {
+        await setDoc(legacyMenuRef(), {
+          categories: menu.categories,
+          allergens: menu.allergens,
+          items: menu.items,
+          updatedAt: Date.now(),
+        }, { merge: true });
+      } catch (_) {}
+    }
+  }
   return menuCache;
 }
 

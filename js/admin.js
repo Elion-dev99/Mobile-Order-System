@@ -351,7 +351,9 @@ const AdminPage = {
   renderMenuEditor() {
     const list = document.getElementById('menuEditorList');
     if (!list || !this.menuDraft) return;
-    list.innerHTML = this.menuDraft.items.map((item, idx) => `
+    list.innerHTML = this.menuDraft.items.map((item, idx) => {
+      const customs = Array.isArray(item.customizable) ? item.customizable : [];
+      return `
       <article class="menu-edit-card" data-idx="${idx}">
         <div class="menu-edit-main">
           <input class="me-emoji" value="${item.emoji || ''}" maxlength="4" title="絵文字" aria-label="絵文字">
@@ -361,6 +363,9 @@ const AdminPage = {
             <input class="me-price" type="number" value="${item.price}" min="0" step="10" placeholder="価格" aria-label="価格">
           </div>
         </div>
+        <label class="me-field me-desc-field">説明
+          <input class="me-desc" value="${this.escapeAttr(item.description || '')}" placeholder="客席に表示する説明">
+        </label>
         <div class="menu-edit-meta">
           <label class="me-field">カテゴリ
             <select class="me-cat" aria-label="カテゴリ">
@@ -373,8 +378,22 @@ const AdminPage = {
           <label class="me-check"><input type="checkbox" class="me-soldout" data-id="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}><span>品切れ</span></label>
           <button type="button" class="me-del" data-idx="${idx}">削除</button>
         </div>
-      </article>
-    `).join('');
+
+        <div class="me-custom-block">
+          <div class="me-custom-head">
+            <strong>カスタム項目</strong>
+            <span>辛さ・大盛り・トッピングなど</span>
+          </div>
+          <div class="me-custom-list" data-item-idx="${idx}">
+            ${customs.length ? customs.map((opt, oi) => this.renderCustomOptionRow(opt, oi, idx)).join('') : '<p class="me-custom-empty">まだカスタム項目はありません</p>'}
+          </div>
+          <div class="me-custom-actions">
+            <button type="button" class="me-custom-add" data-add-custom="${idx}" data-type="select">＋ 選択肢</button>
+            <button type="button" class="me-custom-add" data-add-custom="${idx}" data-type="toggle">＋ トグル（追加料金）</button>
+          </div>
+        </div>
+      </article>`;
+    }).join('');
 
     list.querySelectorAll('.me-del').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -388,23 +407,112 @@ const AdminPage = {
         await setItemSoldOut(input.dataset.id, input.checked);
       });
     });
+    list.querySelectorAll('[data-add-custom]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.syncMenuDraftFromDom();
+        const idx = Number(btn.dataset.addCustom);
+        const item = this.menuDraft.items[idx];
+        if (!item) return;
+        if (!Array.isArray(item.customizable)) item.customizable = [];
+        const type = btn.dataset.type || 'select';
+        const id = 'opt_' + Date.now().toString(36);
+        if (type === 'toggle') {
+          item.customizable.push({ id, label: 'トッピング', type: 'toggle', price: 100 });
+        } else {
+          item.customizable.push({
+            id,
+            label: 'オプション',
+            type: 'select',
+            options: ['普通', '大盛り(+100円)'],
+            default: '普通',
+          });
+        }
+        this.renderMenuEditor();
+      });
+    });
+    list.querySelectorAll('[data-del-custom]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.syncMenuDraftFromDom();
+        const itemIdx = Number(btn.dataset.itemIdx);
+        const optIdx = Number(btn.dataset.delCustom);
+        const item = this.menuDraft.items[itemIdx];
+        if (!item?.customizable) return;
+        item.customizable.splice(optIdx, 1);
+        this.renderMenuEditor();
+      });
+    });
+  },
+
+  renderCustomOptionRow(opt, oi, itemIdx) {
+    const type = opt.type === 'toggle' ? 'toggle' : 'select';
+    if (type === 'toggle') {
+      return `
+        <div class="me-custom-row" data-opt-idx="${oi}" data-opt-type="toggle">
+          <input type="hidden" class="me-opt-id" value="${this.escapeAttr(opt.id || '')}">
+          <span class="me-opt-badge">トグル</span>
+          <input class="me-opt-label" value="${this.escapeAttr(opt.label || '')}" placeholder="表示名（例: チャーシュー追加）">
+          <div class="me-opt-price-wrap"><span>+¥</span>
+            <input class="me-opt-price" type="number" min="0" step="10" value="${Number(opt.price) || 0}">
+          </div>
+          <button type="button" class="me-opt-del" data-del-custom="${oi}" data-item-idx="${itemIdx}">削除</button>
+        </div>`;
+    }
+    const optionsText = Array.isArray(opt.options) ? opt.options.join(', ') : '';
+    return `
+      <div class="me-custom-row" data-opt-idx="${oi}" data-opt-type="select">
+        <input type="hidden" class="me-opt-id" value="${this.escapeAttr(opt.id || '')}">
+        <span class="me-opt-badge">選択</span>
+        <input class="me-opt-label" value="${this.escapeAttr(opt.label || '')}" placeholder="表示名（例: 辛さ）">
+        <input class="me-opt-options" value="${this.escapeAttr(optionsText)}" placeholder="選択肢（カンマ区切り）例: 甘口, 中辛, 辛口">
+        <input class="me-opt-default" value="${this.escapeAttr(opt.default || '')}" placeholder="初期値">
+        <button type="button" class="me-opt-del" data-del-custom="${oi}" data-item-idx="${itemIdx}">削除</button>
+      </div>`;
   },
 
   escapeAttr(s) {
-    return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   },
 
   syncMenuDraftFromDom() {
     const rows = document.querySelectorAll('#menuEditorList .menu-edit-card, #menuEditorList .menu-edit-row');
     rows.forEach((row, idx) => {
       if (!this.menuDraft.items[idx]) return;
+      const customizable = [];
+      row.querySelectorAll('.me-custom-row').forEach((optRow) => {
+        const type = optRow.dataset.optType === 'toggle' ? 'toggle' : 'select';
+        const id = (optRow.querySelector('.me-opt-id')?.value || '').trim() || ('opt_' + Math.random().toString(36).slice(2, 8));
+        const label = (optRow.querySelector('.me-opt-label')?.value || '').trim() || 'オプション';
+        if (type === 'toggle') {
+          customizable.push({
+            id,
+            label,
+            type: 'toggle',
+            price: Number(optRow.querySelector('.me-opt-price')?.value) || 0,
+          });
+          return;
+        }
+        const optionsRaw = optRow.querySelector('.me-opt-options')?.value || '';
+        const options = optionsRaw.split(/[,、]/).map(s => s.trim()).filter(Boolean);
+        let def = (optRow.querySelector('.me-opt-default')?.value || '').trim();
+        if (!def && options.length) def = options[0];
+        customizable.push({
+          id,
+          label,
+          type: 'select',
+          options: options.length ? options : ['普通'],
+          default: def || '普通',
+        });
+      });
+
       this.menuDraft.items[idx] = {
         ...this.menuDraft.items[idx],
         emoji: row.querySelector('.me-emoji')?.value || '🍽️',
         name: row.querySelector('.me-name')?.value || '無題',
+        description: row.querySelector('.me-desc')?.value || '',
         price: Number(row.querySelector('.me-price')?.value) || 0,
         category: row.querySelector('.me-cat')?.value || 'side',
         popular: !!row.querySelector('.me-popular')?.checked,
+        customizable,
       };
     });
   },
@@ -429,10 +537,10 @@ const AdminPage = {
     this.syncMenuDraftFromDom();
     try {
       await saveMenu(this.menuDraft);
-      alert('メニューを保存しました');
+      alert('メニューを保存しました（カスタム項目含む）');
     } catch (e) {
       console.error(e);
-      alert('保存に失敗しました。Firestoreルールを確認してください。');
+      alert('保存に失敗しました。通信または権限を確認してください。');
     }
   },
 
