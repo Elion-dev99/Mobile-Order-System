@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
     function isValidOrder() {
       return request.resource.data.keys().hasAll(['id', 'shopId', 'timestamp'])
         && request.resource.data.id is string
@@ -18,55 +22,63 @@ service cloud.firestore {
             && request.resource.data.email.size() < 200);
     }
 
-    // Orders: open for guest create + kitchen lifecycle (no Firebase Auth yet).
-    // Create payload is lightly validated; prefer Firebase Auth before production scale.
+    // Kitchen tablets may advance status without full staff Auth.
+    function orderKitchenOnlyUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status']);
+    }
+
+    // Guest checkout may decrement stock / coupon use; first visit may stamp trial.
+    function guestShopOpsUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['stock', 'soldOut', 'coupons', 'updatedAt', 'trialStartedAt', 'trialEndsAt']);
+    }
+
     match /orders/{id} {
       allow read: if true;
       allow create: if isValidOrder();
-      allow update, delete: if true;
+      allow update: if orderKitchenOnlyUpdate() || signedIn();
+      allow delete: if signedIn();
     }
 
-    // Legacy single-tenant settings
     match /shop/{doc} {
       allow read: if true;
-      allow create, update: if true;
-      allow delete: if false;
+      allow create, delete: if signedIn();
+      allow update: if signedIn() || guestShopOpsUpdate();
     }
 
-    // Multi-tenant shops — no anonymous wipe
     match /shops/{shopId} {
       allow read: if true;
-      allow create, update: if true;
-      allow delete: if false;
+      allow create, delete: if signedIn();
+      allow update: if signedIn() || guestShopOpsUpdate();
     }
 
     match /shopMenus/{shopId} {
       allow read: if true;
-      allow create, update: if true;
-      allow delete: if false;
+      allow write: if signedIn();
     }
 
-    // Leads: public create (LP), read/update for Ops UI; no delete
+    // Lead PII: public create (LP), staff-only read/update
     match /leads/{id} {
-      allow read: if true;
+      allow read, update: if signedIn();
       allow create: if isValidLeadCreate();
-      allow update: if true;
       allow delete: if false;
     }
 
     match /serviceRequests/{id} {
       allow read: if true;
-      allow create, update: if true;
-      allow delete: if false;
+      allow create: if true;
+      // Store/admin resolve without forcing Auth on every floor tablet
+      allow update: if true;
+      allow delete: if signedIn();
     }
 
     match /surveys/{id} {
-      allow read: if true;
+      allow read: if signedIn();
       allow create: if true;
       allow update, delete: if false;
     }
 
-    // Ops settings (webhooks etc.) — never client-accessible
     match /ops/{doc} {
       allow read, write: if false;
     }
