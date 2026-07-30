@@ -429,7 +429,7 @@
 
     <section data-ops-panel="security" hidden>
       <h2>Firebase Auth（特権書き込み）</h2>
-      <p class="ops-muted">店舗・メニュー・注文削除・リード閲覧は Firebase ログイン必須です。厨房のステータス更新だけは従来どおり匿名でも可。</p>
+      <p class="ops-muted">店舗作成・メニュー・注文削除・リード閲覧は Firebase ログイン必須です。Store フロア端末と厨房ステータス更新は Auth 不要です。</p>
       <p id="opsFirebaseStatus" class="ops-status" hidden></p>
       <div class="ops-toolbar">
         <button type="button" id="opsFirebaseLogin" class="ops-btn">Firebase ログイン</button>

@@ -5,11 +5,11 @@
 | Layer | Status |
 |-------|--------|
 | Ops UI password | Client-side SHA-256 gate (session only). **Not** real auth. |
-| Firebase Auth | **Required** for privileged Firestore writes (Ops / Admin / Store) |
+| Firebase Auth | **Required** for Ops / Admin privileged writes (not Store floor tablets) |
 | `OPS_API_SECRET` | Required for Cardinal dispatch/tick, Incident, and client Discord webhooks |
 | Firestore `ops/*` | **Denied** to all clients (no webhook storage) |
 | Shop / menu create·delete·full update | **Signed-in only** |
-| Guest shop patch | Narrow keys only: `stock`, `soldOut`, `coupons`, `updatedAt`, `trialStartedAt`, `trialEndsAt` |
+| Store / guest shop patch | Floor-tablet keys (profile, `isOpen`, stock, coupons, …) without Auth. Plan/billing/create/delete still signed-in |
 | Orders | Guest **create** OK; kitchen **status-only** update OK; delete = signed-in |
 | Leads / surveys read | Signed-in only (LP may still **create** leads) |
 | Discord | Prefer Cloudflare `DISCORD_WEBHOOK_URL`; client webhook needs Ops secret |
@@ -26,7 +26,7 @@ Auth is not enabled on the project until this runs once (`CONFIGURATION_NOT_FOUN
    - Enables Email/Password  
    - Creates the staff user  
    - Deploys `firestore.rules`
-4. Open Ops / Admin / Store → Firebase login modal (separate from Ops password)
+4. Open Ops / Admin → Firebase login modal (Store needs no Auth)
 
 ### Manual (Console)
 
@@ -56,10 +56,11 @@ OPS_API_SECRET=<same as Cloudflare>
 
 Paste the same `OPS_API_SECRET` after login so Cardinal / AutoHeal / 通知テストが動きます.
 
-## What guests can still do (anonymous)
+## What can still run without Firebase Auth
 
 - Place orders (`orders` create)
 - Kitchen tablets: update order `status` only
+- **Store page**: profile / open-close / coupons / sold-out / stock (narrow field patch)
 - Checkout: decrement stock / mark soldOut / mark coupon used / stamp trial window
 - Create leads from LP; create surveys / service requests
 

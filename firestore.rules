@@ -28,10 +28,21 @@ service cloud.firestore {
         .hasOnly(['status']);
     }
 
-    // Guest checkout may decrement stock / coupon use; first visit may stamp trial.
-    function guestShopOpsUpdate() {
+    // Guest checkout + Store floor tablet: narrow field patches without Firebase Auth.
+    // Billing / plan / create-delete still require signedIn().
+    function storeFloorShopUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['stock', 'soldOut', 'coupons', 'updatedAt', 'trialStartedAt', 'trialEndsAt']);
+        .hasOnly([
+          'stock', 'soldOut', 'coupons', 'updatedAt',
+          'trialStartedAt', 'trialEndsAt',
+          'isOpen',
+          'name', 'subtitle', 'hoursNote', 'address', 'tableCount',
+          'ownerEmail', 'ownerPhone', 'locale',
+          'lastOrderEnabled', 'lastOrderTime',
+          'accentColor', 'minOrderAmount', 'partySizeRequired', 'ageGateEnabled',
+          'quickServiceEnabled', 'serviceChargePercent', 'tipEnabled',
+          'staffPins',
+        ]);
     }
 
     match /orders/{id} {
@@ -44,13 +55,13 @@ service cloud.firestore {
     match /shop/{doc} {
       allow read: if true;
       allow create, delete: if signedIn();
-      allow update: if signedIn() || guestShopOpsUpdate();
+      allow update: if signedIn() || storeFloorShopUpdate();
     }
 
     match /shops/{shopId} {
       allow read: if true;
       allow create, delete: if signedIn();
-      allow update: if signedIn() || guestShopOpsUpdate();
+      allow update: if signedIn() || storeFloorShopUpdate();
     }
 
     match /shopMenus/{shopId} {

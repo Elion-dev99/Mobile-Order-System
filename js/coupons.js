@@ -3,7 +3,7 @@
  * Growth+ via feature flag.
  */
 
-import { getShop, saveShop, patchShopFields, shopCanUse, isNowInWindow } from './shop.js';
+import { getShop, patchShopFields, shopCanUse, isNowInWindow } from './shop.js';
 
 const APPLIED_KEY = (shopId) => `mos_coupon_${shopId}`;
 
@@ -34,7 +34,8 @@ export function normalizeCoupon(raw = {}) {
 
 export async function saveCoupons(coupons) {
   const cleaned = (coupons || []).map(normalizeCoupon).filter((c) => c.code);
-  return saveShop({ coupons: cleaned });
+  // Narrow patch so Store floor tablets can save without Firebase Auth
+  return patchShopFields({ coupons: cleaned });
 }
 
 export function findCoupon(code, shop = getShop()) {
