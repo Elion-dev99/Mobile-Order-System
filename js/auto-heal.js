@@ -11,6 +11,7 @@ import {
 import { getDiscordWebhook, isLikelyDiscordWebhook } from './notify.js';
 import { opsAuthHeaders } from './ops-secret.js';
 import { loadMaintenance, syncAutoMaintenance } from './maintenance.js';
+import { isCapabilityOn, loadCardinalPrefs } from './cardinal-features.js';
 
 const ESCALATE_KEY = 'mos_autoheal_escalated_at';
 const FAIL_STREAK_KEY = 'mos_autoheal_fail_streak';
@@ -106,7 +107,8 @@ export async function runAutoHealCycle({ escalateAfterFails = 2, escalateCooldow
   } else {
     const streak = getStreak() + 1;
     setStreak(streak);
-    if ((orderPathBroken || fullDown) && streak >= escalateAfterFails) {
+    if ((orderPathBroken || fullDown) && streak >= escalateAfterFails
+        && isCapabilityOn('autoMaintenance', loadCardinalPrefs())) {
       maintenance = await syncAutoMaintenance({
         shouldMaintain: true,
         reason: fullDown ? 'down' : 'firestore',

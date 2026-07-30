@@ -26,9 +26,36 @@ import {
   startAutoHeal,
 } from './auto-heal.js';
 import { opsAuthHeaders } from './ops-secret.js';
+import {
+  loadCardinalPrefs,
+  isCapabilityOn,
+  shouldSuppressNoise,
+  pushCardinalTimeline,
+  listCardinalTimeline,
+  runCardinalDiagnose,
+  scanBusinessAnomalies,
+  maybeNotifyAnomalies,
+  maybeSendDailyDigest,
+  CARDINAL_CAPABILITIES,
+} from './cardinal-features.js';
 
 const STATE_KEY = 'mos_cardinal_state';
 const CARDINAL_PATH = '/api/cardinal';
+
+export {
+  loadCardinalPrefs,
+  saveCardinalPrefs,
+  CARDINAL_CAPABILITIES,
+  listCardinalTimeline,
+  clearCardinalTimeline,
+  pushCardinalTimeline,
+  runCardinalDiagnose,
+  scanBusinessAnomalies,
+  maybeNotifyAnomalies,
+  buildDailyDigest,
+  maybeSendDailyDigest,
+  isQuietHours,
+} from './cardinal-features.js';
 
 export const ROLES = {
   guardian: {
@@ -128,6 +155,21 @@ export async function recordHeartbeat(role, { status = 'ok', detail = '' } = {})
  */
 export async function dispatchRole(role, task = {}) {
   const id = ROLES[role] ? role : 'executor';
+  const prefs = loadCardinalPrefs();
+  if (!task.force && task.kind === 'incident' && !isCapabilityOn('dispatchOnOutage', prefs)) {
+    return { ok: false, skipped: true, reason: 'capability_off', role: id };
+  }
+  if (!task.force && task.kind === 'watchdog' && !isCapabilityOn('watchdog', prefs)) {
+    return { ok: false, skipped: true, reason: 'capability_off', role: id };
+  }
+  if (!task.force && shouldSuppressNoise(task.severity || 'warning', prefs) && task.kind !== 'incident') {
+    pushCardinalTimeline({
+      type: 'dispatch_suppressed',
+      severity: 'info',
+      summary: `${id} 起動を静穏時間で抑制 (${task.kind || 'ops'})`,
+    });
+    return { ok: false, skipped: true, reason: 'quiet_hours', role: id };
+  }
   const state = loadCardinalState();
   const cooldownMs = Number(task.cooldownMs) || 20 * 60 * 1000;
   if (Date.now() - (state[id]?.lastDispatchAt || 0) < cooldownMs && !task.force) {
@@ -168,6 +210,11 @@ export async function dispatchRole(role, task = {}) {
     state[id] = { ...(state[id] || {}), lastDispatchAt: Date.now() };
     state.dispatches = (state.dispatches || 0) + 1;
     saveCardinalState(state);
+    pushCardinalTimeline({
+      type: 'dispatch',
+      severity: task.severity || 'warning',
+      summary: `${ROLES[id].name} 起動 · ${task.kind || 'ops'} · ${String(task.summary || task.title || '').slice(0, 80)}`,
+    });
     await notifyDiscord({
       title: `Cardinal ${ROLES[id].name} 起動`,
       emoji: id === 'guardian' ? '👁' : '🛠',
@@ -194,9 +241,22 @@ export async function runCardinalCycle({
   guardianSlaMs = 90 * 60 * 1000,
   executorSlaMs = 90 * 60 * 1000,
   escalateAfterFails = 2,
+  shops = [],
+  orders = [],
 } = {}) {
   await loadNotifySettings().catch(() => {});
+  const prefs = loadCardinalPrefs();
   const heal = await runAutoHealCycle({ escalateAfterFails });
+  // Respect capability: undo auto-maintenance intent messaging is in auto-heal;
+  // if capability off, try not to leave new auto locks from this cycle's heal result
+  if (!isCapabilityOn('autoMaintenance', prefs)
+      && heal.maintenance?.ok
+      && heal.maintenance?.enabled) {
+    try {
+      const { syncAutoMaintenance } = await import('./maintenance.js');
+      await syncAutoMaintenance({ shouldMaintain: false, reason: 'capability_off' });
+    } catch (_) {}
+  }
   const health = heal.health || await checkSystemHealth();
   const state = loadCardinalState();
   state.cycles = (state.cycles || 0) + 1;
@@ -218,6 +278,11 @@ export async function runCardinalCycle({
 
   if (heal.maintenance && !heal.maintenance.skipped) {
     actions.push({ type: 'auto_maintenance', result: heal.maintenance });
+    pushCardinalTimeline({
+      type: 'auto_maintenance',
+      severity: heal.maintenance.enabled ? 'critical' : 'info',
+      summary: heal.maintenance.enabled ? '自動メンテ ON' : '自動メンテ解除',
+    });
   }
 
   // Persistent outage → Executor
@@ -246,7 +311,8 @@ export async function runCardinalCycle({
   }
 
   // Mutual watchdog: Executor silent → wake Guardian to investigate / re-dispatch
-  if (isStale(refreshed.executor?.lastHeartbeatAt, executorSlaMs)
+  if (isCapabilityOn('watchdog', prefs)
+      && isStale(refreshed.executor?.lastHeartbeatAt, executorSlaMs)
       && isStale(refreshed.executor?.lastDispatchAt, executorSlaMs)) {
     // Only when we've previously dispatched or health is bad — avoid cold-start noise
     if ((refreshed.dispatches || 0) > 0 || health.status !== 'ok') {
@@ -269,7 +335,8 @@ export async function runCardinalCycle({
   }
 
   // Guardian silent after activity → Executor self-watch (ask Executor to ping ops)
-  if (isStale(refreshed.guardian?.lastHeartbeatAt, guardianSlaMs)
+  if (isCapabilityOn('watchdog', prefs)
+      && isStale(refreshed.guardian?.lastHeartbeatAt, guardianSlaMs)
       && (refreshed.dispatches || 0) > 0) {
     const r = await dispatchRole('executor', {
       kind: 'watchdog',
@@ -287,12 +354,32 @@ export async function runCardinalCycle({
     actions.push({ type: 'dispatch_executor_watchdog', result: r });
   }
 
+  // Business anomaly scan + daily digest (Ops-fed shop/order lists)
+  if (isCapabilityOn('anomalyScan', prefs)) {
+    const findings = scanBusinessAnomalies({ shops, orders, prefs });
+    if (findings.length) {
+      const n = await maybeNotifyAnomalies(findings);
+      actions.push({ type: 'anomaly_scan', findings, notify: n });
+    }
+  }
+  if (isCapabilityOn('dailyDigest', prefs)) {
+    const dig = await maybeSendDailyDigest({ shops, orders });
+    if (!dig.skipped) actions.push({ type: 'daily_digest', result: dig });
+  }
+
   saveCardinalState(refreshed);
+  pushCardinalTimeline({
+    type: 'cycle',
+    severity: health.status === 'ok' ? 'info' : 'warning',
+    summary: `cycle#${refreshed.cycles} health=${health.status} actions=${actions.length}`,
+  });
   return {
     health,
     heal,
     state: loadCardinalState(),
     autoHeal: getAutoHealState(),
+    prefs,
+    timeline: listCardinalTimeline(12),
     actions,
   };
 }
@@ -301,12 +388,17 @@ export function getCardinalSnapshot() {
   const state = loadCardinalState();
   const heal = getAutoHealState();
   const health = getLastHealthState();
+  const prefs = loadCardinalPrefs();
   return {
     ...state,
     roles: ROLES,
     autoHeal: heal,
     lastHealth: health,
     running: started,
+    prefs,
+    capabilities: CARDINAL_CAPABILITIES,
+    timeline: listCardinalTimeline(20),
+    quiet: shouldSuppressNoise('warning', prefs),
   };
 }
 
@@ -314,13 +406,20 @@ export function startCardinal({
   intervalMs = 60_000,
   guardianSlaMs = 90 * 60 * 1000,
   executorSlaMs = 90 * 60 * 1000,
+  getContext = null,
 } = {}) {
   if (started) return;
   started = true;
   startAutoHeal({ intervalMs: Math.min(intervalMs, 45_000) });
 
   const tick = () => {
-    runCardinalCycle({ guardianSlaMs, executorSlaMs }).catch(() => {});
+    const ctx = typeof getContext === 'function' ? (getContext() || {}) : {};
+    runCardinalCycle({
+      guardianSlaMs,
+      executorSlaMs,
+      shops: ctx.shops || [],
+      orders: ctx.orders || [],
+    }).catch(() => {});
   };
   tick();
   timer = setInterval(tick, intervalMs);

@@ -441,20 +441,51 @@
         <div class="ops-card"><span>ディスパッチ</span><strong id="cardinalDispatches">0</strong></div>
         <div class="ops-card"><span>AutoHeal連続失敗</span><strong id="cardinalHealStreak">0</strong></div>
         <div class="ops-card"><span>API</span><strong id="cardinalApiStatus">確認中</strong></div>
+        <div class="ops-card"><span>静穏時間</span><strong id="cardinalQuietStatus">—</strong></div>
+        <div class="ops-card"><span>機能ON</span><strong id="cardinalCapsOn">—</strong></div>
       </div>
 
       <div class="ops-health-playbook">
         <h2>いま動いていること</h2>
         <ul class="ops-checklist">
-          <li>Ops を開いている間、クライアント側 Cardinal が 60秒ごとにヘルス＋心拍を回します</li>
-          <li>障害が続くと Executor（修正AI）を起動、相手の心拍が途切れると監視側を起こします</li>
-          <li>常駐の「本当の2体」は Cursor Automations（cron / webhook）です — 下の設定を一度だけ</li>
+          <li>Ops を開いている間、クライアント側 Cardinal が 60秒ごとにヘルス＋心拍・異常スキャン・日次ダイジェストを回します</li>
+          <li>障害が続くと自動メンテ＋ Executor 起動、相手の心拍が途切れると監視側を起こします</li>
+          <li>静穏時間中は warning 以下の通知/起動を抑制（down / critical は通す）</li>
         </ul>
-        <button type="button" id="opsCardinalCycle" class="ops-btn-secondary">今すぐ1サイクル実行</button>
-        <button type="button" id="opsCardinalDrill" class="ops-btn">2体ドリル起動</button>
-        <button type="button" id="opsCardinalRefresh" class="ops-btn-secondary">状態更新</button>
+        <div class="ops-toolbar" style="flex-wrap:wrap;">
+          <button type="button" id="opsCardinalCycle" class="ops-btn-secondary">今すぐ1サイクル実行</button>
+          <button type="button" id="opsCardinalDiagnose" class="ops-btn">自己診断</button>
+          <button type="button" id="opsCardinalDigest" class="ops-btn-secondary">ダイジェスト送信</button>
+          <button type="button" id="opsCardinalAnomaly" class="ops-btn-secondary">異常スキャン</button>
+          <button type="button" id="opsCardinalDrill" class="ops-btn">2体ドリル起動</button>
+          <button type="button" id="opsCardinalRefresh" class="ops-btn-secondary">状態更新</button>
+        </div>
         <p id="opsCardinalStatus" class="ops-status" hidden></p>
         <pre id="opsCardinalLog" class="ops-muted" style="white-space:pre-wrap;max-height:220px;overflow:auto;margin-top:12px;padding:12px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
+      </div>
+
+      <div class="ops-health-playbook">
+        <h2>機能スイッチ</h2>
+        <p class="ops-muted">このブラウザの Cardinal 挙動を ON/OFF。静穏時間は JST 既定 23:00–08:00。</p>
+        <div id="opsCardinalCaps" class="ops-event-list"></div>
+        <div class="ops-form-grid" style="margin-top:10px;">
+          <label>静穏 開始<input id="opsCardinalQuietStart" type="time" value="23:00"></label>
+          <label>静穏 終了<input id="opsCardinalQuietEnd" type="time" value="08:00"></label>
+          <label>ダイジェスト時（時）<input id="opsCardinalDigestHour" type="number" min="0" max="23" value="9"></label>
+          <label>注文ゼロ警告（時間）<input id="opsCardinalZeroHours" type="number" min="1" max="48" value="3"></label>
+        </div>
+        <div class="ops-toolbar" style="margin-top:8px;">
+          <button type="button" id="opsCardinalPrefsSave" class="ops-btn">設定を保存</button>
+        </div>
+        <p id="opsCardinalPrefsStatus" class="ops-status" hidden></p>
+      </div>
+
+      <div class="ops-health-playbook">
+        <h2>アクション履歴</h2>
+        <div class="ops-toolbar">
+          <button type="button" id="opsCardinalTimelineClear" class="ops-btn-secondary">履歴クリア</button>
+        </div>
+        <div id="opsCardinalTimeline" class="ops-muted" style="margin-top:8px;"></div>
       </div>
 
       <div class="ops-health-playbook">
@@ -525,7 +556,7 @@
   </main>
 </div>
 
-<script type="module" src="js/ops.js?v=sched1"></script>
+<script type="module" src="js/ops.js?v=cardinal2"></script>
 <script>
   // モジュール読み込み失敗時のフォールバック表示
   setTimeout(() => {

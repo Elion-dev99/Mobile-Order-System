@@ -269,6 +269,104 @@ export async function onRequestPost(context) {
     });
   }
 
+  // Server-side diagnose: probe edges + Firestore without launching agents
+  if (action === 'diagnose') {
+    const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
+    const probes = {};
+    for (const path of ['/', '/api/notify', '/api/maintenance', '/api/cardinal', '/ops.html']) {
+      const started = Date.now();
+      try {
+        const res = await fetch(`${base}${path}`, {
+          method: 'GET',
+          redirect: 'follow',
+          headers: { 'user-agent': 'QuickOrder-Cardinal-Diagnose/1.0' },
+        });
+        probes[path] = { ok: res.ok || res.status < 500, status: res.status, ms: Date.now() - started };
+      } catch (e) {
+        probes[path] = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
+      }
+    }
+    {
+      const started = Date.now();
+      try {
+        const res = await fetch(FIRESTORE_PROBE, {
+          method: 'GET',
+          headers: { 'user-agent': 'QuickOrder-Cardinal-Diagnose/1.0' },
+        });
+        probes.firestore = { ok: res.status > 0 && res.status < 500, status: res.status, ms: Date.now() - started };
+      } catch (e) {
+        probes.firestore = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
+      }
+    }
+    let maintenance = null;
+    try {
+      maintenance = await readMaintenanceState(context.caches);
+    } catch (e) {
+      maintenance = { error: String(e?.message || e) };
+    }
+    const failed = Object.entries(probes).filter(([, p]) => !p.ok).map(([k]) => k);
+    const report = {
+      ok: failed.length === 0,
+      failed,
+      probes,
+      maintenance,
+      configured: {
+        discord: !!(env?.DISCORD_WEBHOOK_URL),
+        apiKey: !!(env?.CURSOR_API_KEY),
+        opsSecret: !!getOpsSecret(env),
+      },
+      at: Date.now(),
+    };
+    if (body.notify !== false) {
+      await postDiscord(env, body, {
+        title: report.ok ? 'Cardinal 診断: 正常' : `Cardinal 診断: 異常 ${failed.length}件`,
+        color: report.ok ? 0x57f287 : 0xed4245,
+        fields: [
+          ...Object.entries(probes).map(([path, p]) => ({
+            name: path,
+            value: p.ok ? `OK ${p.status || ''} (${p.ms}ms)` : `NG ${p.error || p.status}`,
+            inline: true,
+          })),
+          {
+            name: 'メンテ',
+            value: maintenance?.maintenance ? `ON (${maintenance.source || '?'})` : 'OFF',
+            inline: true,
+          },
+        ],
+        timestamp: new Date().toISOString(),
+        footer: { text: 'QuickOrder Cardinal' },
+      }).catch(() => {});
+    }
+    return j({ ok: true, action: 'diagnose', ...report });
+  }
+
+  // Lightweight digest from server probes (no order DB aggregation)
+  if (action === 'digest') {
+    const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
+    const started = Date.now();
+    let home = { ok: false };
+    try {
+      const res = await fetch(`${base}/`, { method: 'GET', headers: { 'user-agent': 'QuickOrder-Cardinal-Digest/1.0' } });
+      home = { ok: res.ok || res.status < 500, status: res.status, ms: Date.now() - started };
+    } catch (e) {
+      home = { ok: false, error: String(e?.message || e) };
+    }
+    let maintenance = null;
+    try { maintenance = await readMaintenanceState(context.caches); } catch (_) {}
+    await postDiscord(env, body, {
+      title: 'Cardinal サーバーダイジェスト',
+      color: home.ok ? 0x5865f2 : 0xed4245,
+      fields: [
+        { name: 'サイト', value: home.ok ? `OK ${home.status} (${home.ms}ms)` : `NG ${home.error || ''}`, inline: true },
+        { name: 'メンテ', value: maintenance?.maintenance ? `ON (${maintenance.source || '?'})` : 'OFF', inline: true },
+        { name: 'CURSOR_API_KEY', value: env?.CURSOR_API_KEY ? '設定済' : '未設定', inline: true },
+      ],
+      timestamp: new Date().toISOString(),
+      footer: { text: 'QuickOrder Cardinal' },
+    }).catch(() => {});
+    return j({ ok: true, action: 'digest', home, maintenance });
+  }
+
   // Hourly/ cron tick: probe site + Firestore, auto maintenance, wake agents
   if (action === 'tick') {
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
