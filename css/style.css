@@ -1135,25 +1135,28 @@ img { max-width: 100%; }
 
 .admin-tabs {
   background: #2C2C2E;
-  padding: 8px 12px;
+  padding: 10px 12px;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
   border-bottom: 0.5px solid rgba(255,255,255,0.1);
+  -webkit-overflow-scrolling: touch;
 }
 
 .admin-tabs::-webkit-scrollbar { display: none; }
 
 .admin-tab {
-  padding: 7px 16px;
+  padding: 8px 14px;
   border-radius: var(--radius-full);
   font-size: 13px;
   font-weight: 600;
-  color: #8E8E93;
+  color: #C7C7CC;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
   transition: all var(--spring);
+  line-height: 1.2;
+  flex: 0 0 auto;
 }
 
 .admin-tab.active { background: var(--blue); color: #fff; }

@@ -149,6 +149,7 @@ const AdminPage = {
     if (view === 'billing') this.renderBilling();
     if (view === 'leads') this.renderLeads();
     if (view === 'analytics') this.renderAnalytics();
+    if (view === 'menu') this.renderMenuEditor();
   },
 
   playNewOrderSound() {
