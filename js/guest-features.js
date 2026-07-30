@@ -41,11 +41,25 @@ export async function createServiceRequest({ type, tableNumber, note = '' }) {
     const id = 'REQ-' + Math.random().toString(36).slice(2, 8).toUpperCase();
     try {
       sessionStorage.setItem('mos_demo_req_' + id, JSON.stringify({ ...payload, id }));
+      const all = JSON.parse(localStorage.getItem('mos_local_requests') || '[]');
+      all.unshift({ ...payload, id });
+      localStorage.setItem('mos_local_requests', JSON.stringify(all.slice(0, 50)));
     } catch (_) {}
     return { ...payload, id };
   }
-  const ref = await addDoc(collection(db, 'serviceRequests'), payload);
-  return { ...payload, id: ref.id };
+  try {
+    const ref = await addDoc(collection(db, 'serviceRequests'), payload);
+    return { ...payload, id: ref.id };
+  } catch (e) {
+    console.warn('serviceRequest firestore failed, local fallback', e);
+    const id = 'LOCAL-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+    try {
+      const all = JSON.parse(localStorage.getItem('mos_local_requests') || '[]');
+      all.unshift({ ...payload, id });
+      localStorage.setItem('mos_local_requests', JSON.stringify(all.slice(0, 50)));
+    } catch (_) {}
+    return { ...payload, id };
+  }
 }
 
 export function subscribeServiceRequests(shopId, cb) {

@@ -26,11 +26,15 @@ const OpsPage = {
       return;
     }
     this.showApp();
-    await ensureSeedShops();
-    await this.refreshShops();
-    this.bind();
-    this.subscribeGlobal();
     this.renderRole();
+    this.bind();
+    try {
+      await ensureSeedShops();
+    } catch (e) {
+      console.warn('ensureSeedShops', e);
+    }
+    await this.refreshShops();
+    this.subscribeGlobal();
     this.renderLabs();
   },
 

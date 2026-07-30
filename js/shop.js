@@ -178,13 +178,17 @@ export async function listShops() {
   const map = new Map();
   listSeedShops().forEach(s => map.set(s.id, { ...s }));
   try {
+    const local = JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
+    local.forEach(s => map.set(s.id, mergeShop(s, s.id)));
+  } catch (_) {}
+  try {
     const snap = await getDocs(collection(db, 'shops'));
     snap.docs.forEach(d => {
       const data = d.data() || {};
       map.set(d.id, mergeShop(data, d.id));
     });
   } catch (e) {
-    console.warn('listShops failed', e);
+    console.warn('listShops firestore failed', e);
   }
   return [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
 }
@@ -195,10 +199,24 @@ export async function upsertShop(shopId, partial = {}) {
     .replace(/[^a-z0-9_-]/g, '')
     .slice(0, 48);
   if (!id) throw new Error('invalid shop id');
-  const current = await loadShop(id);
+  let current = {};
+  try {
+    current = await loadShop(id);
+  } catch (_) {}
   const next = mergeShop({ ...current, ...partial, id, slug: id }, id);
-  await setDoc(settingsRef(id), { ...next, updatedAt: Date.now() }, { merge: true });
-  await ensureMenuSeeded(id);
+  try {
+    await setDoc(settingsRef(id), { ...next, updatedAt: Date.now() }, { merge: true });
+    await ensureMenuSeeded(id);
+  } catch (e) {
+    console.warn('upsertShop firestore failed, saving locally', e);
+    try {
+      const local = JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
+      const idx = local.findIndex(s => s.id === id);
+      if (idx >= 0) local[idx] = next;
+      else local.push(next);
+      localStorage.setItem('mos_local_shops', JSON.stringify(local));
+    } catch (_) {}
+  }
   return next;
 }
 
