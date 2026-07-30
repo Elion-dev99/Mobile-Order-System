@@ -10,6 +10,9 @@ import {
   recommendUpsells, subscribeTableBillLock, showBillLockOverlay, hideBillLockOverlay,
 } from './guest-features.js';
 import { enqueuePendingOrder, flushPendingOrders, listPendingOrders } from './health.js';
+import {
+  loadMaintenance, subscribeMaintenance, mountMaintenanceBanner, isMaintenanceMode, maintenanceMessage,
+} from './maintenance.js';
 
 function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -33,7 +36,9 @@ const CartPage = {
     this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
     if (isDemoMode()) document.title = 'カート | テストモード';
-    await Promise.all([loadShop(), loadMenu()]);
+    await Promise.all([loadShop(), loadMenu(), loadMaintenance().catch(() => {})]);
+    subscribeMaintenance(() => this.updatePlaceBtn());
+    mountMaintenanceBanner({ compact: true });
     if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.render();
@@ -56,6 +61,7 @@ const CartPage = {
   },
 
   async flushQueuedOrders() {
+    if (isMaintenanceMode()) return;
     const pending = listPendingOrders();
     if (!pending.length) return;
     const result = await flushPendingOrders(async (order) => {
@@ -346,6 +352,11 @@ const CartPage = {
       location.href = withDemo(`status.html?order=${orderId}&table=${encodeURIComponent(this.tableNumber)}`);
     } catch (e) {
       console.error(e);
+      if (isMaintenanceMode()) {
+        showToast(maintenanceMessage());
+        this.updatePlaceBtn();
+        return;
+      }
       const n = enqueuePendingOrder(order);
       localStorage.removeItem(cartStorageKey());
       showToast(`通信障害のため注文を端末に一時保存しました（保留${n}件）`);

@@ -32,6 +32,10 @@ export function recommendUpsells(cart = [], limit = 3) {
 }
 
 export async function createServiceRequest({ type, tableNumber, note = '' }) {
+  const { isMaintenanceMode, maintenanceMessage } = await import('./maintenance.js');
+  if (isMaintenanceMode() && !isDemoMode()) {
+    throw new Error(maintenanceMessage());
+  }
   const payload = {
     shopId: getShopId(),
     tableNumber: String(tableNumber),

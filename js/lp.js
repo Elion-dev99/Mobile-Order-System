@@ -3,6 +3,9 @@ import {
   estimateMrr, annualSavings, paymentCta, estimateSetup,
 } from './plans.js';
 import { submitLead } from './leads.js';
+import {
+  loadMaintenance, subscribeMaintenance, mountMaintenanceBanner, isMaintenanceMode, maintenanceMessage,
+} from './maintenance.js';
 
 let billingCycle = PRODUCT.defaultBillingCycle || 'annual';
 let selectedPlanId = 'growth';
@@ -233,6 +236,7 @@ form.addEventListener('submit', async (e) => {
   };
 
   try {
+    if (isMaintenanceMode()) throw new Error(maintenanceMessage());
     await submitLead(payload);
     status.textContent = cycle === 'annual'
       ? `送信しました。${plan.name}年払い（初回目安 ¥${yen(payload.chargeNow)}）で折り返します。`
@@ -244,7 +248,9 @@ form.addEventListener('submit', async (e) => {
   } catch (err) {
     console.error(err);
     status.classList.add('error');
-    status.textContent = '送信に失敗しました。Firestoreルールまたはネットワークを確認してください。';
+    status.textContent = isMaintenanceMode()
+      ? maintenanceMessage()
+      : '送信に失敗しました。Firestoreルールまたはネットワークを確認してください。';
   } finally {
     submitBtn.disabled = false;
   }
@@ -260,3 +266,7 @@ fillLeadPlanSelect();
 document.getElementById('leadCycle').value = billingCycle;
 updateRoi();
 updateQuotePreview();
+loadMaintenance().catch(() => {}).then(() => {
+  subscribeMaintenance();
+  mountMaintenanceBanner({ compact: true });
+});

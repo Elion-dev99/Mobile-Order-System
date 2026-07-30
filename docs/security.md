@@ -13,6 +13,7 @@
 | Orders | Guest **create** OK; kitchen **status-only** update OK; delete = signed-in |
 | Leads / surveys read | Signed-in only (LP may still **create** leads) |
 | Discord | Prefer Cloudflare `DISCORD_WEBHOOK_URL`; client webhook needs Ops secret |
+| `platform/config` | Public **read** (maintenance flag). **Write** = Firebase Auth (Ops). Guest creates (orders/leads/requests/…) denied while `maintenance == true` |
 
 ## Firebase Auth setup (one-shot)
 

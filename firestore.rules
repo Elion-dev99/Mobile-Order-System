@@ -5,6 +5,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Platform kill switch (Ops). Missing doc = not in maintenance.
+    function isMaintenance() {
+      return exists(/databases/$(database)/documents/platform/config)
+        && get(/databases/$(database)/documents/platform/config).data.maintenance == true;
+    }
+
     function isValidOrder() {
       return request.resource.data.keys().hasAll(['id', 'shopId', 'timestamp'])
         && request.resource.data.id is string
@@ -50,7 +56,7 @@ service cloud.firestore {
 
     match /orders/{id} {
       allow read: if true;
-      allow create: if isValidOrder();
+      allow create: if isValidOrder() && !isMaintenance();
       allow update: if orderFloorUpdate() || signedIn();
       allow delete: if signedIn();
     }
@@ -74,39 +80,39 @@ service cloud.firestore {
 
     match /leads/{id} {
       allow read, update: if signedIn();
-      allow create: if isValidLeadCreate();
+      allow create: if isValidLeadCreate() && !isMaintenance();
       allow delete: if false;
     }
 
     match /serviceRequests/{id} {
       allow read: if true;
-      allow create: if true;
+      allow create: if !isMaintenance();
       allow update: if true;
       allow delete: if signedIn();
     }
 
     match /surveys/{id} {
       allow read: if signedIn();
-      allow create: if true;
+      allow create: if !isMaintenance();
       allow update, delete: if false;
     }
 
     match /members/{id} {
       allow read: if true;
-      allow create, update: if true;
+      allow create, update: if !isMaintenance();
       allow delete: if signedIn();
     }
 
     match /reservations/{id} {
       allow read: if true;
-      allow create: if true;
+      allow create: if !isMaintenance();
       allow update: if true;
       allow delete: if signedIn();
     }
 
     match /waitlist/{id} {
       allow read: if true;
-      allow create: if true;
+      allow create: if !isMaintenance();
       allow update: if true;
       allow delete: if signedIn();
     }
@@ -115,6 +121,13 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if true;
       allow update, delete: if false;
+    }
+
+    // Public platform flags (maintenance). Write = Firebase Auth (Ops/Admin).
+    match /platform/{doc} {
+      allow read: if true;
+      allow create, update: if signedIn();
+      allow delete: if signedIn();
     }
 
     match /ops/{doc} {

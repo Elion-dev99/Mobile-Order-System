@@ -45,6 +45,9 @@ import {
 } from './cardinal.js';
 import { escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
 import { ordersToCsv, downloadCsv } from './guest-extras.js';
+import {
+  loadMaintenance, subscribeMaintenance, setMaintenanceMode, getMaintenance, DEFAULT_MESSAGE,
+} from './maintenance.js';
 
 const OpsPage = {
   shops: [],
@@ -100,6 +103,8 @@ const OpsPage = {
     this.renderLabs();
     await this.refreshNotifySetup();
     await this.refreshHealth();
+    await this.refreshMaintenance();
+    subscribeMaintenance(() => this.renderMaintenancePanel());
     this.startHealthPolling();
     startCardinal({ intervalMs: 60_000 });
     await this.refreshCardinal();
@@ -346,6 +351,65 @@ const OpsPage = {
     return !!user;
   },
 
+  async refreshMaintenance() {
+    try {
+      await loadMaintenance();
+    } catch (e) {
+      console.warn(e);
+    }
+    this.renderMaintenancePanel();
+  },
+
+  renderMaintenancePanel() {
+    const state = getMaintenance();
+    const banner = document.getElementById('opsMaintenanceState');
+    const input = document.getElementById('opsMaintenanceMessage');
+    const hq = document.getElementById('hqHealth');
+    if (input && document.activeElement !== input) {
+      input.value = state.message || DEFAULT_MESSAGE;
+    }
+    if (banner) {
+      banner.hidden = false;
+      if (state.maintenance) {
+        banner.innerHTML = `<strong>現在 ON</strong><span>${escapeHtml(state.message)}</span>`;
+        banner.style.borderColor = 'rgba(237, 66, 69, 0.45)';
+        banner.style.background = 'rgba(237, 66, 69, 0.14)';
+      } else {
+        banner.innerHTML = `<strong>現在 OFF</strong><span>通常営業（ゲスト新規受付可）</span>`;
+        banner.style.borderColor = 'rgba(87, 242, 135, 0.35)';
+        banner.style.background = 'rgba(87, 242, 135, 0.1)';
+      }
+    }
+    if (hq && state.maintenance) {
+      hq.textContent = 'メンテ中';
+    }
+  },
+
+  async applyMaintenance(enabled) {
+    const st = document.getElementById('opsMaintenanceStatus');
+    if (!(await this.requireFirebaseForWrite(enabled ? 'メンテナンス開始' : 'メンテナンス解除'))) {
+      if (st) { st.hidden = false; st.textContent = 'Firebase ログインが必要です'; }
+      return;
+    }
+    const message = document.getElementById('opsMaintenanceMessage')?.value?.trim() || DEFAULT_MESSAGE;
+    const label = enabled ? 'メンテナンスを開始します。全店舗の新規注文が止まります。続行？' : 'メンテナンスを解除します。続行？';
+    if (!confirm(label)) return;
+    if (st) { st.hidden = false; st.textContent = '保存中...'; }
+    try {
+      const user = getStaffUser();
+      await setMaintenanceMode({
+        enabled,
+        message,
+        updatedBy: user?.email || getOpsRole() || 'ops',
+      });
+      this.renderMaintenancePanel();
+      if (st) st.textContent = enabled ? 'メンテナンスを開始しました' : 'メンテナンスを解除しました';
+    } catch (e) {
+      console.error(e);
+      if (st) st.textContent = '保存に失敗: ' + (e?.message || e);
+    }
+  },
+
   bind() {
     if (this._bound) return;
     this._bound = true;
@@ -353,6 +417,9 @@ const OpsPage = {
       clearOpsAuth();
       location.href = 'ops.html';
     });
+    document.getElementById('opsMaintenanceOn')?.addEventListener('click', () => this.applyMaintenance(true));
+    document.getElementById('opsMaintenanceOff')?.addEventListener('click', () => this.applyMaintenance(false));
+    document.getElementById('opsMaintenanceRefresh')?.addEventListener('click', () => this.refreshMaintenance());
     document.querySelectorAll('[data-ops-tab]').forEach(btn => {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.opsTab));
     });
