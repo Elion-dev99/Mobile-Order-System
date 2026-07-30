@@ -142,9 +142,11 @@ const OpsPage = {
   },
 
   bind() {
+    if (this._bound) return;
+    this._bound = true;
     document.getElementById('opsLogout')?.addEventListener('click', () => {
       clearOpsAuth();
-      location.reload();
+      location.href = 'ops.html';
     });
     document.querySelectorAll('[data-ops-tab]').forEach(btn => {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.opsTab));
