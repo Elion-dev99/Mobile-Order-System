@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyBDe3aI2F-W9wSFxHtcaplYs5-U2MdrNI8",
   authDomain: "mobile-order-system-c7c70.firebaseapp.com",
   projectId: "mobile-order-system-c7c70",

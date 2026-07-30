@@ -49,10 +49,14 @@
   <nav class="ops-tabs">
     <button type="button" data-ops-tab="hq" class="active">HQ</button>
     <button type="button" data-ops-tab="shops">店舗</button>
+    <button type="button" data-ops-tab="orders">注文</button>
+    <button type="button" data-ops-tab="leads">リード</button>
+    <button type="button" data-ops-tab="fees">手数料</button>
     <button type="button" data-ops-tab="notify">通知</button>
     <button type="button" data-ops-tab="requests">呼出</button>
     <button type="button" data-ops-tab="surveys">アンケート</button>
     <button type="button" data-ops-tab="lab">テスト</button>
+    <button type="button" data-ops-tab="tools">Dev</button>
     <button type="button" data-ops-tab="cardinal">Cardinal</button>
     <button type="button" data-ops-tab="security">鍵</button>
   </nav>
@@ -107,7 +111,131 @@
         <button type="submit">店舗を作成</button>
       </form>
       <p id="createShopStatus" class="ops-status" hidden></p>
+
+      <div class="ops-toolbar">
+        <input id="shopsFilter" type="search" placeholder="店舗名・IDで絞り込み">
+        <button type="button" id="shopsRefresh" class="ops-btn-secondary">再読込</button>
+        <button type="button" id="shopsReseed" class="ops-btn-secondary">シード再投入</button>
+      </div>
       <div id="shopsList" class="ops-shop-grid"></div>
+
+      <dialog id="shopEditDialog" class="ops-dialog">
+        <form method="dialog" id="shopEditForm" class="ops-form-grid">
+          <h2 style="margin:0;grid-column:1/-1;">店舗を編集 <code id="shopEditId"></code></h2>
+          <label>店名<input id="editShopName" required></label>
+          <label>プラン
+            <select id="editShopPlan">
+              <option value="lite">Lite</option>
+              <option value="growth">Growth</option>
+              <option value="business">Business</option>
+              <option value="chain">Chain</option>
+            </select>
+          </label>
+          <label>支払い
+            <select id="editShopCycle">
+              <option value="monthly">月払い</option>
+              <option value="annual">年払い</option>
+            </select>
+          </label>
+          <label>席数<input id="editShopTables" type="number" min="1" max="300"></label>
+          <label>店舗数<input id="editShopStores" type="number" min="1" max="200"></label>
+          <label class="ops-inline"><input type="checkbox" id="editShopOpen" checked> 営業中</label>
+          <label class="ops-inline"><input type="checkbox" id="editShopSubscribed"> 課金中</label>
+          <div class="ops-dialog-actions">
+            <button type="submit" value="save" class="ops-btn">保存</button>
+            <button type="submit" value="cancel" class="ops-btn-secondary">キャンセル</button>
+          </div>
+          <p id="shopEditStatus" class="ops-status" hidden></p>
+        </form>
+      </dialog>
+    </section>
+
+    <section data-ops-panel="orders" hidden>
+      <h2>注文ブラウザ</h2>
+      <p class="ops-muted">全店舗の注文を横断表示。LOAD-* / DEMO の掃除、CSV、削除ができます。</p>
+      <div class="ops-toolbar ops-toolbar-wrap">
+        <label>店舗
+          <select id="ordersShopFilter"><option value="">すべて</option></select>
+        </label>
+        <label>状態
+          <select id="ordersStatusFilter">
+            <option value="">すべて</option>
+            <option value="received">受付</option>
+            <option value="cooking">調理中</option>
+            <option value="finishing">仕上げ</option>
+            <option value="done">完了</option>
+          </select>
+        </label>
+        <label class="ops-inline"><input type="checkbox" id="ordersHideDemo" checked> デモ除外</label>
+        <label class="ops-inline"><input type="checkbox" id="ordersOnlyLoad"> LOAD-* のみ</label>
+        <input id="ordersSearch" type="search" placeholder="注文ID / 卓番号">
+        <button type="button" id="ordersExportCsv" class="ops-btn-secondary">CSV</button>
+        <button type="button" id="ordersDeleteSelected" class="ops-btn-secondary">選択削除</button>
+        <button type="button" id="ordersPurgeLoad" class="ops-btn-secondary">LOAD-* 全削除</button>
+      </div>
+      <p id="ordersStatus" class="ops-status" hidden></p>
+      <div class="ops-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="ordersSelectAll" title="全選択"></th>
+              <th>ID</th><th>店舗</th><th>卓</th><th>状態</th><th>合計</th><th>手数料</th><th>時刻</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="ordersRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section data-ops-panel="leads" hidden>
+      <h2>導入リード</h2>
+      <p class="ops-muted">LPからの問い合わせ。対応中 / 成約を更新できます。</p>
+      <div class="ops-toolbar">
+        <label>状態
+          <select id="leadsStatusFilter">
+            <option value="">すべて</option>
+            <option value="new" selected>新規</option>
+            <option value="contacted">対応中</option>
+            <option value="won">成約</option>
+          </select>
+        </label>
+        <button type="button" id="leadsRefresh" class="ops-btn-secondary">再描画</button>
+      </div>
+      <div id="opsLeadsList" class="ops-lead-list"></div>
+    </section>
+
+    <section data-ops-panel="fees" hidden>
+      <h2>注文手数料台帳（Chain 0.8%）</h2>
+      <p class="ops-muted">未請求の platformFee を一覧し、請求済みに更新します。</p>
+      <div class="ops-cards">
+        <div class="ops-card"><span>未請求合計</span><strong id="feeUnbilledTotal">¥0</strong></div>
+        <div class="ops-card"><span>未請求件数</span><strong id="feeUnbilledCount">0</strong></div>
+        <div class="ops-card"><span>請求済（表示中）</span><strong id="feeBilledCount">0</strong></div>
+      </div>
+      <div class="ops-toolbar">
+        <label>表示
+          <select id="feesViewFilter">
+            <option value="unbilled" selected>未請求</option>
+            <option value="billed">請求済</option>
+            <option value="all">すべて</option>
+          </select>
+        </label>
+        <button type="button" id="feesMarkSelected" class="ops-btn-secondary">選択を請求済</button>
+        <button type="button" id="feesMarkAllUnbilled" class="ops-btn">未請求を全部請求済</button>
+        <button type="button" id="feesExportCsv" class="ops-btn-secondary">CSV</button>
+      </div>
+      <p id="feesStatus" class="ops-status" hidden></p>
+      <div class="ops-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="feesSelectAll"></th>
+              <th>注文</th><th>店舗</th><th>合計</th><th>手数料</th><th>状態</th><th>時刻</th>
+            </tr>
+          </thead>
+          <tbody id="feesRows"></tbody>
+        </table>
+      </div>
     </section>
 
     <section data-ops-panel="notify" hidden>
@@ -206,13 +334,62 @@
 
       <h3>チェックリスト</h3>
       <ul id="labChecklist" class="ops-checklist"></ul>
-      <h3>業界機能マトリクス</h3>
+      <h3>プラン機能マトリクス（ライブ）</h3>
       <div class="ops-table-wrap">
         <table>
-          <thead><tr><th>機能</th><th>状態</th><th>根拠</th></tr></thead>
+          <thead id="planMatrixHead"></thead>
           <tbody id="featureMatrix"></tbody>
         </table>
       </div>
+    </section>
+
+    <section data-ops-panel="tools" hidden>
+      <h2>Dev ツール</h2>
+      <p class="ops-muted">Cursor / オーナー向け。保留注文・localStorage・環境ダンプ・ランブック。</p>
+
+      <div class="ops-cards">
+        <div class="ops-card"><span>保留注文</span><strong id="toolsPendingCount">0</strong></div>
+        <div class="ops-card"><span>Firestore</span><strong id="toolsFsStatus">—</strong></div>
+        <div class="ops-card"><span>通知API</span><strong id="toolsNotifyStatus">—</strong></div>
+        <div class="ops-card"><span>役割</span><strong id="toolsRole">—</strong></div>
+      </div>
+
+      <h3>クイックリンク</h3>
+      <div id="toolsQuickLinks" class="ops-lab-links"></div>
+
+      <h3>保留注文キュー</h3>
+      <div class="ops-toolbar">
+        <button type="button" id="toolsFlushPending" class="ops-btn">保留を再送</button>
+        <button type="button" id="toolsClearPending" class="ops-btn-secondary">キューを空にする</button>
+        <button type="button" id="toolsRefreshPending" class="ops-btn-secondary">更新</button>
+      </div>
+      <pre id="toolsPendingLog" class="ops-code" hidden></pre>
+
+      <h3>環境ダンプ</h3>
+      <div class="ops-toolbar">
+        <button type="button" id="toolsDumpEnv" class="ops-btn-secondary">収集</button>
+        <button type="button" id="toolsCopyEnv" class="ops-btn-secondary">コピー</button>
+      </div>
+      <pre id="toolsEnvDump" class="ops-code" hidden></pre>
+
+      <h3>localStorage</h3>
+      <div class="ops-toolbar">
+        <button type="button" id="toolsListStorage" class="ops-btn-secondary">一覧</button>
+        <button type="button" id="toolsClearMosStorage" class="ops-btn-secondary">mos_* を削除</button>
+        <button type="button" id="toolsClearLoadLevels" class="ops-btn-secondary">負荷キャッシュ削除</button>
+      </div>
+      <pre id="toolsStorageLog" class="ops-code" hidden></pre>
+      <p id="toolsStatus" class="ops-status" hidden></p>
+
+      <h3>エージェント・ランブック</h3>
+      <ol class="ops-steps" id="toolsRunbook">
+        <li><strong>障害</strong> — HQのヘルス → Discord送信 → Cardinalサイクル → Executor起動</li>
+        <li><strong>負荷テスト後</strong> — テストタブで「負荷テスト店舗を全削除」or 注文タブで LOAD-* 削除</li>
+        <li><strong>通知切れ</strong> — 通知タブで Webhook 再保存 → テスト送信</li>
+        <li><strong>課金/手数料</strong> — 手数料タブで未請求を請求済に更新（Chain）</li>
+        <li><strong>秘密情報</strong> — CF: <code>CURSOR_API_KEY</code> / Discord webhook · docs: <code>docs/cardinal.md</code> <code>docs/revenue.md</code></li>
+        <li><strong>本番URL</strong> — <code>https://mobile-order-system.pages.dev/ops.html</code></li>
+      </ol>
     </section>
 
     <section data-ops-panel="cardinal" hidden>
