@@ -1,11 +1,8 @@
 import {
-  loadShop, saveShop, getShop, isSubscribed, getShopId, getMenu, loadMenu,
+  loadShop, patchShopFields, getShop, isSubscribed, getShopId, getMenu, loadMenu,
   setItemSoldOut, isItemSoldOut, ensureTrialStarted, getShopAccess,
   shopCanUse, getItemStock, setItemStock,
 } from './shop.js';
-import {
-  ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn,
-} from './staff-firebase-auth.js';
 import { getPlan, yen, paymentCta } from './plans.js';
 import { db } from './firebase.js';
 import {
@@ -26,11 +23,8 @@ const StorePage = {
     resolveShopId();
     await Promise.all([loadShop(), loadMenu()]);
     await ensureTrialStarted().catch(() => {});
-    ensureStaffAuthStyles();
-    await ensureStaffFirebase({
-      title: '店舗管理の Firebase ログイン',
-      hint: 'プロフィール保存・クーポン編集などに必要です。呼出対応だけなら「後で」でも可。',
-    }).catch(() => {});
+    // Store floor tablets stay Auth-free: rules allow narrow shop field patches.
+    // Firebase login is only for Ops / Admin (menu, billing, deletes).
     this.bind();
     this.patchNav();
     this.renderProfile();
@@ -57,25 +51,11 @@ const StorePage = {
     set('#navGuest', guestEntryUrl(id, 1));
   },
 
-  async requireFirebaseForWrite(actionLabel = 'この操作') {
-    if (isStaffSignedIn()) return true;
-    ensureStaffAuthStyles();
-    const user = await ensureStaffFirebase({
-      title: 'Firebase ログインが必要です',
-      hint: `${actionLabel}には Firebase Authentication が必要です。`,
-    });
-    return !!user;
-  },
-
   bind() {
     document.getElementById('openToggle')?.addEventListener('click', async () => {
-      if (!(await this.requireFirebaseForWrite('営業状態の変更'))) {
-        alert('Firebase ログイン後に変更できます');
-        return;
-      }
       const shop = getShop();
       try {
-        await saveShop({ isOpen: !shop.isOpen });
+        await patchShopFields({ isOpen: !shop.isOpen });
       } catch (e) {
         console.error(e);
         alert('更新に失敗しました');
@@ -89,10 +69,6 @@ const StorePage = {
       this.renderCoupons();
     });
     document.getElementById('saveStoreCoupons')?.addEventListener('click', async () => {
-      if (!(await this.requireFirebaseForWrite('クーポン保存'))) {
-        alert('Firebase ログイン後に保存できます');
-        return;
-      }
       this.syncStoreCouponsFromDom();
       try {
         await saveCoupons(this.couponDraft);
@@ -106,21 +82,12 @@ const StorePage = {
     document.getElementById('printQrSheet')?.addEventListener('click', () => this.printQrSheet());
     document.getElementById('storeForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!(await this.requireFirebaseForWrite('店舗プロフィール保存'))) {
-        const status = document.getElementById('storeStatus');
-        if (status) {
-          status.hidden = false;
-          status.classList.add('error');
-          status.textContent = 'Firebase ログイン後に保存できます';
-        }
-        return;
-      }
       const status = document.getElementById('storeStatus');
       status.hidden = false;
       status.classList.remove('error');
       status.textContent = '保存中...';
       try {
-        await saveShop({
+        await patchShopFields({
           name: document.getElementById('storeName').value.trim() || 'QuickOrder',
           subtitle: document.getElementById('storeSubtitle').value.trim(),
           hoursNote: document.getElementById('storeHours').value.trim(),
