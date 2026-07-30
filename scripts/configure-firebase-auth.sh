@@ -8,8 +8,6 @@ API_KEY="${FIREBASE_WEB_API_KEY:-AIzaSyBDe3aI2F-W9wSFxHtcaplYs5-U2MdrNI8}"
 STAFF_EMAIL="${STAFF_EMAIL:?STAFF_EMAIL required}"
 STAFF_PASSWORD="${STAFF_PASSWORD:?STAFF_PASSWORD required}"
 FIREBASE_TOKEN="${FIREBASE_TOKEN:?FIREBASE_TOKEN required (npx firebase-tools login:ci)}"
-BILLING_ACCOUNT="${BILLING_ACCOUNT:-}" # optional: billingAccounts/XXXX
-
 TOOLS_ROOT="$(npm root -g 2>/dev/null)/firebase-tools"
 if [[ ! -d "$TOOLS_ROOT" ]]; then
   npx --yes firebase-tools@latest --version >/dev/null
