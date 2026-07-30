@@ -8,74 +8,115 @@ API_KEY="${FIREBASE_WEB_API_KEY:-AIzaSyBDe3aI2F-W9wSFxHtcaplYs5-U2MdrNI8}"
 STAFF_EMAIL="${STAFF_EMAIL:?STAFF_EMAIL required}"
 STAFF_PASSWORD="${STAFF_PASSWORD:?STAFF_PASSWORD required}"
 FIREBASE_TOKEN="${FIREBASE_TOKEN:?FIREBASE_TOKEN required (npx firebase-tools login:ci)}"
+BILLING_ACCOUNT="${BILLING_ACCOUNT:-}" # optional: billingAccounts/XXXX
 
-# Public Firebase CLI OAuth client (used by firebase-tools CI tokens)
-CLIENT_ID="563584335869-fgrhgmd47bqnek1034d9pejz9hvuj0ah.apps.googleusercontent.com"
-CLIENT_SECRET="FAKESECRET_u1v2w3x4y5z6a7b8c9d0"
+TOOLS_ROOT="$(npm root -g 2>/dev/null)/firebase-tools"
+if [[ ! -d "$TOOLS_ROOT" ]]; then
+  npx --yes firebase-tools@latest --version >/dev/null
+  TOOLS_ROOT="$(find "$HOME/.npm/_npx" -path '*/firebase-tools/package.json' 2>/dev/null | head -1 | xargs dirname)"
+fi
 
 if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
   echo "::add-mask::${FIREBASE_TOKEN}"
   echo "::add-mask::${STAFF_PASSWORD}"
 fi
 
-echo "==> Exchanging CI token for access token"
-TOKEN_JSON=$(curl -sS https://oauth2.googleapis.com/token \
-  -d "grant_type=refresh_token" \
-  -d "refresh_token=${FIREBASE_TOKEN}" \
-  -d "client_id=${CLIENT_ID}" \
-  -d "client_secret=${CLIENT_SECRET}")
-ACCESS_TOKEN=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]);
-assert "access_token" in d, "Token exchange failed: "+sys.argv[1][:400];
-print(d["access_token"])' "$TOKEN_JSON")
-if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-  echo "::add-mask::${ACCESS_TOKEN}"
-fi
-AUTHZ="Authorization: Bearer ${ACCESS_TOKEN}"
-
-echo "==> Initialize Identity Platform / Auth (ok if already done)"
-INIT_CODE=$(curl -sS -o /tmp/fb-init.json -w "%{http_code}" -X POST \
-  "https://identitytoolkit.googleapis.com/v2/projects/${PROJECT_ID}/identityPlatform:initializeAuth" \
-  -H "$AUTHZ" -H "Content-Type: application/json" -H "X-Goog-User-Project: ${PROJECT_ID}" \
-  -d '{}')
-echo "initializeAuth HTTP ${INIT_CODE}"
-python3 -c 'import json; print(json.load(open("/tmp/fb-init.json")))' || true
-
-echo "==> Enable Email/Password sign-in"
-curl -sS -X PATCH \
-  "https://identitytoolkit.googleapis.com/admin/v2/projects/${PROJECT_ID}/config?updateMask=signIn.email" \
-  -H "$AUTHZ" -H "Content-Type: application/json" -H "X-Goog-User-Project: ${PROJECT_ID}" \
-  -d '{"signIn":{"email":{"enabled":true,"passwordRequired":true}}}' \
-  -o /tmp/fb-config.json
-python3 -c 'import json; d=json.load(open("/tmp/fb-config.json"));
-print("signIn:", json.dumps(d.get("signIn", d.get("error", d)), ensure_ascii=False)[:600])'
-python3 -c 'import json,sys; d=json.load(open("/tmp/fb-config.json"));
-sys.exit(1 if "error" in d and "signIn" not in d else 0)'
-
-echo "==> Create staff user (or confirm exists)"
-CREATE=$(curl -sS -X POST \
-  "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"${STAFF_EMAIL}\",\"password\":\"${STAFF_PASSWORD}\",\"returnSecureToken\":true}")
-CREATE_MSG=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print((d.get("error") or {}).get("message","") or ("OK:"+str(d.get("email") or d.get("localId"))))' "$CREATE")
-echo "signUp: ${CREATE_MSG}"
-if [[ "$CREATE_MSG" != OK:* && "$CREATE_MSG" != "EMAIL_EXISTS" ]]; then
-  echo "Trying Admin accounts API..."
-  ADMIN_CREATE=$(curl -sS -X POST \
-    "https://identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts" \
-    -H "$AUTHZ" -H "Content-Type: application/json" \
-    -d "{\"email\":\"${STAFF_EMAIL}\",\"password\":\"${STAFF_PASSWORD}\"}")
-  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); e=(d.get("error") or {}).get("message","");
-print("admin:", e or ("OK:"+str(d.get("email") or d.get("localId"))));
-sys.exit(0 if e in ("EMAIL_EXISTS","") or "localId" in d else 1)' "$ADMIN_CREATE"
-fi
-
 echo "==> Deploy Firestore rules"
 npx --yes firebase-tools@latest deploy --only firestore:rules \
   --project "$PROJECT_ID" --token "$FIREBASE_TOKEN" --non-interactive
 
-echo "==> Verify Auth responds"
-VERIFY=$(curl -sS "https://www.googleapis.com/identitytoolkit/v3/relyingparty/getProjectConfig?key=${API_KEY}")
-python3 -c 'import json,sys; d=json.loads(sys.argv[1]);
-print("getProjectConfig:", "error" in d and d["error"] or "ok", "domains=", d.get("authorizedDomains",[])[:3])' "$VERIFY"
+echo "==> Auth enable + staff user (via firebase-tools token refresh)"
+PROJECT_ID="$PROJECT_ID" API_KEY="$API_KEY" STAFF_EMAIL="$STAFF_EMAIL" \
+STAFF_PASSWORD="$STAFF_PASSWORD" FIREBASE_TOKEN="$FIREBASE_TOKEN" \
+BILLING_ACCOUNT="$BILLING_ACCOUNT" TOOLS_ROOT="$TOOLS_ROOT" \
+node <<'NODE'
+const path = require('path');
+const https = require('https');
+const tools = process.env.TOOLS_ROOT;
+const auth = require(path.join(tools, 'lib/auth.js'));
+const scopes = require(path.join(tools, 'lib/scopes.js'));
+const project = process.env.PROJECT_ID;
+const apiKey = process.env.API_KEY;
+const email = process.env.STAFF_EMAIL;
+const password = process.env.STAFF_PASSWORD;
+const refresh = process.env.FIREBASE_TOKEN;
+const billingAccount = process.env.BILLING_ACCOUNT || '';
+const sc = [scopes.CLOUD_PLATFORM, scopes.FIREBASE_PLATFORM, scopes.EMAIL, scopes.OPENID];
 
-echo "DONE. Staff login email: ${STAFF_EMAIL}"
+function req(method, url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const data = body == null ? null : JSON.stringify(body);
+    const r = https.request({
+      method, hostname: u.hostname, path: u.pathname + u.search,
+      headers: { ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}), ...headers },
+    }, (res) => {
+      let b = ''; res.on('data', (c) => b += c); res.on('end', () => {
+        let j; try { j = JSON.parse(b || '{}'); } catch { j = { raw: b }; }
+        resolve({ status: res.statusCode, body: j });
+      });
+    });
+    r.on('error', reject); if (data) r.write(data); r.end();
+  });
+}
+
+(async () => {
+  const tok = await auth.getAccessToken(refresh, sc);
+  const access = tok.access_token;
+  if (!access || String(access).startsWith('1//')) throw new Error('Failed to refresh access token');
+  const az = { Authorization: 'Bearer ' + access, 'X-Goog-User-Project': project };
+
+  // Ensure billing if initializeAuth needs it
+  let init = await req('POST', `https://identitytoolkit.googleapis.com/v2/projects/${project}/identityPlatform:initializeAuth`, az, {});
+  console.log('initializeAuth', init.status, JSON.stringify(init.body).slice(0, 200));
+  if (init.status >= 400 && /BILLING_NOT_ENABLED/.test(init.body.error?.message || '')) {
+    await req('POST', `https://serviceusage.googleapis.com/v1/projects/${project}/services/cloudbilling.googleapis.com:enable`, az, {});
+    await new Promise((r) => setTimeout(r, 5000));
+    let account = billingAccount;
+    if (!account) {
+      const list = await req('GET', 'https://cloudbilling.googleapis.com/v1/billingAccounts', az, null);
+      account = (list.body.billingAccounts || []).find((a) => a.open)?.name || '';
+    }
+    if (!account) throw new Error('No open billing account; link billing in GCP Console then retry');
+    const link = await req('PUT', `https://cloudbilling.googleapis.com/v1/projects/${project}/billingInfo`, az, {
+      billingAccountName: account,
+    });
+    console.log('billing link', link.status, JSON.stringify(link.body).slice(0, 200));
+    await new Promise((r) => setTimeout(r, 5000));
+    init = await req('POST', `https://identitytoolkit.googleapis.com/v2/projects/${project}/identityPlatform:initializeAuth`, az, {});
+    console.log('initializeAuth2', init.status, JSON.stringify(init.body).slice(0, 200));
+  }
+
+  const cfg = await req('PATCH',
+    `https://identitytoolkit.googleapis.com/admin/v2/projects/${project}/config?updateMask=signIn.email,authorizedDomains`,
+    az, {
+      signIn: { email: { enabled: true, passwordRequired: true } },
+      authorizedDomains: [
+        `${project}.firebaseapp.com`,
+        `${project}.web.app`,
+        'mobile-order-system.pages.dev',
+        'localhost',
+      ],
+    });
+  console.log('updateConfig', cfg.status, JSON.stringify(cfg.body.signIn || cfg.body.error || {}).slice(0, 300));
+  if (cfg.status >= 400) process.exit(1);
+
+  let signup = await req('POST', `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {},
+    { email, password, returnSecureToken: true });
+  const msg = (signup.body.error && signup.body.error.message) || ('OK ' + signup.body.email);
+  console.log('signUp', signup.status, msg);
+  if (signup.body.error && signup.body.error.message !== 'EMAIL_EXISTS') {
+    const admin = await req('POST', `https://identitytoolkit.googleapis.com/v1/projects/${project}/accounts`, az, { email, password });
+    console.log('adminCreate', admin.status, (admin.body.error && admin.body.error.message) || ('OK'));
+  }
+
+  const login = await req('POST', `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {},
+    { email, password, returnSecureToken: true });
+  if (login.status >= 400) {
+    console.error('signIn failed', login.body);
+    process.exit(1);
+  }
+  console.log('signIn OK', login.body.email);
+  console.log('DONE. Staff login:', email);
+})().catch((e) => { console.error(e); process.exit(1); });
+NODE
