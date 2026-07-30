@@ -1,0 +1,55 @@
+name: Configure Firebase Auth + Rules
+
+on:
+  workflow_dispatch:
+    inputs:
+      firebase_token:
+        description: "Output of: npx firebase-tools@latest login:ci (owner account)"
+        required: true
+        type: string
+      staff_email:
+        description: "Staff login email for Ops/Admin/Store"
+        required: true
+        type: string
+        default: "owner@quickorder.app"
+      staff_password:
+        description: "Staff login password (store safely; not shown in app UI)"
+        required: true
+        type: string
+      git_ref:
+        description: "Git ref that contains firestore.rules"
+        required: true
+        type: string
+        default: "cursor/firestore-auth-lockdown-a58c"
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Mask secrets
+        env:
+          FIREBASE_TOKEN: ${{ inputs.firebase_token }}
+          STAFF_PASSWORD: ${{ inputs.staff_password }}
+        run: |
+          echo "::add-mask::$FIREBASE_TOKEN"
+          echo "::add-mask::$STAFF_PASSWORD"
+
+      - name: Enable Auth, create user, deploy rules
+        env:
+          FIREBASE_TOKEN: ${{ inputs.firebase_token }}
+          STAFF_EMAIL: ${{ inputs.staff_email }}
+          STAFF_PASSWORD: ${{ inputs.staff_password }}
+          FIREBASE_PROJECT_ID: mobile-order-system-c7c70
+        run: |
+          chmod +x scripts/configure-firebase-auth.sh
+          ./scripts/configure-firebase-auth.sh

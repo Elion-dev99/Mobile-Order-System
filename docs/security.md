@@ -14,25 +14,27 @@
 | Leads / surveys read | Signed-in only (LP may still **create** leads) |
 | Discord | Prefer Cloudflare `DISCORD_WEBHOOK_URL`; client webhook needs Ops secret |
 
-## Firebase Auth setup (required before deploying rules)
+## Firebase Auth setup (one-shot)
 
-1. Firebase Console → **Authentication** → Get started
-2. Sign-in method → enable **Email/Password**
-3. Users → **Add user** (shared staff account is fine for v1)
-4. Deploy rules (below)
-5. Open Ops / Admin / Store → complete the Firebase login modal (separate from Ops password)
+Auth is not enabled on the project until this runs once (`CONFIGURATION_NOT_FOUND` until then).
+
+### Recommended: GitHub Action
+
+1. Locally: `npx firebase-tools@latest login:ci` (Firebase owner Google account) → copy the token
+2. Run workflow: [Configure Firebase Auth + Rules](https://github.com/Elion-dev99/Mobile-Order-System/actions/workflows/configure-firebase-auth.yml)
+3. Paste token + staff email/password → Run  
+   - Enables Email/Password  
+   - Creates the staff user  
+   - Deploys `firestore.rules`
+4. Open Ops / Admin / Store → Firebase login modal (separate from Ops password)
+
+### Manual (Console)
+
+1. [Authentication](https://console.firebase.google.com/project/mobile-order-system-c7c70/authentication/providers) → Get started → Email/Password ON → Add user
+2. Deploy rules: `npx firebase-tools@latest deploy --only firestore:rules --project mobile-order-system-c7c70`  
+   or publish in [Firestore Rules](https://console.firebase.google.com/project/mobile-order-system-c7c70/firestore/rules)
 
 Staff sessions persist in the browser (`browserLocalPersistence`). Ops「鍵」タブから再ログイン / ログアウト可能。
-
-## Deploy Firestore rules
-
-```bash
-firebase deploy --only firestore:rules
-```
-
-Or Firebase Console → Firestore → Rules → publish `firestore.rules`.
-
-**Deploy rules only after at least one Auth user exists**, or Ops/Admin writes will fail until you create that user.
 
 ## Required secrets
 
