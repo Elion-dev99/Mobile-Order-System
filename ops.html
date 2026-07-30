@@ -242,15 +242,14 @@
       </div>
 
       <div class="ops-health-playbook" id="opsCardinalSetup">
-        <h2>一度だけの設定（人間ゲート）</h2>
+        <h2>運用ステータス</h2>
         <ol class="ops-steps">
-          <li><a href="https://cursor.com/automations" target="_blank" rel="noopener">Cursor Automations</a> で <strong>Guardian</strong> と <strong>Executor</strong> を作成</li>
-          <li>各 Automation の Webhook URL / API key を控える（または Cursor API Key を1つ）</li>
-          <li>GitHub Actions「Configure Cursor Cardinal」で Cloudflare Pages secrets に投入</li>
-          <li>Discord Webhook は通知タブで保存済みなら流用されます</li>
-          <li>詳細プロトコル: <code>docs/cardinal.md</code></li>
+          <li><strong>CURSOR_API_KEY</strong> — Cloudflare に設定済み（オンデマンド起動可）</li>
+          <li><strong>GitHub cron</strong> — 毎時本番プローブ。異常時だけ Executor 起動</li>
+          <li><strong>Discord</strong> — 通知タブの Webhook があれば心拍・起動通知が届きます（任意）</li>
+          <li>マージ判断だけは当面人間ゲート。詳細: <code>docs/cardinal.md</code></li>
         </ol>
-        <p class="ops-muted">マージ判断だけは当面人間が残します。検知・調査・修正PR・相互監視は Cardinal が担います。</p>
+        <p class="ops-muted">追加の Cursor Automations（PRレビュー専用など）は任意です。今の構成だけで双AI起動は動きます。</p>
       </div>
     </section>
 
