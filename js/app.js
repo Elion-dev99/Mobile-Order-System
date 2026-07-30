@@ -837,6 +837,7 @@ const App = {
     });
     this.renderModal(item);
     document.getElementById('itemModal').classList.add('open');
+    document.body.classList.add('scroll-locked');
     document.body.style.overflow = 'hidden';
   },
 
@@ -999,7 +1000,7 @@ const App = {
 
   closeModal() {
     document.getElementById('itemModal').classList.remove('open');
-    document.body.style.overflow = '';
+    this.unlockPageScroll();
     this.modalItem = null;
   },
 
@@ -1083,16 +1084,22 @@ const App = {
   showView(view, { skipHistory = false, replace = false } = {}) {
     const next = view === 'cart' ? 'cart' : 'menu';
     this.view = next;
+    this.closeModal();
+    this.unlockPageScroll();
     const menuView = document.getElementById('spaMenuView');
     const cartView = document.getElementById('spaCartView');
     const header = document.querySelector('.guest-header');
     const allergen = document.querySelector('.guest-allergen');
     const cartBar = document.getElementById('cartBar');
+    const serviceBar = document.getElementById('guestServiceBar');
+    const reserveBar = document.getElementById('guestReserveBar');
 
     if (next === 'cart') {
       if (menuView) menuView.hidden = true;
       if (header) header.hidden = true;
       if (allergen) allergen.hidden = true;
+      if (serviceBar) serviceBar.hidden = true;
+      if (reserveBar) reserveBar.hidden = true;
       if (cartBar) cartBar.classList.remove('visible');
       if (cartView) cartView.hidden = false;
       document.body.classList.add('spa-cart-open');
@@ -1103,6 +1110,8 @@ const App = {
       if (menuView) menuView.hidden = false;
       if (header) header.hidden = false;
       if (allergen) allergen.hidden = false;
+      if (serviceBar) serviceBar.hidden = false;
+      if (reserveBar) reserveBar.hidden = false;
       document.body.classList.remove('spa-cart-open');
       this.updateCartBar();
     }
@@ -1272,16 +1281,21 @@ const App = {
     }
     // Tip UI visibility
     const tipRow = document.getElementById('tipRow');
-    if (tipRow) tipRow.hidden = !(shopCanUse('tip') && shop.tipEnabled);
+    if (tipRow) tipRow.hidden = !(shopCanUse('tip') && shop.tipEnabled !== false);
     const couponRow = document.getElementById('couponRow');
     if (couponRow) couponRow.style.display = shopCanUse('coupons') ? '' : 'none';
     this.renderChannelPaymentUi();
   },
 
+  unlockPageScroll() {
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+    document.body.classList.remove('scroll-locked');
+  },
+
   mountReserveBar() {
     if (document.getElementById('guestReserveBar')) return;
-    const host = document.querySelector('.guest-header');
-    if (!host) return;
+    const header = document.querySelector('.guest-header');
     const bar = document.createElement('div');
     bar.id = 'guestReserveBar';
     bar.className = 'guest-reserve-bar';
@@ -1289,7 +1303,9 @@ const App = {
       ${shopCanUse('reservations') ? `<button type="button" id="guestReserveBtn">${tUi('reserve', this.locale)}</button>` : ''}
       ${shopCanUse('waitlist') ? `<button type="button" id="guestWaitBtn">${tUi('waitlist', this.locale)}</button>` : ''}
     `;
-    host.appendChild(bar);
+    // Outside sticky header so scroll-back isn't trapped under a tall sticky block
+    if (header?.parentNode) header.insertAdjacentElement('afterend', bar);
+    else document.body.prepend(bar);
     document.getElementById('guestReserveBtn')?.addEventListener('click', async () => {
       const name = prompt(this.locale === 'en' ? 'Name' : 'お名前');
       if (!name) return;
@@ -1413,10 +1429,18 @@ const App = {
       btn.addEventListener('click', () => {
         this.tipPercent = Number(btn.dataset.tip) || 0;
         document.getElementById('tipRow')?.querySelectorAll('[data-tip]').forEach((b) => {
-          b.classList.toggle('active', b === btn);
+          b.classList.toggle('active', Number(b.dataset.tip) === this.tipPercent);
         });
         this.renderSpaCartSummary();
         this.updateCartBar();
+        // Make tip line obvious even at 0% after a change
+        const tipSummary = document.getElementById('tipSummaryRow');
+        const tipAmount = document.getElementById('tipAmount');
+        if (tipSummary && this.tipPercent > 0) tipSummary.hidden = false;
+        if (tipAmount) {
+          const totals = computeOrderTotals(this.cart, getShop(), { tipPercent: this.tipPercent });
+          tipAmount.textContent = `¥${totals.tip.toLocaleString()}`;
+        }
       });
     });
   },
