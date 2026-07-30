@@ -64,24 +64,34 @@ function mergeShop(data = {}, shopId = resolveShopId()) {
 
 export async function loadShop(shopId = resolveShopId()) {
   shopIdCache = shopId;
+
+  // Local created shops / cached settings first (works without Firestore shops rules)
   try {
-    const localRaw = localStorage.getItem(scopedKey('mos_shop_settings'));
-    if (localRaw) {
-      const local = JSON.parse(localRaw);
-      if (local?.id === shopId || !local?.id) {
-        shopCache = mergeShop(local, shopId);
+    const keyed = localStorage.getItem(`mos_shop_settings_${shopId}`);
+    if (keyed) shopCache = mergeShop(JSON.parse(keyed), shopId);
+    else {
+      const local = readLocalShops().find(s => s.id === shopId);
+      if (local) shopCache = mergeShop(local, shopId);
+      else {
+        const legacyKey = localStorage.getItem(scopedKey('mos_shop_settings'));
+        if (legacyKey) {
+          const parsed = JSON.parse(legacyKey);
+          if (parsed?.id === shopId || (!parsed?.id && shopId === DEFAULT_SHOP_ID)) {
+            shopCache = mergeShop(parsed, shopId);
+          }
+        }
       }
     }
   } catch (_) {}
+
   try {
-    const snap = await getDoc(settingsRef(shopId));
+    const snap = await withTimeout(getDoc(settingsRef(shopId)), 2500, 'loadShop timeout');
     if (snap.exists()) {
       shopCache = mergeShop(snap.data() || {}, shopId);
       return shopCache;
     }
-    // Migrate legacy default shop once
     if (shopId === DEFAULT_SHOP_ID) {
-      const legacy = await getDoc(legacySettingsRef());
+      const legacy = await withTimeout(getDoc(legacySettingsRef()), 2500, 'legacy load timeout');
       if (legacy.exists()) {
         shopCache = mergeShop(legacy.data() || {}, shopId);
         try { await setDoc(settingsRef(shopId), shopCache, { merge: true }); } catch (_) {}
@@ -198,15 +208,38 @@ export async function markSubscribed() {
   return saveShop({ subscribed: true, subscribedAt: Date.now() });
 }
 
+function withTimeout(promise, ms, label = 'timeout') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
+  ]);
+}
+
+function readLocalShops() {
+  try {
+    return JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalShop(shop) {
+  const local = readLocalShops();
+  const idx = local.findIndex(s => s.id === shop.id);
+  if (idx >= 0) local[idx] = shop;
+  else local.push(shop);
+  localStorage.setItem('mos_local_shops', JSON.stringify(local));
+  try {
+    localStorage.setItem(`mos_shop_settings_${shop.id}`, JSON.stringify(shop));
+  } catch (_) {}
+}
+
 export async function listShops() {
   const map = new Map();
   listSeedShops().forEach(s => map.set(s.id, { ...s }));
+  readLocalShops().forEach(s => map.set(s.id, mergeShop(s, s.id)));
   try {
-    const local = JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
-    local.forEach(s => map.set(s.id, mergeShop(s, s.id)));
-  } catch (_) {}
-  try {
-    const snap = await getDocs(collection(db, 'shops'));
+    const snap = await withTimeout(getDocs(collection(db, 'shops')), 2500, 'listShops timeout');
     snap.docs.forEach(d => {
       const data = d.data() || {};
       map.set(d.id, mergeShop(data, d.id));
@@ -223,43 +256,54 @@ export async function upsertShop(shopId, partial = {}) {
     .replace(/[^a-z0-9_-]/g, '')
     .slice(0, 48);
   if (!id) throw new Error('invalid shop id');
-  let current = {};
+
+  const existingLocal = readLocalShops().find(s => s.id === id) || seedShopMeta(id) || {};
+  const next = mergeShop({ ...existingLocal, ...partial, id, slug: id, updatedAt: Date.now() }, id);
+
+  // Always persist locally first so Ops UI never hangs on Firestore rules
+  writeLocalShop(next);
+  shopCache = next;
+  shopIdCache = id;
+
   try {
-    current = await loadShop(id);
-  } catch (_) {}
-  const next = mergeShop({ ...current, ...partial, id, slug: id }, id);
-  try {
-    await setDoc(settingsRef(id), { ...next, updatedAt: Date.now() }, { merge: true });
-    await ensureMenuSeeded(id);
-  } catch (e) {
-    console.warn('upsertShop firestore failed, saving locally', e);
+    await withTimeout(
+      setDoc(settingsRef(id), next, { merge: true }),
+      2500,
+      'upsertShop setDoc timeout'
+    );
     try {
-      const local = JSON.parse(localStorage.getItem('mos_local_shops') || '[]');
-      const idx = local.findIndex(s => s.id === id);
-      if (idx >= 0) local[idx] = next;
-      else local.push(next);
-      localStorage.setItem('mos_local_shops', JSON.stringify(local));
+      await withTimeout(ensureMenuSeeded(id), 2500, 'ensureMenuSeeded timeout');
     } catch (_) {}
+  } catch (e) {
+    console.warn('upsertShop firestore failed, kept local copy', e);
   }
   return next;
 }
 
 export async function deleteShop(shopId) {
   if (!shopId || shopId === DEFAULT_SHOP_ID) throw new Error('default shop cannot be deleted');
-  await deleteDoc(settingsRef(shopId));
+  try {
+    const local = readLocalShops().filter(s => s.id !== shopId);
+    localStorage.setItem('mos_local_shops', JSON.stringify(local));
+    localStorage.removeItem(`mos_shop_settings_${shopId}`);
+  } catch (_) {}
+  try {
+    await withTimeout(deleteDoc(settingsRef(shopId)), 2500, 'deleteShop timeout');
+  } catch (_) {}
   try { await deleteDoc(menuRef(shopId)); } catch (_) {}
 }
 
 export async function ensureSeedShops() {
   for (const seed of listSeedShops()) {
     try {
-      const snap = await getDoc(settingsRef(seed.id));
+      const snap = await withTimeout(getDoc(settingsRef(seed.id)), 2000, 'seed get timeout');
       if (!snap.exists()) {
-        await setDoc(settingsRef(seed.id), mergeShop(seed, seed.id));
-        await ensureMenuSeeded(seed.id);
+        await withTimeout(setDoc(settingsRef(seed.id), mergeShop(seed, seed.id)), 2000, 'seed set timeout');
+        await withTimeout(ensureMenuSeeded(seed.id), 2000, 'seed menu timeout');
       }
     } catch (e) {
       console.warn('seed shop failed', seed.id, e);
+      writeLocalShop(mergeShop(seed, seed.id));
     }
   }
 }
