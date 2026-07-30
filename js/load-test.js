@@ -179,6 +179,30 @@ function scrubLocalLoadArtifacts(shopIds = []) {
   }
 }
 
+async function deleteAllLoadTestOrders() {
+  let deleted = 0;
+  const errors = [];
+  try {
+    const snap = await getDocs(collection(db, 'orders'));
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      const isLoad = data.loadTest === true
+        || String(d.id).startsWith('LOAD-')
+        || String(data.shopId || '').startsWith('load-');
+      if (!isLoad) continue;
+      try {
+        await deleteDoc(d.ref);
+        deleted++;
+      } catch (e) {
+        errors.push(`orders/${d.id}: ${e?.message || e}`);
+      }
+    }
+  } catch (e) {
+    errors.push(`orders scan: ${e?.message || e}`);
+  }
+  return { deleted, errors };
+}
+
 /**
  * Delete all load-test shops (and related orders / service requests when possible).
  * @param {object} [opts]
@@ -189,11 +213,18 @@ function scrubLocalLoadArtifacts(shopIds = []) {
 export async function cleanupLoadTestShops(opts = {}) {
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
   const deleteRelated = opts.deleteRelated !== false;
-  const shops = await listShops();
+  const shops = await listShops().catch(() => []);
   let targets = shops.filter(isLoadTestShop);
   if (Array.isArray(opts.shopIds) && opts.shopIds.length) {
     const allow = new Set(opts.shopIds.map(String));
-    targets = targets.filter((s) => allow.has(s.id));
+    // Include explicit ids even if listShops couldn't see Firestore shops
+    const known = new Map(targets.map((s) => [s.id, s]));
+    for (const id of allow) {
+      if (!known.has(id) && (String(id).startsWith('load-') || id !== 'default')) {
+        known.set(id, { id, loadTest: true, name: id });
+      }
+    }
+    targets = [...known.values()].filter((s) => allow.has(s.id) && isLoadTestShop(s));
   }
   const shopIds = targets.map((s) => s.id);
   const result = {
@@ -205,25 +236,34 @@ export async function cleanupLoadTestShops(opts = {}) {
     shopIds: [],
     errors: [],
   };
-  onProgress(`負荷テスト店舗クリーンアップ開始（${shopIds.length}件）`, { shopIds: shopIds.slice(0, 30) });
+  onProgress(`負荷テスト店舗クリーンアップ開始（店舗候補 ${shopIds.length}件）`, { shopIds: shopIds.slice(0, 30) });
 
-  if (deleteRelated && shopIds.length) {
-    onProgress('関連注文を削除中…');
-    const orders = await deleteCollectionDocsByShopIds('orders', shopIds, { loadTestOnly: true });
-    result.ordersDeleted = orders.deleted;
-    result.errors.push(...orders.errors);
-    // Also by shopId for any that lacked loadTest flag
-    const orders2 = await deleteCollectionDocsByShopIds('orders', shopIds, { loadTestOnly: false });
-    result.ordersDeleted = Math.max(result.ordersDeleted, orders2.deleted);
-    result.errors.push(...orders2.errors);
+  if (deleteRelated) {
+    onProgress('負荷テスト注文を削除中…');
+    // Full scan first — works even when shops collection is permission-denied
+    const scanned = await deleteAllLoadTestOrders();
+    result.ordersDeleted += scanned.deleted;
+    result.errors.push(...scanned.errors);
 
-    onProgress('関連リクエストを削除中…');
-    const reqs = await deleteCollectionDocsByShopIds('serviceRequests', shopIds, { loadTestOnly: true });
-    result.requestsDeleted = reqs.deleted;
-    result.errors.push(...reqs.errors);
-    const reqs2 = await deleteCollectionDocsByShopIds('serviceRequests', shopIds, { loadTestOnly: false });
-    result.requestsDeleted = Math.max(result.requestsDeleted, reqs2.deleted);
-    result.errors.push(...reqs2.errors);
+    if (shopIds.length) {
+      const orders2 = await deleteCollectionDocsByShopIds('orders', shopIds, { loadTestOnly: false });
+      result.ordersDeleted += orders2.deleted;
+      result.errors.push(...orders2.errors);
+
+      onProgress('関連リクエストを削除中…');
+      const reqs = await deleteCollectionDocsByShopIds('serviceRequests', shopIds, { loadTestOnly: true });
+      result.requestsDeleted += reqs.deleted;
+      result.errors.push(...reqs.errors);
+      const reqs2 = await deleteCollectionDocsByShopIds('serviceRequests', shopIds, { loadTestOnly: false });
+      result.requestsDeleted += reqs2.deleted;
+      result.errors.push(...reqs2.errors);
+    } else {
+      // Still try loadTest-flagged service requests
+      onProgress('負荷テストリクエストを削除中…');
+      const reqs = await deleteCollectionDocsByShopIds('serviceRequests', [], { loadTestOnly: true });
+      result.requestsDeleted += reqs.deleted;
+      result.errors.push(...reqs.errors);
+    }
   }
 
   for (let i = 0; i < targets.length; i++) {
