@@ -44,7 +44,10 @@ export function computeOrderTotals(cart, shop = getShop(), opts = {}) {
   const afterDiscount = Math.max(0, subtotal - discount);
   const servicePct = shopCanUse('serviceCharge') ? Math.max(0, Number(shop?.serviceChargePercent) || 0) : 0;
   const serviceCharge = Math.floor(afterDiscount * (servicePct / 100));
-  const tipPercent = shopCanUse('tip') && shop?.tipEnabled ? Math.max(0, Number(opts.tipPercent) || 0) : 0;
+  // tipEnabled defaults on for Growth+; only hide when explicitly false
+  const tipPercent = shopCanUse('tip') && shop?.tipEnabled !== false
+    ? Math.max(0, Number(opts.tipPercent) || 0)
+    : 0;
   const tip = Math.floor(afterDiscount * (tipPercent / 100));
   const taxable = afterDiscount + serviceCharge + tip;
   const tax = Math.floor(taxable * 0.1);

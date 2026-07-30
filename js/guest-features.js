@@ -67,22 +67,48 @@ export async function createServiceRequest({ type, tableNumber, note = '' }) {
   }
 }
 
+function emitLocalRequests(shopId, cb) {
+  try {
+    const all = JSON.parse(localStorage.getItem('mos_local_requests') || '[]');
+    cb(all.filter((r) => (r.shopId || shopId) === shopId));
+  } catch {
+    cb([]);
+  }
+}
+
+function mergeRequestRows(shopId, cloudRows) {
+  let local = [];
+  try {
+    local = JSON.parse(localStorage.getItem('mos_local_requests') || '[]')
+      .filter((r) => (r.shopId || shopId) === shopId);
+  } catch (_) {}
+  const byId = new Map();
+  [...local, ...cloudRows].forEach((r) => byId.set(r.id, r));
+  return [...byId.values()].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+}
+
 export function subscribeServiceRequests(shopId, cb) {
+  let unsub = () => {};
+  const attachLoose = () => {
+    const loose = query(collection(db, 'serviceRequests'), where('shopId', '==', shopId));
+    unsub = onSnapshot(loose, (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      cb(mergeRequestRows(shopId, rows));
+    }, () => emitLocalRequests(shopId, cb));
+  };
   const q = query(
     collection(db, 'serviceRequests'),
     where('shopId', '==', shopId),
     orderBy('timestamp', 'desc')
   );
-  return onSnapshot(q, snap => {
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  unsub = onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, () => {
-    try {
-      const all = JSON.parse(localStorage.getItem('mos_local_requests') || '[]');
-      cb(all.filter(r => (r.shopId || shopId) === shopId));
-    } catch {
-      cb([]);
-    }
+    // Missing composite index → still listen live without orderBy
+    try { unsub(); } catch (_) {}
+    attachLoose();
   });
+  return () => { try { unsub(); } catch (_) {} };
 }
 
 export async function resolveServiceRequest(id, { tableNumber: tableHint } = {}) {
@@ -207,8 +233,10 @@ export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast, 
     ${quick ? `<button type="button" data-svc="cutlery" data-note="${locale === 'en' ? 'Cutlery please' : 'カトラリーください'}">${cutleryLabel}</button>` : ''}
     <button type="button" data-svc="bill">${billLabel}</button>
   `;
-  const header = document.querySelector('.guest-header') || document.body;
-  header.appendChild(bar);
+  // Keep OUT of sticky header — tall sticky headers trap scroll on mobile
+  const header = document.querySelector('.guest-header');
+  if (header?.parentNode) header.insertAdjacentElement('afterend', bar);
+  else document.body.prepend(bar);
 
   const applyBillUi = () => {
     const billBtn = bar.querySelector('[data-svc="bill"]');

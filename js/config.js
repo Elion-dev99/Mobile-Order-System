@@ -290,7 +290,7 @@ export const DEFAULT_SHOP = {
   quickServiceEnabled: true,
   /** Revenue-justifying ops features */
   serviceChargePercent: 0,
-  tipEnabled: false,
+  tipEnabled: true,
   tipPresets: [0, 5, 10],
   coupons: [],
   /** itemId -> remaining stock (null/absent = unlimited) */
