@@ -67,9 +67,9 @@ const StorePage = {
     document.title = `店舗管理 | ${shop.name || 'QuickOrder'}`;
     const sub = [
       plan.name,
-      shop.hoursNote || '',
+      shop.hoursNote || '営業時間未設定',
       isSubscribed() ? '課金中' : '未課金',
-    ].filter(Boolean).join(' · ');
+    ].join(' · ');
     document.getElementById('storePlanLine').textContent = sub;
 
     const btn = document.getElementById('openToggle');
