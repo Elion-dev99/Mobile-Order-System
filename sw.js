@@ -1,12 +1,12 @@
 /* Minimal offline shell for guest menu assets */
-const CACHE = 'qo-shell-v1';
+const CACHE = 'qo-shell-v2';
 const PRECACHE = [
   './',
   './index.html',
   './favicon.svg',
   './manifest.webmanifest',
-  './css/style.css?v=feat1',
-  './css/guest.css?v=feat1',
+  './css/style.css?v=ent1',
+  './css/guest.css?v=ent1',
 ];
 
 self.addEventListener('install', (event) => {

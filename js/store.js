@@ -6,12 +6,17 @@ import {
 import { getPlan, yen, paymentCta } from './plans.js';
 import { db } from './firebase.js';
 import {
-  collection, onSnapshot, query, where, orderBy
+  collection, onSnapshot, query, where, orderBy, doc, updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { resolveShopId, guestEntryUrl } from './tenant.js';
 import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
 import { orderDetailHtml, bindOrderHistoryToggles } from './order-history.js';
 import { listCoupons, normalizeCoupon, saveCoupons } from './coupons.js';
+import {
+  subscribeReservations, subscribeWaitlist, updateReservationStatus, updateWaitlistStatus,
+} from './reservations.js';
+import { startOfflineSync } from './offline-sync.js';
+import { markOrderPaid, paymentBadge } from './payments.js';
 
 const StorePage = {
   orders: [],
@@ -25,6 +30,7 @@ const StorePage = {
     await ensureTrialStarted().catch(() => {});
     // Store floor tablets stay Auth-free: rules allow narrow shop field patches.
     // Firebase login is only for Ops / Admin (menu, billing, deletes).
+    startOfflineSync();
     this.bind();
     this.patchNav();
     this.renderProfile();
@@ -35,6 +41,7 @@ const StorePage = {
     this.renderTableBoard();
     this.subscribeOrders();
     this.subscribeRequests();
+    this.subscribeFoh();
     setInterval(() => this.tickClock(), 1000);
     this.tickClock();
   },
@@ -337,6 +344,63 @@ const StorePage = {
     }));
   },
 
+  subscribeFoh() {
+    const shopId = getShopId();
+    this.reservations = [];
+    this.waitlist = [];
+    subscribeReservations(shopId, (rows) => {
+      this.reservations = rows;
+      this.renderFoh();
+    });
+    subscribeWaitlist(shopId, (rows) => {
+      this.waitlist = rows;
+      this.renderFoh();
+    });
+  },
+
+  renderFoh() {
+    const el = document.getElementById('storeFohList');
+    if (!el) return;
+    const rsv = (this.reservations || []).filter((r) => r.status === 'booked').slice(0, 15);
+    const wait = (this.waitlist || []).filter((w) => w.status === 'waiting').slice(0, 15);
+    el.innerHTML = `
+      <h3>予約</h3>
+      ${rsv.length ? rsv.map((r) => `
+        <div class="store-foh-row">
+          <span>${r.name} · ${r.partySize}名 · ${new Date(r.at).toLocaleString('ja-JP')}</span>
+          <button type="button" data-rsv="${r.id}">着席</button>
+        </div>`).join('') : '<p class="store-hint">予約なし</p>'}
+      <h3>待ち行列</h3>
+      ${wait.length ? wait.map((w) => `
+        <div class="store-foh-row">
+          <span>${w.name} · ${w.partySize}名</span>
+          <button type="button" data-wait="${w.id}">呼出</button>
+        </div>`).join('') : '<p class="store-hint">待ちなし</p>'}
+      <h3>会計クローズ（形）</h3>
+      ${(this.orders || []).filter((o) => o.paymentStatus && o.paymentStatus !== 'paid' && o.paymentStatus !== 'none').slice(0, 8).map((o) => `
+        <div class="store-foh-row">
+          <span>${o.id} · 席${o.tableNumber} · ${paymentBadge(o.payment || { status: o.paymentStatus })}</span>
+          <button type="button" data-pay="${o.id}">クローズ</button>
+        </div>`).join('') || '<p class="store-hint">未精算なし</p>'}
+    `;
+    el.querySelectorAll('[data-rsv]').forEach((btn) => {
+      btn.addEventListener('click', () => updateReservationStatus(btn.dataset.rsv, 'seated').catch(console.error));
+    });
+    el.querySelectorAll('[data-wait]').forEach((btn) => {
+      btn.addEventListener('click', () => updateWaitlistStatus(btn.dataset.wait, 'called').catch(console.error));
+    });
+    el.querySelectorAll('[data-pay]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          const order = this.orders.find((o) => o.id === btn.dataset.pay);
+          const patch = await markOrderPaid(order || {});
+          await updateDoc(doc(db, 'orders', btn.dataset.pay), patch);
+          this.renderFoh();
+        } catch (e) { console.error(e); alert('失敗しました'); }
+      });
+    });
+  },
+
   renderTableBoard() {
     const panel = document.getElementById('tableBoardPanel');
     if (!panel) return;
@@ -536,6 +600,7 @@ const StorePage = {
     document.getElementById('statGmv').textContent = `¥${yen(gmv)}`;
     this.renderOrderHistory();
     this.renderTableBoard();
+    this.renderFoh();
   },
 };
 

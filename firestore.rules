@@ -22,14 +22,13 @@ service cloud.firestore {
             && request.resource.data.email.size() < 200);
     }
 
-    // Kitchen tablets may advance status without full staff Auth.
-    function orderKitchenOnlyUpdate() {
+    // Kitchen / floor tablets: status + payment close without full Auth
+    function orderFloorUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['status']);
+        .hasOnly(['status', 'paymentStatus', 'payment', 'paidAt', 'closedAt']);
     }
 
     // Guest checkout + Store floor tablet: narrow field patches without Firebase Auth.
-    // Billing / plan / create-delete still require signedIn().
     function storeFloorShopUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly([
@@ -42,13 +41,17 @@ service cloud.firestore {
           'accentColor', 'minOrderAmount', 'partySizeRequired', 'ageGateEnabled',
           'quickServiceEnabled', 'serviceChargePercent', 'tipEnabled',
           'staffPins',
+          'channelsEnabled', 'paymentMethodsEnabled',
+          'posProvider', 'posLocationId', 'posLastSyncAt',
+          'printerMode', 'autoPrintOnOrder', 'printerIp',
+          'loyaltyEnabled', 'staffEmails',
         ]);
     }
 
     match /orders/{id} {
       allow read: if true;
       allow create: if isValidOrder();
-      allow update: if orderKitchenOnlyUpdate() || signedIn();
+      allow update: if orderFloorUpdate() || signedIn();
       allow delete: if signedIn();
     }
 
@@ -69,7 +72,6 @@ service cloud.firestore {
       allow write: if signedIn();
     }
 
-    // Lead PII: public create (LP), staff-only read/update
     match /leads/{id} {
       allow read, update: if signedIn();
       allow create: if isValidLeadCreate();
@@ -79,12 +81,37 @@ service cloud.firestore {
     match /serviceRequests/{id} {
       allow read: if true;
       allow create: if true;
-      // Store/admin resolve without forcing Auth on every floor tablet
       allow update: if true;
       allow delete: if signedIn();
     }
 
     match /surveys/{id} {
+      allow read: if signedIn();
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
+    match /members/{id} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if signedIn();
+    }
+
+    match /reservations/{id} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if signedIn();
+    }
+
+    match /waitlist/{id} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if signedIn();
+    }
+
+    match /auditLogs/{id} {
       allow read: if signedIn();
       allow create: if true;
       allow update, delete: if false;

@@ -28,6 +28,8 @@
       <div class="lang-toggle" id="langToggle" role="group" aria-label="Language">
         <button type="button" data-lang="ja" class="active">JP</button>
         <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="zh">中</button>
+        <button type="button" data-lang="ko">한</button>
       </div>
     </div>
   </div>
@@ -81,6 +83,25 @@
   <div class="cart-content spa-cart-body">
     <div class="cart-section-title">注文内容</div>
     <div id="cartItems"></div>
+    <div class="cart-section-title" id="channelTitle">注文タイプ</div>
+    <div class="channel-row" id="channelRow" role="group" aria-label="注文タイプ">
+      <button type="button" class="channel-btn active" data-channel="dine_in">店内</button>
+      <button type="button" class="channel-btn" data-channel="takeout">テイクアウト</button>
+      <button type="button" class="channel-btn" data-channel="delivery">デリバリー</button>
+    </div>
+    <div class="cart-section-title" id="paymentTitle">お支払い（形のみ・本番決済は後日）</div>
+    <div class="payment-row" id="paymentRow"></div>
+    <div class="cart-section-title" id="memberTitle">ポイント会員</div>
+    <div class="member-row" id="memberRow" hidden>
+      <input id="memberPhone" type="tel" inputmode="tel" placeholder="電話番号" maxlength="15" autocomplete="tel">
+      <input id="memberName" type="text" placeholder="お名前（任意）" maxlength="40">
+      <button type="button" id="memberSaveBtn" class="menu-link-btn">登録</button>
+      <p class="coupon-msg" id="memberMsg" hidden></p>
+      <label class="member-redeem" id="memberRedeemWrap" hidden>
+        ポイント利用
+        <input id="pointsRedeem" type="number" min="0" step="1" value="0">
+      </label>
+    </div>
     <div class="cart-section-title">クーポン</div>
     <div class="coupon-row" id="couponRow">
       <input id="couponInput" type="text" placeholder="クーポンコード" autocomplete="off" maxlength="24">
@@ -137,7 +158,7 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-    <script type="module" src="js/app.js?v=feat1"></script>
+    <script type="module" src="js/app.js?v=ent1"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
