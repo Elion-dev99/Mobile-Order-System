@@ -57,6 +57,8 @@
   </nav>
 
   <main class="ops-main">
+    <div id="opsHealthBanner" class="ops-health-banner" hidden></div>
+
     <section data-ops-panel="hq">
       <div class="ops-cards">
         <div class="ops-card"><span>店舗数</span><strong id="hqShops">0</strong></div>
@@ -66,6 +68,14 @@
         <div class="ops-card"><span>新規リード</span><strong id="hqLeads">0</strong></div>
         <div class="ops-card"><span>未対応呼出</span><strong id="hqRequests">0</strong></div>
         <div class="ops-card"><span>平均満足度</span><strong id="hqNps">—</strong></div>
+        <div class="ops-card"><span>サーバー</span><strong id="hqHealth">確認中</strong></div>
+      </div>
+      <div id="opsHealthPlaybook" class="ops-health-playbook" hidden>
+        <h2>障害時の対処</h2>
+        <ul id="opsHealthPlaybookList" class="ops-checklist"></ul>
+        <button type="button" id="opsHealthRecheck" class="ops-btn-secondary">再チェック</button>
+        <button type="button" id="opsHealthNotify" class="ops-btn-secondary">状態をDiscordへ送信</button>
+        <p id="opsHealthStatus" class="ops-status" hidden></p>
       </div>
       <h2>店舗別きょう</h2>
       <div class="ops-table-wrap">
@@ -100,7 +110,7 @@
     <section data-ops-panel="notify" hidden>
       <div id="notifySetupBanner" class="ops-banner" hidden>
         <strong>Discord通知の初期設定がまだです</strong>
-        <span>下のウィザードを進めると、店舗・商品・契約のお知らせが Discord に届きます。</span>
+        <span>Webhook URL を保存すると、契約・負荷・障害のお知らせが Discord に届きます。</span>
       </div>
 
       <div class="ops-status-cards" id="notifyStatusCards">

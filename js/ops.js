@@ -22,6 +22,11 @@ import {
   NOTIFY_EVENTS,
 } from './notify.js';
 import { maybeNotifySystemLoad, notifySystemLoadNow, assessSystemLoad } from './load-monitor.js';
+import {
+  runHealthCheckAndNotify,
+  playbookFor,
+  listPendingOrders,
+} from './health.js';
 
 const OpsPage = {
   shops: [],
@@ -31,6 +36,8 @@ const OpsPage = {
   requests: [],
   unsubReq: null,
   _loadNotifyTimer: null,
+  _healthTimer: null,
+  health: null,
 
   async init() {
     if (!isOpsAuthed()) {
@@ -61,6 +68,8 @@ const OpsPage = {
     }
     this.renderLabs();
     await this.refreshNotifySetup();
+    await this.refreshHealth();
+    this.startHealthPolling();
     const params = new URLSearchParams(location.search);
     if (params.get('tab') === 'notify') this.switchTab('notify');
     else {
@@ -68,6 +77,69 @@ const OpsPage = {
       if (status?.needsSetup) this.switchTab('notify');
     }
     window.scrollTo(0, 0);
+  },
+
+  startHealthPolling() {
+    clearInterval(this._healthTimer);
+    this._healthTimer = setInterval(() => {
+      this.refreshHealth({ notify: true }).catch(() => {});
+    }, 60_000);
+    window.addEventListener('online', () => this.refreshHealth({ notify: true }));
+    window.addEventListener('offline', () => this.refreshHealth({ notify: true }));
+  },
+
+  async refreshHealth({ notify = true } = {}) {
+    try {
+      if (notify) {
+        const { health } = await runHealthCheckAndNotify();
+        this.health = health;
+      } else {
+        const { checkSystemHealth } = await import('./health.js');
+        this.health = await checkSystemHealth();
+      }
+    } catch (_) {
+      this.health = {
+        status: 'down',
+        label: '障害',
+        emoji: '🔴',
+        firestore: { ok: false },
+        notifyApi: { functionReady: false },
+        online: typeof navigator !== 'undefined' ? navigator.onLine !== false : true,
+      };
+    }
+    this.renderHealth();
+  },
+
+  renderHealth() {
+    const h = this.health;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    if (!h) {
+      set('hqHealth', '確認中');
+      return;
+    }
+    set('hqHealth', `${h.emoji || ''} ${h.label || h.status}`);
+    const banner = document.getElementById('opsHealthBanner');
+    const book = document.getElementById('opsHealthPlaybook');
+    const list = document.getElementById('opsHealthPlaybookList');
+    const pending = listPendingOrders().length;
+    if (banner) {
+      if (h.status === 'ok') {
+        banner.hidden = true;
+        banner.innerHTML = '';
+      } else {
+        banner.hidden = false;
+        banner.dataset.level = h.status;
+        banner.innerHTML = `<strong>${h.emoji || ''} サーバー状態: ${escapeHtml(h.label || h.status)}</strong>
+          <span>Firestore: ${h.firestore?.ok ? 'OK' : '障害'} · 通知API: ${h.notifyApi?.functionReady ? 'OK' : '障害'}${pending ? ` · 保留注文 ${pending}件` : ''}</span>`;
+      }
+    }
+    if (book && list) {
+      const show = h.status !== 'ok';
+      book.hidden = !show;
+      if (show) {
+        list.innerHTML = playbookFor(h.status).map(s => `<li>${escapeHtml(s)}</li>`).join('');
+      }
+    }
   },
 
   showGate() {
@@ -337,6 +409,21 @@ const OpsPage = {
       if (btn) btn.disabled = false;
     });
 
+    document.getElementById('opsHealthRecheck')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsHealthStatus');
+      if (st) { st.hidden = false; st.textContent = '再チェック中...'; }
+      await this.refreshHealth({ notify: false });
+      if (st) st.textContent = `結果: ${this.health?.emoji || ''} ${this.health?.label || ''}`;
+    });
+    document.getElementById('opsHealthNotify')?.addEventListener('click', async () => {
+      const st = document.getElementById('opsHealthStatus');
+      if (st) { st.hidden = false; st.textContent = 'Discordへ送信中...'; }
+      const { health } = await runHealthCheckAndNotify({ forceNotify: true });
+      this.health = health;
+      this.renderHealth();
+      if (st) st.textContent = `送信しました（${health?.emoji || ''} ${health?.label || ''}）`;
+    });
+
     document.getElementById('opsNotifySaveEvents')?.addEventListener('click', async () => {
       const st = document.getElementById('opsNotifyStatus');
       st.hidden = false;
@@ -386,6 +473,7 @@ const OpsPage = {
     set('notifyReadyStatus', status.ready ? 'OK' : '要設定');
 
     const banner = document.getElementById('notifySetupBanner');
+    // Webhook設定済みなら黄色い初期設定バナーは出さない
     if (banner) banner.hidden = !status.needsSetup;
 
     const list = document.getElementById('notifyChecklist');

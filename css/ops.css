@@ -339,3 +339,32 @@ body.ops-body {
   cursor: pointer;
   font-family: inherit;
 }
+
+
+.ops-health-banner {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(237, 66, 69, 0.45);
+  background: rgba(237, 66, 69, 0.14);
+  color: var(--ops-text);
+}
+.ops-health-banner[data-level="degraded"] {
+  border-color: rgba(240, 180, 41, 0.45);
+  background: rgba(240, 180, 41, 0.12);
+}
+.ops-health-banner[data-level="offline"] {
+  border-color: rgba(142, 170, 162, 0.5);
+  background: rgba(142, 170, 162, 0.12);
+}
+.ops-health-banner[hidden] { display: none !important; }
+.ops-health-playbook {
+  margin: 0 0 18px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--ops-line);
+  background: var(--ops-panel);
+}
+.ops-health-playbook h2 { margin-top: 0; }

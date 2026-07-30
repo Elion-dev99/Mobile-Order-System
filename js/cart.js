@@ -7,6 +7,7 @@ import {
 import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
 import { resolveShopId } from './tenant.js';
 import { recommendUpsells } from './guest-features.js';
+import { enqueuePendingOrder, flushPendingOrders, listPendingOrders } from './health.js';
 
 function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -35,10 +36,23 @@ const CartPage = {
     this.loadCart();
     this.render();
     this.bindEvents();
-    if (!isDemoMode()) this.loadReorderHistory();
-    else {
+    if (!isDemoMode()) {
+      this.loadReorderHistory();
+      this.flushQueuedOrders();
+    } else {
       const reorder = document.getElementById('reorderSection');
       if (reorder) reorder.classList.add('hidden');
+    }
+  },
+
+  async flushQueuedOrders() {
+    const pending = listPendingOrders();
+    if (!pending.length) return;
+    const result = await flushPendingOrders(async (order) => {
+      await setDoc(doc(db, 'orders', order.id), order);
+    });
+    if (result.sent) {
+      showToast(`保留していた注文 ${result.sent}件を送信しました`);
     }
   },
 
@@ -296,8 +310,18 @@ const CartPage = {
       location.href = withDemo(`status.html?order=${orderId}&table=${encodeURIComponent(this.tableNumber)}`);
     } catch (e) {
       console.error(e);
-      btn.textContent = 'エラーが発生しました。再度お試しください';
+      const n = enqueuePendingOrder(order);
+      localStorage.removeItem(cartStorageKey());
+      showToast(`通信障害のため注文を端末に一時保存しました（保留${n}件）`);
+      btn.textContent = '一時保存しました。接続後に自動再送します';
       btn.disabled = false;
+      // Still take guest to a local status view if possible
+      try {
+        sessionStorage.setItem('mos_demo_order_' + orderId, JSON.stringify({ ...order, queued: true }));
+      } catch (_) {}
+      setTimeout(() => {
+        location.href = withDemo(`status.html?order=${orderId}&table=${encodeURIComponent(this.tableNumber)}&queued=1`);
+      }, 900);
     }
   },
 };

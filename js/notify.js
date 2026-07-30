@@ -25,6 +25,7 @@ const LEGACY = {
 
 export const NOTIFY_EVENTS = [
   { id: 'system_load', label: 'システム負荷・混雑状況', defaultOn: true },
+  { id: 'system_health', label: 'サーバー障害・復旧', defaultOn: true },
   { id: 'lead_new', label: '見込み契約利益（問い合わせ）', defaultOn: true },
   { id: 'lead_won', label: '成約利益（リード成約）', defaultOn: true },
   { id: 'contract_activated', label: '契約収益（課金開始・MRR）', defaultOn: true },
@@ -37,6 +38,7 @@ export const NOTIFY_EVENTS = [
 
 const EVENT_COLORS = {
   system_load: 0xfaa61a,
+  system_health: 0xed4245,
   lead_new: 0x5865f2,
   lead_won: 0xfee75c,
   contract_activated: 0x57f287,
@@ -244,12 +246,19 @@ export async function getSetupStatus() {
   const settings = await loadNotifySettings();
   const api = await probeNotifyApi();
   const hasWebhook = isLikelyDiscordWebhook(settings.webhook) || !!api.hasEnvWebhook;
+  // Webhook が入っていれば初期設定は完了扱い（黄色いバナーを出さない）
+  if (hasWebhook && !settings.setupDone) {
+    try {
+      await saveNotifySettings({ setupDone: true });
+    } catch (_) {}
+  }
+  const refreshed = getNotifySettings();
   return {
-    settings,
+    settings: refreshed,
     api,
     hasWebhook,
-    ready: !!(settings.enabled && hasWebhook && api.functionReady),
-    needsSetup: !settings.setupDone || !hasWebhook,
+    ready: !!(refreshed.enabled !== false && hasWebhook && api.functionReady),
+    needsSetup: !hasWebhook,
   };
 }
 
@@ -352,6 +361,19 @@ export async function testSlackNotify() {
 }
 
 const ALL_EVENT_SAMPLES = [
+  {
+    event: 'system_health',
+    title: 'システム障害: 一部障害',
+    emoji: '🟡',
+    fields: {
+      状態: '🟡 一部障害',
+      Firestore: 'NG firestore_timeout',
+      通知API: 'OK',
+      回線: 'オンライン',
+      対処: '一部サービスのみ障害です（DBまたは通知）',
+      種別: 'テスト通知',
+    },
+  },
   {
     event: 'system_load',
     title: 'システム負荷: 混雑',
