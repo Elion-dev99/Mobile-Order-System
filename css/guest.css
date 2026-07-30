@@ -573,6 +573,121 @@ body.guest .status-action-bar {
   font-size: 0.75rem;
   font-weight: 700;
 }
+.menu-card-price.is-sale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.menu-card-price.is-sale s {
+  color: var(--g-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+.menu-card-price.is-sale strong {
+  color: #b42318;
+  font-size: 1.05em;
+}
+.sale-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fde8e4;
+  color: #b42318;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.modal-price.is-sale s {
+  opacity: 0.55;
+  margin-right: 6px;
+  font-size: 0.85em;
+}
+.modal-sale-note {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: #b42318;
+  font-weight: 600;
+}
+.order-gate-banner {
+  margin: 0 16px 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff4e5;
+  color: #8a4b2d;
+  border: 1px solid #f0d2a8;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.order-gate-banner[data-reason="last_order"] {
+  background: #fde8e4;
+  border-color: #f2c1b6;
+  color: #9b1c1c;
+}
+.order-gate-banner[data-reason="last_order_info"] {
+  background: rgba(13, 92, 77, 0.08);
+  border-color: rgba(13, 92, 77, 0.18);
+  color: var(--g-accent, #0D5C4D);
+}
+.bill-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(13, 92, 77, 0.35), transparent 55%),
+    rgba(18, 24, 22, 0.72);
+  backdrop-filter: blur(6px);
+}
+.bill-lock-overlay[hidden] { display: none !important; }
+.bill-lock-card {
+  width: min(420px, 100%);
+  padding: 28px 24px 32px;
+  border-radius: 24px;
+  background: linear-gradient(165deg, #f7faf8 0%, #eef5f1 100%);
+  color: #14201c;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.28);
+  animation: guestRise 0.4s ease both;
+}
+.bill-lock-kicker {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #0D5C4D;
+}
+.bill-lock-seat {
+  margin: 0 0 16px;
+  display: grid;
+  gap: 4px;
+}
+.bill-lock-seat span {
+  font-size: 0.85rem;
+  color: #5a6b65;
+  font-weight: 600;
+}
+.bill-lock-seat strong {
+  font-family: Fraunces, "Zen Kaku Gothic New", serif;
+  font-size: clamp(3.2rem, 14vw, 4.6rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #0a3d34;
+}
+.bill-lock-msg {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #334540;
+  font-weight: 600;
+}
+body.ordering-locked-bill .cart-bar,
+body.ordering-locked-bill .guest-service-bar [data-svc="staff"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
 .cart-upsells {
   margin: 16px 0 8px;
   padding: 14px;

@@ -246,14 +246,16 @@ const AdminPage = {
       }
       host.hidden = false;
       host.innerHTML = open.map(r => `
-        <div class="admin-req-chip">
-          <span>${r.type === 'bill' ? '会計' : '呼出'} · 席${r.tableNumber}</span>
-          <button type="button" data-resolve="${r.id}">済</button>
+        <div class="admin-req-chip ${r.type === 'bill' ? 'is-bill' : ''}">
+          <span>${r.type === 'bill' ? '🧾 会計' : '呼出'} · <strong>席${r.tableNumber}</strong>${r.type === 'bill' ? ' → レジ' : ''}</span>
+          <button type="button" data-resolve="${r.id}" data-table="${r.tableNumber}">済</button>
         </div>
       `).join('');
       host.querySelectorAll('[data-resolve]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          try { await resolveServiceRequest(btn.dataset.resolve); } catch (e) { console.error(e); }
+          try {
+            await resolveServiceRequest(btn.dataset.resolve, { tableNumber: btn.dataset.table });
+          } catch (e) { console.error(e); }
         });
       });
     });
@@ -404,6 +406,27 @@ const AdminPage = {
           <button type="button" class="me-del" data-idx="${idx}">削除</button>
         </div>
 
+        <div class="me-sale-block">
+          <div class="me-custom-head">
+            <strong>時間帯セール</strong>
+            <span>指定時間だけ値引き価格で表示</span>
+          </div>
+          <div class="me-sale-grid">
+            <label class="me-check"><input type="checkbox" class="me-sale-on" ${item.saleEnabled ? 'checked' : ''}><span>セール有効</span></label>
+            <label class="me-field">セール価格
+              <div class="me-price-wrap"><span>¥</span>
+                <input class="me-sale-price" type="number" min="0" step="10" value="${Number(item.salePrice) || 0}" aria-label="セール価格">
+              </div>
+            </label>
+            <label class="me-field">開始
+              <input class="me-sale-from" type="time" value="${this.escapeAttr(item.saleFrom || '11:00')}">
+            </label>
+            <label class="me-field">終了
+              <input class="me-sale-until" type="time" value="${this.escapeAttr(item.saleUntil || '14:00')}">
+            </label>
+          </div>
+        </div>
+
         <div class="me-custom-block">
           <div class="me-custom-head">
             <strong>カスタム項目</strong>
@@ -537,6 +560,10 @@ const AdminPage = {
         price: Number(row.querySelector('.me-price')?.value) || 0,
         category: row.querySelector('.me-cat')?.value || 'side',
         popular: !!row.querySelector('.me-popular')?.checked,
+        saleEnabled: !!row.querySelector('.me-sale-on')?.checked,
+        salePrice: Number(row.querySelector('.me-sale-price')?.value) || 0,
+        saleFrom: row.querySelector('.me-sale-from')?.value || '11:00',
+        saleUntil: row.querySelector('.me-sale-until')?.value || '14:00',
         customizable,
       };
     });
@@ -554,6 +581,10 @@ const AdminPage = {
       popular: false,
       allergens: [],
       customizable: [],
+      saleEnabled: false,
+      salePrice: 0,
+      saleFrom: '11:00',
+      saleUntil: '14:00',
     });
     this.renderMenuEditor();
   },

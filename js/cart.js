@@ -1,12 +1,14 @@
 import { TablePin } from './pin.js';
-import { loadMenu, getMenu, getShopId, loadShop, isItemSoldOut } from './shop.js';
+import { loadMenu, getMenu, getShopId, loadShop, getShop, isItemSoldOut, getItemUnitPrice, getOrderingBlockReason } from './shop.js';
 import { db } from './firebase.js';
 import {
   collection, doc, setDoc, getDocs, query, where, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
 import { resolveShopId } from './tenant.js';
-import { recommendUpsells } from './guest-features.js';
+import {
+  recommendUpsells, subscribeTableBillLock, showBillLockOverlay, hideBillLockOverlay,
+} from './guest-features.js';
 import { enqueuePendingOrder, flushPendingOrders, listPendingOrders } from './health.js';
 
 function showToast(msg) {
@@ -36,6 +38,14 @@ const CartPage = {
     this.loadCart();
     this.render();
     this.bindEvents();
+    subscribeTableBillLock(this.tableNumber, ({ locked }) => {
+      if (locked) {
+        showBillLockOverlay({ tableNumber: this.tableNumber, locale: 'ja' });
+      } else {
+        hideBillLockOverlay();
+      }
+      this.updatePlaceBtn();
+    });
     if (!isDemoMode()) {
       this.loadReorderHistory();
       this.flushQueuedOrders();
@@ -162,12 +172,17 @@ const CartPage = {
         ${recs.map(item => `
           <button type="button" class="cart-upsell-item" data-upsell="${item.id}">
             <span>${item.emoji || ''} ${item.name}</span>
-            <strong>¥${item.price.toLocaleString()}</strong>
+            <strong>¥${getItemUnitPrice(item).toLocaleString()}</strong>
           </button>
         `).join('')}
       </div>`;
     wrap.querySelectorAll('[data-upsell]').forEach(btn => {
       btn.addEventListener('click', () => {
+        const block = getOrderingBlockReason(this.tableNumber, getShop());
+        if (block.blocked) {
+          showToast(block.label);
+          return;
+        }
         const item = getMenu().items.find(i => i.id === btn.dataset.upsell);
         if (!item || isItemSoldOut(item.id)) return;
         this.cart.push({
@@ -175,7 +190,7 @@ const CartPage = {
           itemId: item.id,
           name: item.name,
           emoji: item.emoji,
-          price: item.price,
+          price: getItemUnitPrice(item),
           qty: 1,
           customizations: {},
           toggles: {},
@@ -189,6 +204,11 @@ const CartPage = {
   },
 
   updateQty(entryId, action) {
+    const block = getOrderingBlockReason(this.tableNumber, getShop());
+    if (action === 'plus' && block.blocked) {
+      showToast(block.label);
+      return;
+    }
     const idx = this.cart.findIndex(e => String(e.id) === String(entryId));
     if (idx === -1) return;
     if (action === 'plus') this.cart[idx].qty++;
@@ -262,7 +282,17 @@ const CartPage = {
 
   updatePlaceBtn() {
     const btn = document.getElementById('placeOrderBtn');
-    if (btn) btn.disabled = this.cart.length === 0;
+    if (!btn) return;
+    const block = getOrderingBlockReason(this.tableNumber, getShop());
+    if (block.blocked) {
+      btn.disabled = true;
+      btn.textContent = block.reason === 'bill'
+        ? 'お会計中（レジへお進みください）'
+        : block.label;
+      return;
+    }
+    btn.disabled = this.cart.length === 0;
+    btn.textContent = '注文を確定する';
   },
 
   bindEvents() {
@@ -278,6 +308,12 @@ const CartPage = {
 
   async placeOrder() {
     if (this.cart.length === 0) return;
+    const block = getOrderingBlockReason(this.tableNumber, getShop());
+    if (block.blocked) {
+      showToast(block.label);
+      this.updatePlaceBtn();
+      return;
+    }
     const btn = document.getElementById('placeOrderBtn');
     btn.textContent = isDemoMode() ? 'テスト注文を送信中...' : '注文を送信中...';
     btn.disabled = true;

@@ -60,6 +60,14 @@
       <label>店舗名<input id="storeName" name="name" required></label>
       <label>サブタイトル<input id="storeSubtitle" name="subtitle"></label>
       <label>営業時間メモ<input id="storeHours" name="hoursNote" placeholder="11:00–22:00"></label>
+      <label class="store-check">
+        <input type="checkbox" id="storeLastOrderEnabled" name="lastOrderEnabled">
+        <span>ラストオーダーを有効にする</span>
+      </label>
+      <label>ラストオーダー時刻
+        <input id="storeLastOrderTime" name="lastOrderTime" type="time" value="21:30">
+      </label>
+      <p class="store-help">時刻を過ぎると客席からの新規注文を受け付けません（会計・呼出は可能）。</p>
       <label>住所・案内<input id="storeAddress" name="address" placeholder="任意"></label>
       <label>テーブル数<input id="storeTables" name="tableCount" type="number" min="1" max="300"></label>
       <label>担当メール<input id="storeEmail" name="ownerEmail" type="email"></label>

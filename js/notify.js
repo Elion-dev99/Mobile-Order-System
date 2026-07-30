@@ -34,6 +34,7 @@ export const NOTIFY_EVENTS = [
   { id: 'shop_deleted', label: '店舗の削除', defaultOn: true },
   { id: 'item_added', label: '商品の追加', defaultOn: true },
   { id: 'item_removed', label: '商品の削除', defaultOn: true },
+  { id: 'bill_request', label: '客席からの会計リクエスト', defaultOn: true },
 ];
 
 const EVENT_COLORS = {
@@ -47,6 +48,7 @@ const EVENT_COLORS = {
   shop_deleted: 0xff6b6b,
   item_added: 0x57f287,
   item_removed: 0xed4245,
+  bill_request: 0xfaa61a,
   test: 0x3dcf9a,
   default: 0x3dcf9a,
 };
@@ -472,6 +474,18 @@ const ALL_EVENT_SAMPLES = [
     emoji: '❌',
     fields: { 店舗: 'テスト焼肉', 店舗ID: 'test-yakiniku', 件数: 1, 商品: '🧊 限定かき氷', 種別: 'テスト通知' },
   },
+  {
+    event: 'bill_request',
+    title: '会計リクエスト',
+    emoji: '🧾',
+    fields: {
+      店舗: 'テスト焼肉',
+      店舗ID: 'test-yakiniku',
+      席番号: '5',
+      案内: 'お客様はレジへ向かいます。追加注文はロック済みです',
+      種別: 'テスト通知',
+    },
+  },
 ];
 
 function sleep(ms) {
@@ -625,4 +639,14 @@ export function notifyPlanChanged(shop, prevPlanId, nextPlanId) {
     MRR増減: deltaText,
     ARR影響: `${delta >= 0 ? '+' : ''}¥${yen(estimateArr(delta))}/年`,
   }, delta >= 0 ? '📈' : '📉', 'plan_changed');
+}
+
+export function notifyBillRequested({ shopId, shopName, tableNumber, requestId } = {}) {
+  return notifyDiscordEvent('会計リクエスト', {
+    店舗: shopName || shopId,
+    店舗ID: shopId,
+    席番号: String(tableNumber ?? ''),
+    案内: 'お客様はレジへ向かいます。追加注文はロック済みです',
+    リクエストID: requestId || '—',
+  }, '🧾', 'bill_request');
 }

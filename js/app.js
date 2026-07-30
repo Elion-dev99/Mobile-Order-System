@@ -1,12 +1,16 @@
 import { TablePin } from './pin.js';
-import { loadShop, loadMenu, getShop, getMenu, getShopId, isItemSoldOut } from './shop.js';
+import {
+  loadShop, loadMenu, getShop, getMenu, getShopId, isItemSoldOut,
+  getItemUnitPrice, isSaleActive, getOrderingBlockReason,
+} from './shop.js';
 import { ITEM_I18N, CAT_I18N, ALLERGEN_I18N, UI_I18N } from './i18n-menu.js';
 import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
 import { resolveShopId } from './tenant.js';
 import { db } from './firebase.js';
 import { collection, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import {
-  mountGuestServiceActions, mountWaitBadge, estimateWaitMinutes
+  mountGuestServiceActions, mountWaitBadge, estimateWaitMinutes,
+  subscribeTableBillLock, showBillLockOverlay, hideBillLockOverlay,
 } from './guest-features.js';
 
 export function showToast(msg) {
@@ -66,8 +70,72 @@ const App = {
       tableNumber: this.tableNumber,
       locale: this.locale,
       onToast: showToast,
+      onBillLocked: () => this.applyOrderingLock(),
     });
+    this.subscribeBillLock();
+    this.mountOrderGateBanner();
     this.subscribeKitchenLoad();
+  },
+
+  subscribeBillLock() {
+    subscribeTableBillLock(this.tableNumber, ({ locked }) => {
+      if (locked) {
+        showBillLockOverlay({ tableNumber: this.tableNumber, locale: this.locale });
+        this.applyOrderingLock();
+      } else {
+        hideBillLockOverlay();
+        document.body.classList.remove('ordering-locked-bill');
+        this.mountOrderGateBanner();
+        this.renderMenu({ keepScroll: true });
+        this.updateCartBar();
+      }
+    });
+  },
+
+  orderingBlocked() {
+    return getOrderingBlockReason(this.tableNumber, getShop());
+  },
+
+  applyOrderingLock() {
+    document.body.classList.add('ordering-locked-bill');
+    this.closeModal();
+    this.mountOrderGateBanner();
+    this.renderMenu({ keepScroll: true });
+    this.updateCartBar();
+  },
+
+  mountOrderGateBanner() {
+    let el = document.getElementById('orderGateBanner');
+    const block = this.orderingBlocked();
+    if (block.reason === 'bill') {
+      if (el) el.hidden = true;
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'orderGateBanner';
+      el.className = 'order-gate-banner';
+      const host = document.querySelector('.guest-header') || document.body;
+      host.appendChild(el);
+    }
+    if (block.blocked) {
+      el.hidden = false;
+      el.dataset.reason = block.reason || '';
+      el.textContent = block.label;
+    } else if (getShop().lastOrderEnabled && getShop().lastOrderTime) {
+      el.hidden = false;
+      el.dataset.reason = 'last_order_info';
+      el.textContent = this.locale === 'en'
+        ? `Last order ${getShop().lastOrderTime}`
+        : `ラストオーダー ${getShop().lastOrderTime}`;
+    } else {
+      el.hidden = true;
+      el.textContent = '';
+    }
+  },
+
+  canOrder() {
+    return !this.orderingBlocked().blocked;
   },
 
   subscribeKitchenLoad() {
@@ -252,6 +320,10 @@ const App = {
   },
 
   bumpPlain(item, delta) {
+    if (delta > 0 && !this.canOrder()) {
+      showToast(this.orderingBlocked().label);
+      return;
+    }
     let line = this.cart.find(e => e.itemId === item.id && this.isPlainLine(e));
     if (!line && delta > 0) {
       const text = this.itemText(item);
@@ -260,11 +332,12 @@ const App = {
         itemId: item.id,
         name: text.name,
         emoji: item.emoji,
-        price: item.price,
+        price: getItemUnitPrice(item),
         qty: 0,
         customizations: {},
         toggles: {},
         note: '',
+        saleApplied: isSaleActive(item),
       };
       this.cart.push(line);
     }
@@ -336,15 +409,20 @@ const App = {
   renderCard(item) {
     const text = this.itemText(item);
     const soldOut = isItemSoldOut(item.id);
+    const blocked = !this.canOrder();
     const qty = this.qtyForItem(item.id);
     const customizable = this.isCustomizable(item);
+    const onSale = isSaleActive(item);
+    const unit = getItemUnitPrice(item);
     const allergenHTML = (item.allergens || []).map(a => {
       const matched = this.activeAllergens.includes(a);
       return `<span class="allergen-tag ${matched ? 'matched' : ''}">${this.allergenLabel(a)}</span>`;
     }).join('');
 
-    const controls = soldOut
-      ? `<span class="soldout-pill">${this.locale === 'en' ? 'Sold out' : '品切れ'}</span>`
+    const controls = soldOut || blocked
+      ? `<span class="soldout-pill">${soldOut
+        ? (this.locale === 'en' ? 'Sold out' : '品切れ')
+        : (this.locale === 'en' ? 'Unavailable' : '注文不可')}</span>`
       : customizable
       ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : '＋'}</button>`
       : qty > 0
@@ -355,8 +433,16 @@ const App = {
            </div>`
         : `<button class="add-btn" type="button" data-action="plus" aria-label="${text.name}">＋</button>`;
 
+    const priceHtml = onSale
+      ? `<div class="menu-card-price is-sale">
+           <span class="sale-badge">${this.locale === 'en' ? 'Sale' : 'セール'}</span>
+           <s>¥${Number(item.price).toLocaleString()}</s>
+           <strong>¥${unit.toLocaleString()}</strong><span>${this.t('tax')}</span>
+         </div>`
+      : `<div class="menu-card-price">¥${unit.toLocaleString()}<span>${this.t('tax')}</span></div>`;
+
     return `
-      <article class="menu-card ${qty > 0 ? 'in-cart' : ''} ${soldOut ? 'sold-out' : ''}" data-id="${item.id}">
+      <article class="menu-card ${qty > 0 ? 'in-cart' : ''} ${soldOut || blocked ? 'sold-out' : ''} ${onSale ? 'on-sale' : ''}" data-id="${item.id}">
         <div class="menu-card-emoji" aria-hidden="true">${item.emoji || ''}</div>
         <div class="menu-card-body">
           <div class="menu-card-header">
@@ -365,9 +451,9 @@ const App = {
           </div>
           <div class="menu-card-desc">${text.description}</div>
           ${allergenHTML ? `<div class="allergen-tags">${allergenHTML}</div>` : ''}
-          ${customizable && !soldOut ? `<div class="custom-hint">${this.t('customize')}</div>` : ''}
+          ${customizable && !soldOut && !blocked ? `<div class="custom-hint">${this.t('customize')}</div>` : ''}
           <div class="menu-card-footer">
-            <div class="menu-card-price">¥${item.price.toLocaleString()}<span>${this.t('tax')}</span></div>
+            ${priceHtml}
             ${controls}
           </div>
         </div>
@@ -381,7 +467,7 @@ const App = {
       if (!item) return;
 
       card.addEventListener('click', e => {
-        if (isItemSoldOut(itemId)) return;
+        if (isItemSoldOut(itemId) || !this.canOrder()) return;
         if (e.target.closest('button') || e.target.closest('.qty-stepper')) return;
         this.openModal(itemId);
       });
@@ -391,6 +477,14 @@ const App = {
           e.stopPropagation();
           if (isItemSoldOut(itemId)) return;
           const action = btn.dataset.action;
+          if (action === 'minus') {
+            this.bumpPlain(item, -1);
+            return;
+          }
+          if (!this.canOrder()) {
+            showToast(this.orderingBlocked().label);
+            return;
+          }
           if (action === 'customize' || (action === 'plus' && this.isCustomizable(item))) {
             this.openModal(itemId);
             return;
@@ -399,7 +493,6 @@ const App = {
             this.bumpPlain(item, 1);
             showToast(`${this.itemText(item).name} ${this.t('added')}`);
           }
-          if (action === 'minus') this.bumpPlain(item, -1);
         });
       });
     });
@@ -453,8 +546,12 @@ const App = {
   },
 
   openModal(itemId) {
+    if (!this.canOrder()) {
+      showToast(this.orderingBlocked().label);
+      return;
+    }
     const item = getMenu().items.find(i => i.id === itemId);
-    if (!item) return;
+    if (!item || isItemSoldOut(itemId)) return;
     this.modalItem = item;
     this.modalQty = 1;
     this.modalCustomizations = {};
@@ -471,6 +568,8 @@ const App = {
   renderModal(item) {
     const text = this.itemText(item);
     const allergens = item.allergens || [];
+    const onSale = isSaleActive(item);
+    const base = getItemUnitPrice(item);
     const allergenHTML = allergens.length ? `
       <div class="modal-allergen-list">
         ${allergens.map(a => `<span class="modal-allergen-tag">${this.allergenLabel(a)}</span>`).join('')}
@@ -501,13 +600,18 @@ const App = {
       return '';
     }).join('');
 
+    const priceLine = onSale
+      ? `<div class="modal-price is-sale" id="modalPrice"><s>¥${Number(item.price).toLocaleString()}</s> ¥${base.toLocaleString()}</div>`
+      : `<div class="modal-price" id="modalPrice">¥${base.toLocaleString()}</div>`;
+
     document.getElementById('itemModal').querySelector('.modal-sheet').innerHTML = `
       <div class="modal-handle"></div>
       <div class="modal-header">
         <span class="modal-item-emoji">${item.emoji || ''}</span>
         <div class="modal-item-name">${text.name}</div>
         <div class="modal-item-desc">${text.description}</div>
-        <div class="modal-price" id="modalPrice">¥${item.price.toLocaleString()}</div>
+        ${priceLine}
+        ${onSale ? `<p class="modal-sale-note">${this.locale === 'en' ? 'Timed sale' : '時間帯セール中'} ${item.saleFrom || ''}–${item.saleUntil || ''}</p>` : ''}
         ${allergenHTML}
       </div>
       ${customizeHTML ? `<div class="modal-divider"></div><div class="modal-customize">${customizeHTML}</div>` : ''}
@@ -522,7 +626,7 @@ const App = {
         <textarea class="note-input" id="itemNote" rows="2" placeholder="${this.t('notePh')}"></textarea>
       </div>
       <button type="button" class="modal-add-btn" id="modalAddBtn">
-        ${this.t('add')} <span id="modalAddPrice">¥${item.price.toLocaleString()}</span>
+        ${this.t('add')} <span id="modalAddPrice">¥${base.toLocaleString()}</span>
       </button>
     `;
     this.bindModalEvents(item);
@@ -566,7 +670,7 @@ const App = {
   },
 
   calcUnitPrice(item) {
-    let total = item.price;
+    let total = getItemUnitPrice(item);
     (item.customizable || []).forEach(opt => {
       if (opt.type === 'select') {
         const val = this.modalCustomizations[opt.id] || '';
@@ -580,11 +684,23 @@ const App = {
 
   updateModalPrice(item) {
     const unit = this.calcUnitPrice(item);
-    document.getElementById('modalPrice').textContent = `¥${unit.toLocaleString()}`;
-    document.getElementById('modalAddPrice').textContent = `¥${(unit * this.modalQty).toLocaleString()}`;
+    const priceEl = document.getElementById('modalPrice');
+    if (priceEl) {
+      if (isSaleActive(item)) {
+        priceEl.innerHTML = `<s>¥${Number(item.price).toLocaleString()}</s> ¥${unit.toLocaleString()}`;
+      } else {
+        priceEl.textContent = `¥${unit.toLocaleString()}`;
+      }
+    }
+    const addEl = document.getElementById('modalAddPrice');
+    if (addEl) addEl.textContent = `¥${(unit * this.modalQty).toLocaleString()}`;
   },
 
   addToCart(item) {
+    if (!this.canOrder()) {
+      showToast(this.orderingBlocked().label);
+      return;
+    }
     const text = this.itemText(item);
     const note = document.getElementById('itemNote')?.value || '';
     this.cart.push({
@@ -597,6 +713,7 @@ const App = {
       customizations: { ...this.modalCustomizations },
       toggles: { ...this.modalToggles },
       note,
+      saleApplied: isSaleActive(item),
     });
     this.saveCart();
     this.updateCartBar();
@@ -670,3 +787,13 @@ const App = {
 };
 
 document.addEventListener('DOMContentLoaded', () => App.init());
+
+// refresh sale/last-order banners every minute
+setInterval(() => {
+  try {
+    if (typeof App.mountOrderGateBanner === 'function') {
+      App.mountOrderGateBanner();
+      App.renderMenu({ keepScroll: true });
+    }
+  } catch (_) {}
+}, 60_000);
