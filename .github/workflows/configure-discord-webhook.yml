@@ -26,8 +26,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WEBHOOK_URL: ${{ inputs.webhook_url }}
         run: |
+          # Prevent webhook from appearing in Actions logs
+          echo "::add-mask::$WEBHOOK_URL"
           case "$WEBHOOK_URL" in
             https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
             *) echo "Invalid Discord Webhook URL"; exit 1 ;;
           esac
           printf '%s' "$WEBHOOK_URL" | npx --yes wrangler@4 pages secret put DISCORD_WEBHOOK_URL --project-name=mobile-order-system
+          echo "Uploaded DISCORD_WEBHOOK_URL to Pages production secrets"
