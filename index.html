@@ -57,7 +57,7 @@
   </div>
 </details>
 
-<main class="menu-main">
+<main class="menu-main" data-spa-view="menu" id="spaMenuView">
   <div class="menu-list" id="menuList"></div>
 
   <section class="guest-history" id="guestHistorySection">
@@ -68,6 +68,40 @@
     <div id="guestHistoryList"></div>
   </section>
 </main>
+
+<section class="spa-cart-view" data-spa-view="cart" id="spaCartView" hidden>
+  <header class="page-header spa-cart-header">
+    <button class="back-btn" id="spaCartBack" type="button">メニューへ</button>
+    <div class="page-title">カート</div>
+    <div style="width:80px;"></div>
+  </header>
+  <div class="cart-content spa-cart-body">
+    <div class="cart-section-title">注文内容</div>
+    <div id="cartItems"></div>
+    <div class="cart-section-title">お会計</div>
+    <div class="order-summary">
+      <div class="summary-row"><span>小計</span><span id="subtotalAmount">¥0</span></div>
+      <div class="summary-row"><span>消費税（10%）</span><span id="taxAmount">¥0</span></div>
+      <div class="summary-row total"><span>合計</span><span class="amount" id="totalAmount">¥0</span></div>
+    </div>
+    <div class="cart-section-title">割り勘</div>
+    <div class="split-section">
+      <div class="split-title">人数で割り勘</div>
+      <div class="split-controls">
+        <button class="split-btn" id="splitMinus" type="button">−</button>
+        <div class="split-num" id="splitNum">1</div>
+        <button class="split-btn" id="splitPlus" type="button">＋</button>
+        <span class="split-result">人</span>
+      </div>
+      <div id="splitResult" class="hidden">
+        <span class="split-amount" id="splitAmount"></span>
+      </div>
+    </div>
+  </div>
+  <div class="place-order-bar">
+    <button class="place-order-btn" id="placeOrderBtn" disabled type="button">注文を確定する</button>
+  </div>
+</section>
 
 <div class="cart-bar" id="cartBar">
   <button class="cart-bar-btn" id="cartBarBtn" type="button">

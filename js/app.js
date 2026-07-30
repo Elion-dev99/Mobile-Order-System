@@ -4,15 +4,17 @@ import {
   getItemUnitPrice, isSaleActive, getOrderingBlockReason,
 } from './shop.js';
 import { ITEM_I18N, CAT_I18N, ALLERGEN_I18N, UI_I18N } from './i18n-menu.js';
-import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
+import { activateDemoFromUrl, cartStorageKey, ensureDemoBanner, isDemoMode } from './demo.js';
 import { resolveShopId } from './tenant.js';
 import { db } from './firebase.js';
 import { collection, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import {
   mountGuestServiceActions, mountWaitBadge, estimateWaitMinutes,
   subscribeTableBillLock, showBillLockOverlay, hideBillLockOverlay,
+  recommendUpsells,
 } from './guest-features.js';
 import { mountGuestOrderHistory } from './order-history.js';
+import { placeGuestOrder } from './place-order.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -36,6 +38,10 @@ const App = {
   tableNumber: null,
   locale: 'ja',
   scrollSpyBound: false,
+  menuDelegated: false,
+  view: 'menu',
+  splitPeople: 1,
+  spaCartBound: false,
 
   async init() {
     activateDemoFromUrl();
@@ -64,8 +70,10 @@ const App = {
     if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.applyLocaleChrome();
+    this.ensureMenuDelegation();
     this.renderMenu();
     this.bindEvents();
+    this.bindSpaCart();
     this.updateCartBar();
     mountGuestServiceActions({
       tableNumber: this.tableNumber,
@@ -76,8 +84,18 @@ const App = {
     this.subscribeBillLock();
     this.mountOrderGateBanner();
     this.subscribeKitchenLoad();
-    this.loadGuestHistory();
+    // Defer history so first paint / taps stay snappy
+    const defer = window.requestIdleCallback || ((fn) => setTimeout(fn, 600));
+    defer(() => this.loadGuestHistory());
     document.getElementById('guestHistoryRefresh')?.addEventListener('click', () => this.loadGuestHistory());
+
+    const params = new URLSearchParams(location.search);
+    const initialView = params.get('view') || (location.hash === '#cart' ? 'cart' : 'menu');
+    if (initialView === 'cart') this.showView('cart', { replace: true });
+    window.addEventListener('popstate', () => {
+      const v = new URLSearchParams(location.search).get('view') || 'menu';
+      this.showView(v === 'cart' ? 'cart' : 'menu', { skipHistory: true });
+    });
   },
 
   loadGuestHistory() {
@@ -101,8 +119,11 @@ const App = {
         hideBillLockOverlay();
         document.body.classList.remove('ordering-locked-bill');
         this.mountOrderGateBanner();
-        this.renderMenu({ keepScroll: true });
+        document.querySelectorAll('#menuList .menu-card').forEach(card => {
+          this.updateCard(card.dataset.id);
+        });
         this.updateCartBar();
+        if (this.view === 'cart') this.renderSpaCart();
       }
     });
   },
@@ -115,8 +136,12 @@ const App = {
     document.body.classList.add('ordering-locked-bill');
     this.closeModal();
     this.mountOrderGateBanner();
-    this.renderMenu({ keepScroll: true });
+    // Patch visible cards only — do not rebuild the whole menu
+    document.querySelectorAll('#menuList .menu-card').forEach(card => {
+      this.updateCard(card.dataset.id);
+    });
     this.updateCartBar();
+    if (this.view === 'cart') this.renderSpaCart();
   },
 
   mountOrderGateBanner() {
@@ -361,7 +386,65 @@ const App = {
     if (line.qty <= 0) this.cart = this.cart.filter(e => e !== line);
     this.saveCart();
     this.updateCartBar();
-    this.renderMenu({ keepScroll: true });
+    this.updateCard(item.id);
+  },
+
+  /** Replace a single card in-place (SPA realtime — no full menu rebuild). */
+  updateCard(itemId) {
+    const id = String(itemId);
+    const item = getMenu().items.find(i => i.id === id);
+    if (!item) return;
+    const card = [...document.querySelectorAll('#menuList .menu-card')]
+      .find(el => el.dataset.id === id);
+    if (!card) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = this.renderCard(item).trim();
+    const next = tmp.firstElementChild;
+    if (next) card.replaceWith(next);
+  },
+
+  ensureMenuDelegation() {
+    if (this.menuDelegated) return;
+    const container = document.getElementById('menuList');
+    if (!container) return;
+    this.menuDelegated = true;
+
+    container.addEventListener('click', (e) => {
+      const card = e.target.closest('.menu-card');
+      if (!card || !container.contains(card)) return;
+      const itemId = card.dataset.id;
+      const item = getMenu().items.find(i => i.id === itemId);
+      if (!item) return;
+
+      const actionBtn = e.target.closest('[data-action]');
+      if (actionBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isItemSoldOut(itemId)) return;
+        const action = actionBtn.dataset.action;
+        if (action === 'minus') {
+          this.bumpPlain(item, -1);
+          return;
+        }
+        if (!this.canOrder()) {
+          showToast(this.orderingBlocked().label);
+          return;
+        }
+        if (action === 'customize' || (action === 'plus' && this.isCustomizable(item))) {
+          this.openModal(itemId);
+          return;
+        }
+        if (action === 'plus') {
+          this.bumpPlain(item, 1);
+          showToast(`${this.itemText(item).name} ${this.t('added')}`);
+        }
+        return;
+      }
+
+      if (e.target.closest('.qty-stepper')) return;
+      if (isItemSoldOut(itemId) || !this.canOrder()) return;
+      this.openModal(itemId);
+    });
   },
 
   filteredItems() {
@@ -416,7 +499,7 @@ const App = {
       </section>
     `).join('');
 
-    this.bindCardEvents(container);
+    this.ensureMenuDelegation();
     this.setupScrollSpy();
     if (scrollY != null) window.scrollTo(0, scrollY);
   },
@@ -475,42 +558,8 @@ const App = {
       </article>`;
   },
 
-  bindCardEvents(container) {
-    container.querySelectorAll('.menu-card').forEach(card => {
-      const itemId = card.dataset.id;
-      const item = getMenu().items.find(i => i.id === itemId);
-      if (!item) return;
-
-      card.addEventListener('click', e => {
-        if (isItemSoldOut(itemId) || !this.canOrder()) return;
-        if (e.target.closest('button') || e.target.closest('.qty-stepper')) return;
-        this.openModal(itemId);
-      });
-
-      card.querySelectorAll('[data-action]').forEach(btn => {
-        btn.addEventListener('click', e => {
-          e.stopPropagation();
-          if (isItemSoldOut(itemId)) return;
-          const action = btn.dataset.action;
-          if (action === 'minus') {
-            this.bumpPlain(item, -1);
-            return;
-          }
-          if (!this.canOrder()) {
-            showToast(this.orderingBlocked().label);
-            return;
-          }
-          if (action === 'customize' || (action === 'plus' && this.isCustomizable(item))) {
-            this.openModal(itemId);
-            return;
-          }
-          if (action === 'plus') {
-            this.bumpPlain(item, 1);
-            showToast(`${this.itemText(item).name} ${this.t('added')}`);
-          }
-        });
-      });
-    });
+  bindCardEvents() {
+    // Deprecated: clicks are handled once via ensureMenuDelegation()
   },
 
   setupScrollSpy() {
@@ -732,7 +781,7 @@ const App = {
     });
     this.saveCart();
     this.updateCartBar();
-    this.renderMenu({ keepScroll: true });
+    this.updateCard(item.id);
     showToast(`${text.name} ${this.t('added')}`);
   },
 
@@ -796,19 +845,252 @@ const App = {
       if (e.target === document.getElementById('itemModal')) this.closeModal();
     });
     document.getElementById('cartBarBtn')?.addEventListener('click', () => {
-      location.href = withDemo(`cart.html?table=${encodeURIComponent(this.tableNumber)}`);
+      this.showView('cart');
     });
+  },
+
+  bindSpaCart() {
+    if (this.spaCartBound) return;
+    this.spaCartBound = true;
+    document.getElementById('spaCartBack')?.addEventListener('click', () => this.showView('menu'));
+    document.getElementById('splitMinus')?.addEventListener('click', () => {
+      if (this.splitPeople > 1) { this.splitPeople--; this.renderSpaCartSummary(); }
+    });
+    document.getElementById('splitPlus')?.addEventListener('click', () => {
+      this.splitPeople++; this.renderSpaCartSummary();
+    });
+    document.getElementById('placeOrderBtn')?.addEventListener('click', () => this.placeOrderFromSpa());
+    document.getElementById('cartItems')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.cart-qty-btn');
+      if (!btn) return;
+      this.updateSpaCartQty(btn.dataset.id, btn.dataset.action);
+    });
+  },
+
+  showView(view, { skipHistory = false, replace = false } = {}) {
+    const next = view === 'cart' ? 'cart' : 'menu';
+    this.view = next;
+    const menuView = document.getElementById('spaMenuView');
+    const cartView = document.getElementById('spaCartView');
+    const header = document.querySelector('.guest-header');
+    const allergen = document.querySelector('.guest-allergen');
+    const cartBar = document.getElementById('cartBar');
+
+    if (next === 'cart') {
+      if (menuView) menuView.hidden = true;
+      if (header) header.hidden = true;
+      if (allergen) allergen.hidden = true;
+      if (cartBar) cartBar.classList.remove('visible');
+      if (cartView) cartView.hidden = false;
+      document.body.classList.add('spa-cart-open');
+      this.renderSpaCart();
+      window.scrollTo(0, 0);
+    } else {
+      if (cartView) cartView.hidden = true;
+      if (menuView) menuView.hidden = false;
+      if (header) header.hidden = false;
+      if (allergen) allergen.hidden = false;
+      document.body.classList.remove('spa-cart-open');
+      this.updateCartBar();
+    }
+
+    if (!skipHistory) {
+      const url = new URL(location.href);
+      if (next === 'cart') url.searchParams.set('view', 'cart');
+      else url.searchParams.delete('view');
+      const method = replace ? 'replaceState' : 'pushState';
+      history[method]({ view: next }, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  },
+
+  renderSpaCart() {
+    const container = document.getElementById('cartItems');
+    if (!container) return;
+    if (!this.cart.length) {
+      container.innerHTML = `
+        <div class="no-items-cart fade-in">
+          <span class="emoji">🛒</span>
+          <h3>カートが空です</h3>
+          <p>メニューからお好みの料理を<br>選んでカートに追加してください</p>
+          <button type="button" class="menu-link-btn" id="spaEmptyBack">← メニューに戻る</button>
+        </div>`;
+      container.querySelector('#spaEmptyBack')?.addEventListener('click', () => this.showView('menu'));
+      this.renderSpaCartSummary();
+      this.updateSpaPlaceBtn();
+      return;
+    }
+
+    const MENU_DATA = getMenu();
+    container.innerHTML = '<div class="cart-items-group">' + this.cart.map(entry => {
+      const customLines = [];
+      const item = MENU_DATA.items.find(i => i.id === entry.itemId);
+      if (item) {
+        (item.customizable || []).forEach(opt => {
+          if (opt.type === 'select' && entry.customizations?.[opt.id]) customLines.push(`${opt.label}: ${entry.customizations[opt.id]}`);
+          if (opt.type === 'toggle' && entry.toggles?.[opt.id]) customLines.push(`${opt.label}: あり`);
+        });
+      }
+      return `
+        <div class="cart-item fade-in" data-entry-id="${entry.id}">
+          <div class="cart-item-emoji">${entry.emoji}</div>
+          <div class="cart-item-info">
+            <div class="cart-item-name">${entry.name}</div>
+            ${customLines.length ? `<div class="cart-item-customizations">${customLines.join(' / ')}</div>` : ''}
+            ${entry.note ? `<div class="cart-item-note">📝 ${entry.note}</div>` : ''}
+            <div class="cart-item-bottom">
+              <div class="cart-item-price">¥${(entry.price * entry.qty).toLocaleString()}</div>
+              <div class="cart-qty-controls">
+                <button class="cart-qty-btn ${entry.qty === 1 ? 'remove' : ''}" type="button" data-action="${entry.qty === 1 ? 'remove' : 'minus'}" data-id="${entry.id}">
+                  ${entry.qty === 1 ? '🗑' : '−'}
+                </button>
+                <div class="cart-qty-num">${entry.qty}</div>
+                <button class="cart-qty-btn" type="button" data-action="plus" data-id="${entry.id}">＋</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }).join('') + '</div>';
+
+    this.renderSpaUpsells(container);
+    this.renderSpaCartSummary();
+    this.updateSpaPlaceBtn();
+  },
+
+  renderSpaUpsells(container) {
+    let wrap = document.getElementById('cartUpsells');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'cartUpsells';
+      wrap.className = 'cart-upsells';
+      container.after(wrap);
+    }
+    const recs = recommendUpsells(this.cart, 3).filter(i => !isItemSoldOut(i.id));
+    if (!recs.length || !this.cart.length) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = `
+      <h3>あわせていかがですか</h3>
+      <div class="cart-upsell-list">
+        ${recs.map(item => `
+          <button type="button" class="cart-upsell-item" data-upsell="${item.id}">
+            <span>${item.emoji || ''} ${item.name}</span>
+            <strong>¥${getItemUnitPrice(item).toLocaleString()}</strong>
+          </button>
+        `).join('')}
+      </div>`;
+    wrap.querySelectorAll('[data-upsell]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!this.canOrder()) {
+          showToast(this.orderingBlocked().label);
+          return;
+        }
+        const item = getMenu().items.find(i => i.id === btn.dataset.upsell);
+        if (!item || isItemSoldOut(item.id)) return;
+        this.cart.push({
+          id: Date.now() + Math.random(),
+          itemId: item.id,
+          name: item.name,
+          emoji: item.emoji,
+          price: getItemUnitPrice(item),
+          qty: 1,
+          customizations: {},
+          toggles: {},
+          note: '',
+        });
+        this.saveCart();
+        this.updateCard(item.id);
+        this.updateCartBar();
+        this.renderSpaCart();
+        showToast(`${item.name} を追加しました`);
+      });
+    });
+  },
+
+  updateSpaCartQty(entryId, action) {
+    if (action === 'plus' && !this.canOrder()) {
+      showToast(this.orderingBlocked().label);
+      return;
+    }
+    const idx = this.cart.findIndex(e => String(e.id) === String(entryId));
+    if (idx === -1) return;
+    const itemId = this.cart[idx].itemId;
+    if (action === 'plus') this.cart[idx].qty++;
+    else if (action === 'minus') {
+      this.cart[idx].qty--;
+      if (this.cart[idx].qty <= 0) this.cart.splice(idx, 1);
+    } else if (action === 'remove') this.cart.splice(idx, 1);
+    this.saveCart();
+    this.updateCard(itemId);
+    this.updateCartBar();
+    this.renderSpaCart();
+  },
+
+  renderSpaCartSummary() {
+    const subtotal = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
+    const tax = Math.floor(subtotal * 0.1);
+    const total = subtotal + tax;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('subtotalAmount', `¥${subtotal.toLocaleString()}`);
+    set('taxAmount', `¥${tax.toLocaleString()}`);
+    set('totalAmount', `¥${total.toLocaleString()}`);
+    set('splitNum', String(this.splitPeople));
+    if (this.splitPeople > 1) {
+      set('splitAmount', `お一人様 ¥${Math.ceil(total / this.splitPeople).toLocaleString()}`);
+      document.getElementById('splitResult')?.classList.remove('hidden');
+    } else {
+      document.getElementById('splitResult')?.classList.add('hidden');
+    }
+  },
+
+  updateSpaPlaceBtn() {
+    const btn = document.getElementById('placeOrderBtn');
+    if (!btn) return;
+    const block = this.orderingBlocked();
+    if (block.blocked) {
+      btn.disabled = true;
+      btn.textContent = block.reason === 'bill'
+        ? 'お会計中（レジへお進みください）'
+        : block.label;
+      return;
+    }
+    btn.disabled = this.cart.length === 0;
+    btn.textContent = '注文を確定する';
+  },
+
+  async placeOrderFromSpa() {
+    if (!this.cart.length) return;
+    if (!this.canOrder()) {
+      showToast(this.orderingBlocked().label);
+      this.updateSpaPlaceBtn();
+      return;
+    }
+    const btn = document.getElementById('placeOrderBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = isDemoMode() ? 'テスト注文を送信中...' : '注文を送信中...';
+    }
+    const result = await placeGuestOrder({
+      cart: this.cart,
+      tableNumber: this.tableNumber,
+    });
+    this.cart = [];
+    this.saveCart();
+    this.updateCartBar();
+    if (result.queued) {
+      showToast(`通信障害のため注文を端末に一時保存しました（保留${result.pending}件）`);
+    }
+    location.href = result.statusUrl;
   },
 };
 
 document.addEventListener('DOMContentLoaded', () => App.init());
 
-// refresh sale/last-order banners every minute
+// Light tick: banners only — never rebuild the whole menu
 setInterval(() => {
   try {
     if (typeof App.mountOrderGateBanner === 'function') {
       App.mountOrderGateBanner();
-      App.renderMenu({ keepScroll: true });
     }
   } catch (_) {}
 }, 60_000);

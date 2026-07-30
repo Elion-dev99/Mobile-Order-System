@@ -856,3 +856,21 @@ body.shop-closed::after {
   color: var(--g-muted);
   font-size: 0.88rem;
 }
+
+/* —— SPA cart view (no full page reload) —— */
+.spa-cart-view {
+  min-height: 100vh;
+  background: var(--g-bg, #f4f7f5);
+  animation: guestRise 0.28s ease both;
+}
+.spa-cart-view[hidden] { display: none !important; }
+.spa-cart-header { position: sticky; top: 0; z-index: 20; }
+.spa-cart-body { padding-bottom: 110px; }
+body.spa-cart-open .guest-service-bar,
+body.spa-cart-open #guestWaitBadge { display: none; }
+body.spa-cart-open .cart-bar { display: none !important; }
+.menu-card .qty-stepper,
+.menu-card .add-btn { touch-action: manipulation; }
+.menu-card.in-cart {
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
