@@ -248,6 +248,105 @@ export async function setItemSoldOut(itemId, soldOut) {
   return saveShop({ soldOut: map });
 }
 
+/* ——— time windows / last order / timed sales ——— */
+
+/** "HH:mm" → minutes from midnight, or null */
+export function hmToMinutes(hm) {
+  const m = String(hm || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+export function minutesNow(date = new Date()) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+/** Inclusive start, exclusive end. Overnight windows (22:00–02:00) supported. */
+export function isNowInWindow(fromHm, untilHm, date = new Date()) {
+  const from = hmToMinutes(fromHm);
+  const until = hmToMinutes(untilHm);
+  if (from == null || until == null) return false;
+  const cur = minutesNow(date);
+  if (from === until) return true;
+  if (from < until) return cur >= from && cur < until;
+  return cur >= from || cur < until;
+}
+
+export function isPastLastOrder(shop = shopCache, date = new Date()) {
+  if (!shop?.lastOrderEnabled) return false;
+  const t = hmToMinutes(shop.lastOrderTime);
+  if (t == null) return false;
+  return minutesNow(date) >= t;
+}
+
+export function isSaleActive(item, date = new Date()) {
+  if (!item?.saleEnabled) return false;
+  const salePrice = Number(item.salePrice);
+  if (!Number.isFinite(salePrice) || salePrice < 0) return false;
+  if (salePrice >= Number(item.price)) return false;
+  const from = item.saleFrom || '00:00';
+  const until = item.saleUntil || '23:59';
+  return isNowInWindow(from, until, date);
+}
+
+/** Base unit price after timed sale (before customization add-ons). */
+export function getItemUnitPrice(item, date = new Date()) {
+  if (!item) return 0;
+  if (isSaleActive(item, date)) return Number(item.salePrice) || 0;
+  return Number(item.price) || 0;
+}
+
+function lockStorageKey(shopId, tableNumber) {
+  return `mos_bill_lock_${shopId || getShopId()}_${String(tableNumber)}`;
+}
+
+export function setTableOrderingLocked(tableNumber, locked, meta = {}) {
+  const key = lockStorageKey(getShopId(), tableNumber);
+  try {
+    if (locked) {
+      localStorage.setItem(key, JSON.stringify({
+        locked: true,
+        at: Date.now(),
+        ...meta,
+      }));
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch (_) {}
+}
+
+export function isTableOrderingLocked(tableNumber) {
+  try {
+    const raw = localStorage.getItem(lockStorageKey(getShopId(), tableNumber));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return !!parsed?.locked;
+  } catch {
+    return false;
+  }
+}
+
+/** Guest cannot place new orders (bill requested or last order). */
+export function getOrderingBlockReason(tableNumber, shop = shopCache) {
+  if (isTableOrderingLocked(tableNumber)) {
+    return { blocked: true, reason: 'bill', label: 'お会計リクエスト済み' };
+  }
+  if (isPastLastOrder(shop)) {
+    return {
+      blocked: true,
+      reason: 'last_order',
+      label: `ラストオーダー（${shop.lastOrderTime || ''}）を過ぎています`,
+    };
+  }
+  if (shop?.isOpen === false) {
+    return { blocked: true, reason: 'closed', label: 'ただいま準備中です' };
+  }
+  return { blocked: false, reason: null, label: '' };
+}
+
 export function isSubscribed() {
   if (shopCache.subscribed) return true;
   try {

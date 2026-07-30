@@ -231,6 +231,35 @@
   border-bottom: 1px solid var(--g-line);
   font-size: 0.9rem;
 }
+.store-req-row.is-bill {
+  padding: 14px 12px;
+  margin: 6px -4px;
+  border-radius: 14px;
+  border: 1px solid #f0d2a8;
+  background: #fff7eb;
+}
+.store-req-main {
+  display: grid;
+  gap: 2px;
+}
+.store-req-seat {
+  font-family: Fraunces, "Zen Kaku Gothic New", serif;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #0a3d34;
+  line-height: 1.1;
+}
+.store-req-hint {
+  font-size: 0.78rem;
+  color: #8a4b2d;
+  font-weight: 700;
+}
+.store-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
 .store-req-row button {
   border: 0;
   border-radius: 999px;

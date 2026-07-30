@@ -10,6 +10,7 @@ import { subscribeServiceRequests, resolveServiceRequest } from './guest-feature
 const StorePage = {
   orders: [],
   requests: [],
+  _knownReqIds: new Set(),
 
   async init() {
     resolveShopId();
@@ -61,6 +62,8 @@ const StorePage = {
           ownerEmail: document.getElementById('storeEmail').value.trim(),
           ownerPhone: document.getElementById('storePhone').value.trim(),
           locale: document.getElementById('storeLocale').value || 'ja',
+          lastOrderEnabled: !!document.getElementById('storeLastOrderEnabled')?.checked,
+          lastOrderTime: document.getElementById('storeLastOrderTime')?.value || '21:30',
         });
         this.renderProfile();
         this.renderMeta();
@@ -110,6 +113,10 @@ const StorePage = {
     document.getElementById('storeEmail').value = shop.ownerEmail || '';
     document.getElementById('storePhone').value = shop.ownerPhone || '';
     document.getElementById('storeLocale').value = shop.locale || 'ja';
+    const loEn = document.getElementById('storeLastOrderEnabled');
+    const loTime = document.getElementById('storeLastOrderTime');
+    if (loEn) loEn.checked = !!shop.lastOrderEnabled;
+    if (loTime) loTime.value = shop.lastOrderTime || '21:30';
   },
 
   tableUrl(n) {
@@ -192,9 +199,37 @@ const StorePage = {
 
   subscribeRequests() {
     this.unsubReq = subscribeServiceRequests(getShopId(), (rows) => {
-      this.requests = rows.filter(r => r.status === 'open');
+      const open = rows.filter(r => r.status === 'open');
+      const primed = this._knownReqIds.size > 0 || this._reqPrimed;
+      const newBills = primed
+        ? open.filter(r => r.type === 'bill' && !this._knownReqIds.has(r.id))
+        : [];
+      open.forEach(r => this._knownReqIds.add(r.id));
+      this._reqPrimed = true;
+      this.requests = open;
       this.renderRequests();
+      if (newBills.length) this.playBillAlert(newBills[0]);
     });
+  },
+
+  playBillAlert(req) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.value = 880;
+      g.gain.value = 0.08;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      setTimeout(() => { o.stop(); ctx.close(); }, 220);
+    } catch (_) {}
+    if (typeof document !== 'undefined' && document.title) {
+      document.title = `🧾 席${req.tableNumber} 会計 | 店舗管理`;
+    }
   },
 
   renderRequests() {
@@ -208,14 +243,21 @@ const StorePage = {
     }
     const list = document.getElementById('storeRequestList');
     list.innerHTML = this.requests.map(r => `
-      <div class="store-req-row">
-        <span><strong>${r.type === 'bill' ? '会計' : '店員'}</strong> 席${r.tableNumber}</span>
-        <button type="button" data-resolve="${r.id}">対応済</button>
+      <div class="store-req-row ${r.type === 'bill' ? 'is-bill' : ''}">
+        <div class="store-req-main">
+          <strong>${r.type === 'bill' ? '会計' : '店員呼出'}</strong>
+          <span class="store-req-seat">席 ${r.tableNumber}</span>
+          ${r.type === 'bill' ? '<span class="store-req-hint">お客様はレジへ向かいます</span>' : ''}
+        </div>
+        <button type="button" data-resolve="${r.id}" data-table="${r.tableNumber}">対応済</button>
       </div>
     `).join('') || '<p class="store-muted">現在なし</p>';
     list.querySelectorAll('[data-resolve]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        try { await resolveServiceRequest(btn.dataset.resolve); } catch (e) { console.error(e); }
+        try {
+          await resolveServiceRequest(btn.dataset.resolve, { tableNumber: btn.dataset.table });
+          document.title = `店舗管理 | ${getShop().name || 'QuickOrder'} (${getShopId()})`;
+        } catch (e) { console.error(e); }
       });
     });
   },

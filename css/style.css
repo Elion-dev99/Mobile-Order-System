@@ -1520,6 +1520,19 @@ img { max-width: 100%; }
   min-height: 44px;
 }
 .me-desc-field { margin-top: 2px; }
+.me-sale-block {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: grid;
+  gap: 10px;
+}
+.me-sale-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
 .me-custom-block {
   margin-top: 4px;
   padding-top: 12px;
@@ -1842,6 +1855,11 @@ img { max-width: 100%; }
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 12px;
+}
+.admin-req-chip.is-bill {
+  background: rgba(250, 166, 26, 0.25);
+  outline: 1px solid rgba(250, 166, 26, 0.5);
+  font-weight: 700;
 }
 .admin-req-chip button {
   border: 0;

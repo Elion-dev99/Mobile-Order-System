@@ -197,6 +197,8 @@ export const DEFAULT_SHOP = {
   isOpen: true,
   hoursNote: '11:00–22:00',
   address: '',
+  lastOrderEnabled: false,
+  lastOrderTime: '21:30',
 };
 
 /** @deprecated 互換用。Growth 月額を返す */

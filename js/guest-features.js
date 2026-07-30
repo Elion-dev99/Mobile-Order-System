@@ -1,6 +1,9 @@
 import { db } from './firebase.js';
-import { getShopId, getMenu, getShop, isItemSoldOut } from './shop.js';
+import {
+  getShopId, getMenu, getShop, isItemSoldOut, setTableOrderingLocked, isTableOrderingLocked,
+} from './shop.js';
 import { isDemoMode } from './demo.js';
+import { notifyBillRequested } from './notify.js';
 import {
   collection, addDoc, doc, onSnapshot, query, where, orderBy, updateDoc
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
@@ -36,6 +39,7 @@ export async function createServiceRequest({ type, tableNumber, note = '' }) {
     status: 'open',
     timestamp: Date.now(),
     demo: isDemoMode(),
+    orderingLocked: type === 'bill',
   };
   if (isDemoMode()) {
     const id = 'REQ-' + Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -70,41 +74,111 @@ export function subscribeServiceRequests(shopId, cb) {
   );
   return onSnapshot(q, snap => {
     cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  }, () => cb([]));
-}
-
-export async function resolveServiceRequest(id) {
-  await updateDoc(doc(db, 'serviceRequests', id), { status: 'done', resolvedAt: Date.now() });
-}
-
-export async function submitSurvey({ orderId, score, comment = '' }) {
-  const payload = {
-    shopId: getShopId(),
-    orderId: orderId || '',
-    score: Number(score) || 0,
-    comment: String(comment || '').slice(0, 500),
-    timestamp: Date.now(),
-    shopName: getShop().name || '',
-    demo: isDemoMode(),
-  };
-  if (isDemoMode()) {
+  }, () => {
     try {
-      sessionStorage.setItem('mos_demo_survey_' + (orderId || Date.now()), JSON.stringify(payload));
-    } catch (_) {}
-    return payload;
+      const all = JSON.parse(localStorage.getItem('mos_local_requests') || '[]');
+      cb(all.filter(r => (r.shopId || shopId) === shopId));
+    } catch {
+      cb([]);
+    }
+  });
+}
+
+export async function resolveServiceRequest(id, { tableNumber: tableHint } = {}) {
+  let tableNumber = tableHint != null ? String(tableHint) : null;
+  let shopId = getShopId();
+  try {
+    const all = JSON.parse(localStorage.getItem('mos_local_requests') || '[]');
+    const hit = all.find(r => r.id === id);
+    if (hit) {
+      tableNumber = hit.tableNumber || tableNumber;
+      shopId = hit.shopId || shopId;
+      const next = all.map(r => r.id === id ? { ...r, status: 'done', resolvedAt: Date.now() } : r);
+      localStorage.setItem('mos_local_requests', JSON.stringify(next));
+    }
+  } catch (_) {}
+
+  try {
+    await updateDoc(doc(db, 'serviceRequests', id), { status: 'done', resolvedAt: Date.now() });
+  } catch (e) {
+    if (!String(id).startsWith('LOCAL-') && !String(id).startsWith('REQ-')) throw e;
   }
-  await addDoc(collection(db, 'surveys'), payload);
-  return payload;
+
+  if (tableNumber != null) {
+    setTableOrderingLocked(tableNumber, false);
+  }
+  return { id, tableNumber, shopId };
+}
+
+/**
+ * Show / hide full-screen bill lock: seat number + go to register.
+ */
+export function showBillLockOverlay({ tableNumber, locale = 'ja' }) {
+  let el = document.getElementById('billLockOverlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'billLockOverlay';
+    el.className = 'bill-lock-overlay';
+    document.body.appendChild(el);
+  }
+  const seatLabel = locale === 'en' ? 'Table' : '席';
+  const title = locale === 'en' ? 'Bill requested' : 'お会計をリクエストしました';
+  const msg = locale === 'en'
+    ? 'Please proceed to the register. Ordering is locked for this table.'
+    : 'レジへお進みください。この席からの追加注文はできません。';
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="bill-lock-card" role="dialog" aria-live="polite">
+      <p class="bill-lock-kicker">${title}</p>
+      <p class="bill-lock-seat"><span>${seatLabel}</span><strong>${escapeHtml(String(tableNumber))}</strong></p>
+      <p class="bill-lock-msg">${msg}</p>
+    </div>`;
+  document.body.classList.add('ordering-locked-bill');
+}
+
+export function hideBillLockOverlay() {
+  const el = document.getElementById('billLockOverlay');
+  if (el) el.hidden = true;
+  document.body.classList.remove('ordering-locked-bill');
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Keep guest table lock in sync with open bill requests.
+ * onChange({ locked, request })
+ */
+export function subscribeTableBillLock(tableNumber, onChange) {
+  const shopId = getShopId();
+  const table = String(tableNumber);
+  return subscribeServiceRequests(shopId, (rows) => {
+    const openBill = (rows || []).find(
+      r => r.status === 'open' && r.type === 'bill' && String(r.tableNumber) === table
+    );
+    if (openBill) {
+      setTableOrderingLocked(table, true, { requestId: openBill.id });
+      onChange?.({ locked: true, request: openBill });
+    } else {
+      if (isTableOrderingLocked(table)) setTableOrderingLocked(table, false);
+      onChange?.({ locked: false, request: null });
+    }
+  });
 }
 
 /** Mount guest action chips: call staff / request bill */
-export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast }) {
+export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast, onBillLocked }) {
   if (document.getElementById('guestServiceBar')) return;
   const bar = document.createElement('div');
   bar.id = 'guestServiceBar';
   bar.className = 'guest-service-bar';
   const staffLabel = locale === 'en' ? 'Call staff' : '店員を呼ぶ';
-  const billLabel = locale === 'en' ? 'Request bill' : 'お会計';
+  const billLabel = locale === 'en' ? 'Check out' : 'お会計';
   bar.innerHTML = `
     <button type="button" data-svc="staff">${staffLabel}</button>
     <button type="button" data-svc="bill">${billLabel}</button>
@@ -112,21 +186,52 @@ export function mountGuestServiceActions({ tableNumber, locale = 'ja', onToast }
   const header = document.querySelector('.guest-header') || document.body;
   header.appendChild(bar);
 
+  const applyBillUi = () => {
+    const billBtn = bar.querySelector('[data-svc="bill"]');
+    if (billBtn) {
+      billBtn.disabled = true;
+      billBtn.textContent = locale === 'en' ? 'At register' : 'レジへ';
+    }
+    showBillLockOverlay({ tableNumber, locale });
+    onBillLocked?.();
+  };
+
+  if (isTableOrderingLocked(tableNumber)) applyBillUi();
+
   bar.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (btn.dataset.svc === 'bill' && isTableOrderingLocked(tableNumber)) {
+        applyBillUi();
+        return;
+      }
       btn.disabled = true;
       try {
-        await createServiceRequest({ type: btn.dataset.svc, tableNumber });
-        onToast?.(
-          locale === 'en'
-            ? (btn.dataset.svc === 'bill' ? 'Bill requested' : 'Staff called')
-            : (btn.dataset.svc === 'bill' ? '会計をリクエストしました' : '店員を呼び出しました')
-        );
+        const req = await createServiceRequest({ type: btn.dataset.svc, tableNumber });
+        if (btn.dataset.svc === 'bill') {
+          setTableOrderingLocked(tableNumber, true, { requestId: req.id });
+          const shop = getShop();
+          notifyBillRequested({
+            shopId: getShopId(),
+            shopName: shop?.name,
+            tableNumber,
+            requestId: req.id,
+          }).catch(() => {});
+          applyBillUi();
+          onToast?.(
+            locale === 'en'
+              ? 'Please go to the register'
+              : 'レジへお進みください（店舗に通知しました）'
+          );
+        } else {
+          onToast?.(
+            locale === 'en' ? 'Staff called' : '店員を呼び出しました'
+          );
+          setTimeout(() => { btn.disabled = false; }, 2500);
+        }
       } catch (e) {
         console.error(e);
         onToast?.(locale === 'en' ? 'Failed' : '送信に失敗しました');
-      } finally {
-        setTimeout(() => { btn.disabled = false; }, 2500);
+        btn.disabled = false;
       }
     });
   });
@@ -183,4 +288,24 @@ export function mountSurveyCard({ orderId, locale = 'ja', onDone }) {
       send.disabled = false;
     }
   });
+}
+
+export async function submitSurvey({ orderId, score, comment = '' }) {
+  const payload = {
+    shopId: getShopId(),
+    orderId: orderId || '',
+    score: Number(score) || 0,
+    comment: String(comment || '').slice(0, 500),
+    timestamp: Date.now(),
+    shopName: getShop().name || '',
+    demo: isDemoMode(),
+  };
+  if (isDemoMode()) {
+    try {
+      sessionStorage.setItem('mos_demo_survey_' + (orderId || Date.now()), JSON.stringify(payload));
+    } catch (_) {}
+    return payload;
+  }
+  await addDoc(collection(db, 'surveys'), payload);
+  return payload;
 }
