@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+attached_assets
+*.md
+.DS_Store
+.firebaserc
+firebase.json
+firestore.rules
