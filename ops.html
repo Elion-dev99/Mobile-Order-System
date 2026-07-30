@@ -190,9 +190,14 @@
         <label>Webhook（空なら通知設定を使用）
           <input id="loadTestWebhook" type="url" placeholder="https://discord.com/api/webhooks/...">
         </label>
+        <label class="ops-inline" style="align-items:center;gap:8px;">
+          <input id="loadTestAutoCleanup" type="checkbox" checked>
+          テスト後に店舗を自動削除
+        </label>
       </div>
       <button type="button" id="opsLoadTestRun" class="ops-btn-secondary">負荷テスト実行</button>
       <button type="button" id="opsLoadTestStop" class="ops-btn-secondary" disabled>停止</button>
+      <button type="button" id="opsLoadTestCleanup" class="ops-btn-secondary">負荷テスト店舗を全削除</button>
       <pre id="opsLoadTestLog" class="ops-muted" style="white-space:pre-wrap;max-height:240px;overflow:auto;margin-top:12px;padding:12px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
       <p id="opsLoadTestStatus" class="ops-status" hidden></p>
 
