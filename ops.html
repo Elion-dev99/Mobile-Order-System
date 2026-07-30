@@ -142,5 +142,21 @@
 </div>
 
 <script type="module" src="js/ops.js"></script>
+<script>
+  // モジュール読み込み失敗時のフォールバック表示
+  setTimeout(() => {
+    const gate = document.getElementById('opsGate');
+    const app = document.getElementById('opsApp');
+    if (gate && gate.hidden && app && app.hidden) {
+      gate.hidden = false;
+      gate.classList.add('is-visible');
+      const err = document.getElementById('opsLoginError');
+      if (err) {
+        err.hidden = false;
+        err.textContent = '読み込みに失敗しました。通信環境を確認して再読み込みしてください';
+      }
+    }
+  }, 4000);
+</script>
 </body>
 </html>

@@ -25,6 +25,10 @@ const OpsPage = {
       this.showGate();
       return;
     }
+    await this.enterApp();
+  },
+
+  async enterApp() {
     this.showApp();
     this.renderRole();
     this.bind();
@@ -33,14 +37,34 @@ const OpsPage = {
     } catch (e) {
       console.warn('ensureSeedShops', e);
     }
-    await this.refreshShops();
-    this.subscribeGlobal();
+    try {
+      await this.refreshShops();
+    } catch (e) {
+      console.warn('refreshShops', e);
+    }
+    try {
+      this.subscribeGlobal();
+    } catch (e) {
+      console.warn('subscribeGlobal', e);
+    }
     this.renderLabs();
+    window.scrollTo(0, 0);
   },
 
   showGate() {
-    document.getElementById('opsGate').hidden = false;
-    document.getElementById('opsApp').hidden = true;
+    const gate = document.getElementById('opsGate');
+    const app = document.getElementById('opsApp');
+    if (gate) {
+      gate.hidden = false;
+      gate.classList.add('is-visible');
+      gate.style.display = '';
+    }
+    if (app) {
+      app.hidden = true;
+      app.classList.remove('is-visible');
+      app.style.display = 'none';
+    }
+
     document.getElementById('opsShowPw')?.addEventListener('change', (e) => {
       const input = document.getElementById('opsPassword');
       if (input) input.type = e.target.checked ? 'text' : 'password';
@@ -54,11 +78,19 @@ const OpsPage = {
         }
       });
     });
-    document.getElementById('opsLoginForm')?.addEventListener('submit', async (e) => {
+
+    const form = document.getElementById('opsLoginForm');
+    form?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      const btn = form.querySelector('button[type="submit"]');
       const pw = document.getElementById('opsPassword').value;
       const err = document.getElementById('opsLoginError');
       err.hidden = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '入室中...';
+      }
       let res;
       try {
         res = await verifyOpsPassword(pw);
@@ -66,21 +98,41 @@ const OpsPage = {
         console.error(ex);
         err.hidden = false;
         err.textContent = '認証処理でエラーが出ました。再読み込みしてください';
+        if (btn) { btn.disabled = false; btn.textContent = '入室'; }
         return;
       }
       if (!res.ok) {
         err.hidden = false;
         err.textContent = 'パスワードが違います（Cursor: cursor2026 / Owner: owner2026）';
+        if (btn) { btn.disabled = false; btn.textContent = '入室'; }
         return;
       }
       setOpsRole(res.role);
-      location.reload();
+      // リロードせずその場で画面切替（iOSで session が消えて戻る問題を回避）
+      try {
+        await this.enterApp();
+      } catch (ex) {
+        console.error(ex);
+        err.hidden = false;
+        err.textContent = '画面の切替に失敗しました。もう一度お試しください';
+        if (btn) { btn.disabled = false; btn.textContent = '入室'; }
+      }
     });
   },
 
   showApp() {
-    document.getElementById('opsGate').hidden = true;
-    document.getElementById('opsApp').hidden = false;
+    const gate = document.getElementById('opsGate');
+    const app = document.getElementById('opsApp');
+    if (gate) {
+      gate.hidden = true;
+      gate.classList.remove('is-visible');
+      gate.style.display = 'none';
+    }
+    if (app) {
+      app.hidden = false;
+      app.classList.add('is-visible');
+      app.style.display = 'block';
+    }
   },
 
   renderRole() {

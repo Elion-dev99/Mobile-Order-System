@@ -25,9 +25,20 @@ body.ops-body {
 
 .ops-gate {
   min-height: 100vh;
-  display: grid;
+  display: none;
   place-items: center;
   padding: 24px;
+}
+.ops-gate.is-visible,
+.ops-gate:not([hidden]) {
+  display: grid;
+}
+#opsApp {
+  display: none;
+}
+#opsApp.is-visible,
+#opsApp:not([hidden]) {
+  display: block;
 }
 .ops-gate-card {
   width: min(420px, 100%);

@@ -1,16 +1,13 @@
 /**
  * Ops console passwords (client-side gate for internal tools).
- * Roles:
- *  - cursor: agent / engineering access
- *  - owner: 店舗オーナー本人
  *
- * いま有効なパスワード（コピペ推奨）:
+ * 有効パスワード:
  *   Cursor → cursor2026
  *   Owner  → owner2026
- *
  * 旧パスワードも当面受け付けます。
  */
 const OPS_SESSION = 'mos_ops_role';
+const OPS_LOCAL = 'mos_ops_role_local';
 
 /** @type {Record<'cursor'|'owner', string[]>} */
 const PLAIN_PASSWORDS = {
@@ -39,7 +36,7 @@ async function getLiveHashes() {
 
 function normalizePassword(password) {
   return String(password || '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // zero-width
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\u3000/g, ' ')
     .trim();
 }
@@ -48,7 +45,6 @@ export async function verifyOpsPassword(password) {
   const raw = normalizePassword(password);
   if (!raw) return { ok: false, role: null };
 
-  // Fast path: plain compare (also helps when crypto.subtle is blocked)
   for (const role of /** @type {const} */ (['cursor', 'owner'])) {
     if (PLAIN_PASSWORDS[role].includes(raw)) return { ok: true, role };
   }
@@ -71,7 +67,9 @@ export async function verifyOpsPassword(password) {
 
 export function getOpsRole() {
   try {
-    return sessionStorage.getItem(OPS_SESSION) || '';
+    return sessionStorage.getItem(OPS_SESSION)
+      || localStorage.getItem(OPS_LOCAL)
+      || '';
   } catch {
     return '';
   }
@@ -84,8 +82,13 @@ export function isOpsAuthed() {
 
 export function setOpsRole(role) {
   try {
-    if (role) sessionStorage.setItem(OPS_SESSION, role);
-    else sessionStorage.removeItem(OPS_SESSION);
+    if (role) {
+      sessionStorage.setItem(OPS_SESSION, role);
+      localStorage.setItem(OPS_LOCAL, role);
+    } else {
+      sessionStorage.removeItem(OPS_SESSION);
+      localStorage.removeItem(OPS_LOCAL);
+    }
   } catch (_) {}
 }
 
