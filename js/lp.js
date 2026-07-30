@@ -65,34 +65,42 @@ function fillLeadPlanSelect() {
   ).join('');
 }
 
-function recommendPlan(tables) {
-  if (tables <= 15) return getPlan('lite');
-  if (tables <= 50) return getPlan('growth');
-  if (tables <= 100) return getPlan('business');
+function recommendPlan(tables, stores) {
+  if (stores >= 4) return getPlan('chain');
+  if (tables <= 15 && stores === 1) return getPlan('lite');
+  if (tables <= 50 && stores === 1) return getPlan('growth');
+  if (stores <= 3) return getPlan('business');
   return getPlan('chain');
 }
 
 function updateRoi() {
   const tables = Number(document.getElementById('roiTables').value);
+  const seats = Number(document.getElementById('roiSeats').value);
   const turns = Number(document.getElementById('roiTurns').value);
+  const days = Number(document.getElementById('roiDays').value);
   const ticket = Number(document.getElementById('roiTicket').value);
   const attach = Number(document.getElementById('roiAttach').value) / 100;
+  const stores = Number(document.getElementById('roiStores').value);
 
   document.getElementById('roiTablesOut').textContent = String(tables);
+  document.getElementById('roiSeatsOut').textContent = String(seats);
   document.getElementById('roiTurnsOut').textContent = String(turns);
+  document.getElementById('roiDaysOut').textContent = String(days);
   document.getElementById('roiTicketOut').textContent = yen(ticket);
   document.getElementById('roiAttachOut').textContent = String(Math.round(attach * 100));
+  document.getElementById('roiStoresOut').textContent = String(stores);
 
-  const dailyCovers = tables * turns;
-  const monthlyGmv = Math.round(dailyCovers * ticket * attach * 30);
-  const plan = recommendPlan(tables);
-  const cost = estimateMrr({ planId: plan.id, stores: 1, cycle: billingCycle });
+  const dailyCovers = tables * seats * turns;
+  const monthlyGmv = Math.round(dailyCovers * ticket * attach * days * stores);
+  const plan = recommendPlan(tables, stores);
+  const cost = estimateMrr({ planId: plan.id, stores, cycle: billingCycle });
   const rate = monthlyGmv > 0 ? ((cost / monthlyGmv) * 100).toFixed(2) : '—';
 
   document.getElementById('roiGmv').textContent = `¥${yen(monthlyGmv)}`;
   document.getElementById('roiPlan').textContent = plan.name;
   document.getElementById('roiCost').textContent = `¥${yen(cost)}`;
   document.getElementById('roiRate').textContent = rate === '—' ? '—' : `${rate}%`;
+  document.getElementById('roiAnnual').textContent = `¥${yen(cost * 12)}`;
 }
 
 document.querySelectorAll('.lp-cycle').forEach(btn => {
@@ -105,7 +113,7 @@ document.querySelectorAll('.lp-cycle').forEach(btn => {
   });
 });
 
-['roiTables', 'roiTurns', 'roiTicket', 'roiAttach'].forEach(id => {
+['roiTables', 'roiSeats', 'roiTurns', 'roiDays', 'roiTicket', 'roiAttach', 'roiStores'].forEach(id => {
   document.getElementById(id).addEventListener('input', updateRoi);
 });
 

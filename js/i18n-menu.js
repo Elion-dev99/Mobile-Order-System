@@ -1,0 +1,75 @@
+/** English copy for guest menu (ids stable even if Firestore menu edits JA names) */
+export const ITEM_I18N = {
+  item_001: { name: 'Signature Chicken Curry', description: 'House spice blend. Heat level adjustable.' },
+  item_002: { name: 'Seafood Bowl', description: 'Generous fresh seafood over rice.' },
+  item_003: { name: 'Karaage Set', description: 'Juicy fried chicken with rice, soup, and sides.' },
+  item_004: { name: 'Rich Shoyu Ramen', description: 'Pork & chicken broth finished with soy.' },
+  item_005: { name: 'Chewy Udon', description: 'Sanuki-style noodles in savory dashi.' },
+  item_006: { name: 'Pad Thai', description: 'Sweet-savory stir-fried noodles with shrimp & peanut.' },
+  item_007: { name: 'Caesar Salad', description: 'Crispy bacon and parmesan.' },
+  item_008: { name: 'French Fries', description: 'Golden fries. Salt or herb salt.' },
+  item_009: { name: 'Edamame', description: 'Salt-boiled Japanese soybeans.' },
+  item_010: { name: 'Craft Cola', description: 'House-spiced craft cola.' },
+  item_011: { name: 'Fresh Lemonade', description: 'Fresh-squeezed Japanese lemon.' },
+  item_012: { name: 'Coffee of the Day', description: 'Daily single-origin drip.' },
+  item_013: { name: 'Rich Pudding', description: 'Classic firm custard pudding.' },
+  item_014: { name: 'Basque Cheesecake', description: 'Creamy burnt Basque-style cake.' },
+  item_015: { name: 'Seasonal Sorbet', description: 'Dairy-free sorbet with seasonal fruit.' },
+};
+
+export const CAT_I18N = {
+  all: { ja: 'すべて', en: 'All' },
+  rice: { ja: 'ご飯もの', en: 'Rice' },
+  noodle: { ja: 'めん類', en: 'Noodles' },
+  side: { ja: 'サイド', en: 'Sides' },
+  drink: { ja: 'ドリンク', en: 'Drinks' },
+  dessert: { ja: 'デザート', en: 'Dessert' },
+};
+
+export const ALLERGEN_I18N = {
+  gluten: { ja: '小麦', en: 'Wheat' },
+  egg: { ja: '卵', en: 'Egg' },
+  dairy: { ja: '乳製品', en: 'Dairy' },
+  shrimp: { ja: 'えび', en: 'Shrimp' },
+  peanut: { ja: 'ピーナッツ', en: 'Peanut' },
+  soy: { ja: '大豆', en: 'Soy' },
+};
+
+export const UI_I18N = {
+  ja: {
+    search: 'メニューを検索',
+    cart: 'カートを見る',
+    popular: '人気',
+    tax: '税込',
+    add: 'カートに追加',
+    note: 'リクエスト（任意）',
+    notePh: 'アレルギーやご要望があれば',
+    table: 'テーブル',
+    pinSet: 'PIN設定',
+    pinEdit: 'PIN変更',
+    allergen: 'アレルギーで絞り込む',
+    emptyTitle: 'メニューがありません',
+    emptyBody: '条件を変えて再検索してください',
+    customize: 'カスタム',
+    points: '点',
+    added: 'を追加しました',
+  },
+  en: {
+    search: 'Search menu',
+    cart: 'View cart',
+    popular: 'Popular',
+    tax: 'tax in',
+    add: 'Add to cart',
+    note: 'Special request',
+    notePh: 'Allergies or notes',
+    table: 'Table',
+    pinSet: 'Set PIN',
+    pinEdit: 'Edit PIN',
+    allergen: 'Filter by allergen',
+    emptyTitle: 'No matching items',
+    emptyBody: 'Try different filters or search',
+    customize: 'Customize',
+    points: 'items',
+    added: 'added',
+  },
+};

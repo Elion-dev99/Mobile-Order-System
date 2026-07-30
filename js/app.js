@@ -1,6 +1,6 @@
 import { TablePin } from './pin.js';
 import { loadShop, loadMenu, getShop, getMenu } from './shop.js';
-import { featureEnabled } from './plans.js';
+import { ITEM_I18N, CAT_I18N, ALLERGEN_I18N, UI_I18N } from './i18n-menu.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -9,29 +9,8 @@ export function showToast(msg) {
   el.className = 'toast';
   el.textContent = msg;
   container.appendChild(el);
-  setTimeout(() => el.remove(), 2600);
+  setTimeout(() => el.remove(), 2200);
 }
-
-const I18N = {
-  ja: {
-    search: 'メニューを検索...',
-    cart: 'カートを見る',
-    popular: '人気',
-    tax: '(税込)',
-    add: 'カートに追加',
-    note: '特別リクエスト（任意）',
-    notePh: 'アレルギーや特別なご要望があればお知らせください',
-  },
-  en: {
-    search: 'Search menu...',
-    cart: 'View cart',
-    popular: 'Popular',
-    tax: '(tax in)',
-    add: 'Add to cart',
-    note: 'Special request (optional)',
-    notePh: 'Allergies or special requests',
-  },
-};
 
 const App = {
   cart: [],
@@ -44,53 +23,92 @@ const App = {
   modalToggles: {},
   tableNumber: null,
   locale: 'ja',
+  scrollSpyBound: false,
 
   async init() {
     this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
-    document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
     await Promise.all([loadShop(), loadMenu()]);
     const shop = getShop();
     document.querySelectorAll('.nav-large-title').forEach(el => { el.textContent = shop.name || 'QuickOrder'; });
-    document.title = `${shop.name || 'モバイルオーダー'}`;
-    this.locale = shop.locale || 'ja';
+    document.title = shop.name || 'Menu';
+
+    try {
+      this.locale = localStorage.getItem('mos_locale') || shop.locale || 'ja';
+    } catch {
+      this.locale = shop.locale || 'ja';
+    }
+
     this.setupLangToggle();
-    this.applyLocaleChrome();
     this.renderPinControl();
     if (!this.ensurePinAccess()) return;
     this.loadCart();
+    this.applyLocaleChrome();
     this.renderMenu();
     this.bindEvents();
     this.updateCartBar();
   },
 
+  t(key) {
+    return (UI_I18N[this.locale] || UI_I18N.ja)[key] || UI_I18N.ja[key] || key;
+  },
+
+  itemText(item) {
+    if (this.locale === 'en' && ITEM_I18N[item.id]) {
+      return {
+        name: ITEM_I18N[item.id].name,
+        description: ITEM_I18N[item.id].description,
+      };
+    }
+    return { name: item.name, description: item.description || '' };
+  },
+
+  allergenLabel(id) {
+    const row = ALLERGEN_I18N[id];
+    if (!row) return id;
+    return this.locale === 'en' ? row.en : row.ja;
+  },
+
+  catLabel(id) {
+    const row = CAT_I18N[id];
+    if (!row) return id;
+    return this.locale === 'en' ? row.en : row.ja;
+  },
+
   setupLangToggle() {
     const wrap = document.getElementById('langToggle');
     if (!wrap) return;
-    if (!featureEnabled(getShop(), 'multiLang')) {
-      wrap.classList.add('hidden');
-      return;
-    }
     wrap.classList.remove('hidden');
     wrap.querySelectorAll('button').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.lang === this.locale);
-      btn.addEventListener('click', () => {
+      btn.onclick = () => {
         this.locale = btn.dataset.lang;
+        try { localStorage.setItem('mos_locale', this.locale); } catch (_) {}
         wrap.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
         this.applyLocaleChrome();
         this.renderMenu();
-      });
+      };
     });
   },
 
-  t(key) {
-    return (I18N[this.locale] || I18N.ja)[key] || I18N.ja[key] || key;
-  },
-
   applyLocaleChrome() {
+    document.documentElement.lang = this.locale === 'en' ? 'en' : 'ja';
+    document.querySelectorAll('.table-number').forEach(el => {
+      el.textContent = `${this.t('table')} ${this.tableNumber}`;
+    });
     const search = document.getElementById('searchInput');
     if (search) search.placeholder = this.t('search');
-    const cartLabel = document.querySelector('.cart-bar-left span');
+    const cartLabel = document.querySelector('.cart-bar-left > span:first-child');
     if (cartLabel) cartLabel.textContent = this.t('cart');
+    const allergenSummary = document.querySelector('.guest-allergen summary');
+    if (allergenSummary) allergenSummary.textContent = this.t('allergen');
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.textContent = this.catLabel(btn.dataset.cat);
+    });
+    document.querySelectorAll('.allergen-chip').forEach(chip => {
+      chip.textContent = this.allergenLabel(chip.dataset.allergen);
+    });
+    this.renderPinControl();
   },
 
   renderPinControl() {
@@ -99,7 +117,7 @@ const App = {
     const protectedState = TablePin.isProtected(this.tableNumber);
     area.innerHTML = `
       <button class="nav-action pin-action" id="pinSetupBtn" type="button">
-        ${protectedState ? 'PIN変更' : 'PIN設定'}
+        ${protectedState ? this.t('pinEdit') : this.t('pinSet')}
       </button>`;
     document.getElementById('pinSetupBtn')?.addEventListener('click', () => this.promptPinSettings());
   },
@@ -107,48 +125,46 @@ const App = {
   ensurePinAccess() {
     if (!TablePin.isProtected(this.tableNumber) || TablePin.isAuthenticated(this.tableNumber)) return true;
     while (true) {
-      const pin = prompt(`テーブル${this.tableNumber}の暗証番号を入力してください`);
+      const pin = prompt(`${this.t('table')}${this.tableNumber} PIN`);
       if (pin === null) {
         const list = document.getElementById('menuList');
-        if (list) list.innerHTML = '<div class="locked-state">このテーブルは暗証番号で保護されています。PINを入力するとメニューを表示できます。</div>';
+        if (list) list.innerHTML = `<div class="locked-state">${this.locale === 'en' ? 'This table is PIN protected.' : 'このテーブルは暗証番号で保護されています。'}</div>`;
         return false;
       }
       if (TablePin.validatePin(this.tableNumber, pin)) {
         TablePin.setAuthenticated(this.tableNumber);
         return true;
       }
-      alert('暗証番号が違います。もう一度入力してください。');
+      alert(this.locale === 'en' ? 'Incorrect PIN' : '暗証番号が違います');
     }
   },
 
   promptPinSettings() {
     const protectedState = TablePin.isProtected(this.tableNumber);
     if (protectedState) {
-      const currentPin = prompt(`テーブル${this.tableNumber}の現在の暗証番号を入力してください。`);
+      const currentPin = prompt(this.locale === 'en' ? 'Current PIN' : '現在の暗証番号');
       if (currentPin === null) return;
       if (!TablePin.validatePin(this.tableNumber, currentPin)) {
-        alert('暗証番号が違います');
+        alert(this.locale === 'en' ? 'Incorrect PIN' : '暗証番号が違います');
         return;
       }
     }
-    const newPin = prompt(`テーブル${this.tableNumber}の暗証番号を${protectedState ? '変更 / 解除' : '設定'}してください。\n空のままOKを押すと解除されます。`);
+    const newPin = prompt(this.locale === 'en' ? 'New PIN (blank to clear)' : '新しい暗証番号（空で解除）');
     if (newPin === null) return;
     if (newPin.trim() === '') {
       TablePin.clearPin(this.tableNumber);
       TablePin.clearAuthenticated(this.tableNumber);
-      alert(`テーブル${this.tableNumber}のPINを解除しました`);
       this.renderPinControl();
       return;
     }
-    const confirmPin = prompt('暗証番号をもう一度入力してください。');
+    const confirmPin = prompt(this.locale === 'en' ? 'Confirm PIN' : 'もう一度入力');
     if (confirmPin === null) return;
     if (newPin !== confirmPin) {
-      alert('暗証番号が一致しません');
+      alert(this.locale === 'en' ? 'PIN mismatch' : '暗証番号が一致しません');
       return;
     }
     TablePin.setPin(this.tableNumber, newPin);
     TablePin.clearAuthenticated(this.tableNumber);
-    alert(`テーブル${this.tableNumber}のPINを設定しました`);
     this.renderPinControl();
   },
 
@@ -163,80 +179,222 @@ const App = {
     localStorage.setItem('mos_cart', JSON.stringify(this.cart));
   },
 
-  renderMenu() {
-    const container = document.getElementById('menuList');
-    if (!container) return;
-    const MENU_DATA = getMenu();
+  isCustomizable(item) {
+    return Array.isArray(item.customizable) && item.customizable.length > 0;
+  },
 
-    const filtered = MENU_DATA.items.filter(item => {
-      const catMatch = this.selectedCategory === 'all' || item.category === this.selectedCategory;
+  isPlainLine(entry) {
+    const customs = entry.customizations && Object.keys(entry.customizations).length;
+    const toggles = entry.toggles && Object.values(entry.toggles).some(Boolean);
+    const note = entry.note && String(entry.note).trim();
+    return !customs && !toggles && !note;
+  },
+
+  qtyForItem(itemId) {
+    return this.cart
+      .filter(e => e.itemId === itemId)
+      .reduce((s, e) => s + (e.qty || 0), 0);
+  },
+
+  plainQty(itemId) {
+    return this.cart
+      .filter(e => e.itemId === itemId && this.isPlainLine(e))
+      .reduce((s, e) => s + (e.qty || 0), 0);
+  },
+
+  bumpPlain(item, delta) {
+    let line = this.cart.find(e => e.itemId === item.id && this.isPlainLine(e));
+    if (!line && delta > 0) {
+      const text = this.itemText(item);
+      line = {
+        id: Date.now() + Math.random(),
+        itemId: item.id,
+        name: text.name,
+        emoji: item.emoji,
+        price: item.price,
+        qty: 0,
+        customizations: {},
+        toggles: {},
+        note: '',
+      };
+      this.cart.push(line);
+    }
+    if (!line) return;
+    line.qty += delta;
+    if (line.qty <= 0) this.cart = this.cart.filter(e => e !== line);
+    this.saveCart();
+    this.updateCartBar();
+    this.renderMenu({ keepScroll: true });
+  },
+
+  filteredItems() {
+    const MENU_DATA = getMenu();
+    return MENU_DATA.items.filter(item => {
       const allergenMatch = this.activeAllergens.length === 0 ||
         !this.activeAllergens.some(a => (item.allergens || []).includes(a));
-      const searchMatch = this.searchQuery === '' ||
-        item.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-        (item.description || '').toLowerCase().includes(this.searchQuery.toLowerCase());
-      return catMatch && allergenMatch && searchMatch;
-    }).sort((a, b) => Number(!!b.popular) - Number(!!a.popular));
+      const text = this.itemText(item);
+      const q = this.searchQuery.toLowerCase();
+      const searchMatch = q === '' ||
+        text.name.toLowerCase().includes(q) ||
+        text.description.toLowerCase().includes(q) ||
+        (item.name || '').toLowerCase().includes(q);
+      return allergenMatch && searchMatch;
+    });
+  },
 
-    if (filtered.length === 0) {
+  renderMenu(opts = {}) {
+    const container = document.getElementById('menuList');
+    if (!container) return;
+    const scrollY = opts.keepScroll ? window.scrollY : null;
+    const MENU_DATA = getMenu();
+    const items = this.filteredItems().sort((a, b) => Number(!!b.popular) - Number(!!a.popular));
+
+    if (items.length === 0) {
       container.innerHTML = `
-        <div class="empty-state fade-in">
-          <h3>該当するメニューがありません</h3>
-          <p>検索条件やアレルギーフィルターを変えてみてください</p>
+        <div class="empty-state">
+          <h3>${this.t('emptyTitle')}</h3>
+          <p>${this.t('emptyBody')}</p>
         </div>`;
       return;
     }
 
-    container.innerHTML = filtered.map(item => this.renderCard(item)).join('');
-    container.querySelectorAll('.menu-card').forEach(card => {
-      card.addEventListener('click', () => this.openModal(card.dataset.id));
-    });
-    container.querySelectorAll('.add-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const item = getMenu().items.find(i => i.id === btn.closest('.menu-card').dataset.id);
-        if (item && (!item.customizable || item.customizable.length === 0)) {
-          this.addToCartDirect(item);
-          btn.classList.add('bounce-add');
-          setTimeout(() => btn.classList.remove('bounce-add'), 300);
-        } else {
-          this.openModal(btn.closest('.menu-card').dataset.id);
-        }
-      });
-    });
+    const cats = MENU_DATA.categories.filter(c => c.id !== 'all');
+    const byCat = cats.map(cat => ({
+      ...cat,
+      items: items.filter(i => i.category === cat.id),
+    })).filter(c => c.items.length);
+
+    const showAll = this.selectedCategory === 'all';
+    const sections = showAll
+      ? byCat
+      : byCat.filter(c => c.id === this.selectedCategory);
+
+    container.innerHTML = sections.map(section => `
+      <section class="menu-section" id="cat-${section.id}" data-cat="${section.id}">
+        <h2 class="menu-section-title">${this.catLabel(section.id)}</h2>
+        <div class="menu-section-list">
+          ${section.items.map(item => this.renderCard(item)).join('')}
+        </div>
+      </section>
+    `).join('');
+
+    this.bindCardEvents(container);
+    this.setupScrollSpy();
+    if (scrollY != null) window.scrollTo(0, scrollY);
   },
 
   renderCard(item) {
-    const MENU_DATA = getMenu();
+    const text = this.itemText(item);
+    const qty = this.qtyForItem(item.id);
+    const customizable = this.isCustomizable(item);
     const allergenHTML = (item.allergens || []).map(a => {
-      const al = MENU_DATA.allergens.find(al => al.id === a);
       const matched = this.activeAllergens.includes(a);
-      return `<span class="allergen-tag ${matched ? 'matched' : ''}">${al ? al.label : a}</span>`;
+      return `<span class="allergen-tag ${matched ? 'matched' : ''}">${this.allergenLabel(a)}</span>`;
     }).join('');
 
+    const controls = customizable
+      ? `<button class="add-btn" type="button" data-action="customize" aria-label="${text.name}">${qty > 0 ? `${qty}` : '＋'}</button>`
+      : qty > 0
+        ? `<div class="qty-stepper" data-id="${item.id}">
+             <button type="button" data-action="minus" aria-label="minus">−</button>
+             <span>${qty}</span>
+             <button type="button" data-action="plus" aria-label="plus">＋</button>
+           </div>`
+        : `<button class="add-btn" type="button" data-action="plus" aria-label="${text.name}">＋</button>`;
+
     return `
-      <article class="menu-card" data-id="${item.id}">
+      <article class="menu-card ${qty > 0 ? 'in-cart' : ''}" data-id="${item.id}">
         <div class="menu-card-emoji" aria-hidden="true">${item.emoji || ''}</div>
         <div class="menu-card-body">
           <div class="menu-card-header">
-            <div class="menu-card-name">${item.name}</div>
+            <div class="menu-card-name">${text.name}</div>
             ${item.popular ? `<span class="popular-badge">${this.t('popular')}</span>` : ''}
           </div>
-          <div class="menu-card-desc">${item.description || ''}</div>
+          <div class="menu-card-desc">${text.description}</div>
           ${allergenHTML ? `<div class="allergen-tags">${allergenHTML}</div>` : ''}
+          ${customizable ? `<div class="custom-hint">${this.t('customize')}</div>` : ''}
           <div class="menu-card-footer">
             <div class="menu-card-price">¥${item.price.toLocaleString()}<span>${this.t('tax')}</span></div>
-            <button class="add-btn" type="button" aria-label="${item.name}を追加">＋</button>
+            ${controls}
           </div>
         </div>
       </article>`;
   },
 
-  addToCartDirect(item) {
-    this.cart.push({ id: Date.now(), itemId: item.id, name: item.name, emoji: item.emoji, price: item.price, qty: 1, customizations: {}, toggles: {}, note: '' });
-    this.saveCart();
-    this.updateCartBar();
-    showToast(`${item.name} を追加しました`);
+  bindCardEvents(container) {
+    container.querySelectorAll('.menu-card').forEach(card => {
+      const itemId = card.dataset.id;
+      const item = getMenu().items.find(i => i.id === itemId);
+      if (!item) return;
+
+      card.addEventListener('click', e => {
+        if (e.target.closest('button') || e.target.closest('.qty-stepper')) return;
+        this.openModal(itemId);
+      });
+
+      card.querySelectorAll('[data-action]').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const action = btn.dataset.action;
+          if (action === 'customize' || (action === 'plus' && this.isCustomizable(item))) {
+            this.openModal(itemId);
+            return;
+          }
+          if (action === 'plus') {
+            this.bumpPlain(item, 1);
+            showToast(`${this.itemText(item).name} ${this.t('added')}`);
+          }
+          if (action === 'minus') this.bumpPlain(item, -1);
+        });
+      });
+    });
+  },
+
+  setupScrollSpy() {
+    if (this.scrollSpyBound) return;
+    this.scrollSpyBound = true;
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (ticking || this.selectedCategory !== 'all' || this.searchQuery) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const sections = [...document.querySelectorAll('.menu-section')];
+        const marker = 140;
+        let current = sections[0]?.dataset.cat;
+        sections.forEach(sec => {
+          if (sec.getBoundingClientRect().top <= marker) current = sec.dataset.cat;
+        });
+        if (current) {
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.cat === current || (current && b.dataset.cat === 'all' && false));
+          });
+          // highlight matching category tab (not "all")
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.cat === current);
+          });
+        }
+        ticking = false;
+      });
+    }, { passive: true });
+  },
+
+  scrollToCategory(catId) {
+    if (catId === 'all') {
+      this.selectedCategory = 'all';
+      this.renderMenu();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    this.selectedCategory = 'all';
+    this.renderMenu();
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`cat-${catId}`);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 120;
+        window.scrollTo({ top, behavior: 'smooth' });
+      }
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === catId));
+    });
   },
 
   openModal(itemId) {
@@ -256,14 +414,11 @@ const App = {
   },
 
   renderModal(item) {
-    const MENU_DATA = getMenu();
+    const text = this.itemText(item);
     const allergens = item.allergens || [];
     const allergenHTML = allergens.length ? `
       <div class="modal-allergen-list">
-        ${allergens.map(a => {
-          const al = MENU_DATA.allergens.find(al => al.id === a);
-          return `<span class="modal-allergen-tag">${al ? al.label : a}</span>`;
-        }).join('')}
+        ${allergens.map(a => `<span class="modal-allergen-tag">${this.allergenLabel(a)}</span>`).join('')}
       </div>` : '';
 
     const customizeHTML = (item.customizable || []).map(opt => {
@@ -273,7 +428,7 @@ const App = {
             <div class="customize-label">${opt.label}</div>
             <div class="customize-options">
               ${opt.options.map(o => `
-                <button class="option-chip ${o === opt.default ? 'selected' : ''}" data-opt="${opt.id}" data-val="${o}">${o}</button>
+                <button type="button" class="option-chip ${o === opt.default ? 'selected' : ''}" data-opt="${opt.id}" data-val="${o}">${o}</button>
               `).join('')}
             </div>
           </div>`;
@@ -294,25 +449,25 @@ const App = {
     document.getElementById('itemModal').querySelector('.modal-sheet').innerHTML = `
       <div class="modal-handle"></div>
       <div class="modal-header">
-        <span class="modal-item-emoji">${item.emoji}</span>
-        <div class="modal-item-name">${item.name}</div>
-        <div class="modal-item-desc">${item.description}</div>
+        <span class="modal-item-emoji">${item.emoji || ''}</span>
+        <div class="modal-item-name">${text.name}</div>
+        <div class="modal-item-desc">${text.description}</div>
         <div class="modal-price" id="modalPrice">¥${item.price.toLocaleString()}</div>
         ${allergenHTML}
       </div>
       ${customizeHTML ? `<div class="modal-divider"></div><div class="modal-customize">${customizeHTML}</div>` : ''}
       <div class="modal-divider"></div>
       <div class="modal-quantity-row">
-        <button class="qty-btn minus" id="qtyMinus">−</button>
+        <button type="button" class="qty-btn minus" id="qtyMinus">−</button>
         <div class="qty-number" id="qtyNum">1</div>
-        <button class="qty-btn plus" id="qtyPlus">＋</button>
+        <button type="button" class="qty-btn plus" id="qtyPlus">＋</button>
       </div>
       <div class="modal-note-area">
-        <div class="note-label">📝 ${this.t('note')}</div>
+        <div class="note-label">${this.t('note')}</div>
         <textarea class="note-input" id="itemNote" rows="2" placeholder="${this.t('notePh')}"></textarea>
       </div>
-      <button class="modal-add-btn" id="modalAddBtn">
-        🛒 ${this.t('add')} <span id="modalAddPrice">¥${item.price.toLocaleString()}</span>
+      <button type="button" class="modal-add-btn" id="modalAddBtn">
+        ${this.t('add')} <span id="modalAddPrice">¥${item.price.toLocaleString()}</span>
       </button>
     `;
     this.bindModalEvents(item);
@@ -338,13 +493,20 @@ const App = {
       });
     });
     document.getElementById('qtyMinus').addEventListener('click', () => {
-      if (this.modalQty > 1) { this.modalQty--; document.getElementById('qtyNum').textContent = this.modalQty; this.updateModalPrice(item); }
+      if (this.modalQty > 1) {
+        this.modalQty--;
+        document.getElementById('qtyNum').textContent = this.modalQty;
+        this.updateModalPrice(item);
+      }
     });
     document.getElementById('qtyPlus').addEventListener('click', () => {
-      this.modalQty++; document.getElementById('qtyNum').textContent = this.modalQty; this.updateModalPrice(item);
+      this.modalQty++;
+      document.getElementById('qtyNum').textContent = this.modalQty;
+      this.updateModalPrice(item);
     });
     document.getElementById('modalAddBtn').addEventListener('click', () => {
-      this.addToCart(item); this.closeModal();
+      this.addToCart(item);
+      this.closeModal();
     });
   },
 
@@ -353,11 +515,8 @@ const App = {
     (item.customizable || []).forEach(opt => {
       if (opt.type === 'select') {
         const val = this.modalCustomizations[opt.id] || '';
-        if (val.includes('+100円')) total += 100;
-        if (val.includes('+200円')) total += 200;
-        if (val.includes('+280円')) total += 280;
-        if (val.includes('+80円')) total += 80;
-        if (val.includes('+50円')) total += 50;
+        const m = val.match(/\+(\d+)\s*円/);
+        if (m) total += Number(m[1]);
       }
       if (opt.type === 'toggle' && this.modalToggles[opt.id]) total += opt.price || 0;
     });
@@ -371,15 +530,23 @@ const App = {
   },
 
   addToCart(item) {
+    const text = this.itemText(item);
     const note = document.getElementById('itemNote')?.value || '';
     this.cart.push({
-      id: Date.now(), itemId: item.id, name: item.name, emoji: item.emoji,
-      price: this.calcUnitPrice(item), qty: this.modalQty,
-      customizations: { ...this.modalCustomizations }, toggles: { ...this.modalToggles }, note,
+      id: Date.now() + Math.random(),
+      itemId: item.id,
+      name: text.name,
+      emoji: item.emoji,
+      price: this.calcUnitPrice(item),
+      qty: this.modalQty,
+      customizations: { ...this.modalCustomizations },
+      toggles: { ...this.modalToggles },
+      note,
     });
     this.saveCart();
     this.updateCartBar();
-    showToast(`${item.name} をカートに追加しました`);
+    this.renderMenu({ keepScroll: true });
+    showToast(`${text.name} ${this.t('added')}`);
   },
 
   closeModal() {
@@ -395,8 +562,12 @@ const App = {
     const count = this.cart.reduce((s, e) => s + e.qty, 0);
     if (count === 0) { bar.classList.remove('visible'); return; }
     bar.classList.add('visible');
-    bar.querySelector('.cart-count-pill').textContent = `${count}点`;
+    const pill = bar.querySelector('.cart-count-pill');
+    if (pill) pill.textContent = `${count}${this.locale === 'en' ? '' : this.t('points')}`;
+    if (pill && this.locale === 'en') pill.textContent = String(count);
     bar.querySelector('.cart-bar-total').textContent = `¥${total.toLocaleString()}`;
+    const cartLabel = document.querySelector('.cart-bar-left > span:first-child');
+    if (cartLabel) cartLabel.textContent = this.t('cart');
   },
 
   bindEvents() {
@@ -404,12 +575,12 @@ const App = {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this.selectedCategory = btn.dataset.cat;
-        this.renderMenu();
+        this.scrollToCategory(btn.dataset.cat);
       });
     });
     document.querySelectorAll('.allergen-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
+      chip.addEventListener('click', e => {
+        e.preventDefault();
         const id = chip.dataset.allergen;
         if (this.activeAllergens.includes(id)) {
           this.activeAllergens = this.activeAllergens.filter(a => a !== id);
@@ -426,7 +597,12 @@ const App = {
       let timer;
       searchInput.addEventListener('input', () => {
         clearTimeout(timer);
-        timer = setTimeout(() => { this.searchQuery = searchInput.value.trim(); this.renderMenu(); }, 200);
+        timer = setTimeout(() => {
+          this.searchQuery = searchInput.value.trim();
+          this.selectedCategory = 'all';
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === 'all'));
+          this.renderMenu();
+        }, 160);
       });
     }
     document.getElementById('itemModal')?.addEventListener('click', e => {
