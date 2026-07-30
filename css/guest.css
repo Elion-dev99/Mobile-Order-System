@@ -16,16 +16,54 @@
   --g-ease: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-body.guest {
-  font-family: var(--g-sans);
-  color: var(--g-ink);
-  background:
-    radial-gradient(900px 420px at 10% -10%, rgba(13, 92, 77, 0.12), transparent 55%),
-    radial-gradient(700px 380px at 100% 0%, rgba(196, 94, 42, 0.08), transparent 50%),
-    linear-gradient(180deg, var(--g-bg1) 0%, var(--g-bg0) 100%);
-  min-height: 100vh;
-  overscroll-behavior: none;
+body.demo-mode {
+  padding-top: 46px;
 }
+
+.demo-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  background: #1A3A32;
+  color: #E7FFF6;
+  border-bottom: 1px solid rgba(47, 230, 166, 0.35);
+}
+
+.demo-banner-inner {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+}
+
+.demo-banner strong {
+  background: #2FE6A6;
+  color: #042016;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.demo-banner span { opacity: 0.9; flex: 1; min-width: 160px; }
+
+.demo-banner a {
+  color: #2FE6A6;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+body.demo-mode .guest-header {
+  top: 46px;
+}
+
 
 body.guest::before {
   content: "";

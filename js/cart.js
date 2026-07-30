@@ -4,6 +4,7 @@ import { db } from './firebase.js';
 import {
   collection, doc, setDoc, getDocs, query, where, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
 
 function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -21,17 +22,25 @@ const CartPage = {
   tableNumber: null,
 
   async init() {
-    this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
+    activateDemoFromUrl();
+    ensureDemoBanner();
+    this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
+    if (isDemoMode()) document.title = 'カート | テストモード';
     await loadMenu();
     if (!this.ensurePinAccess()) return;
     this.loadCart();
     this.render();
     this.bindEvents();
-    this.loadReorderHistory();
+    if (!isDemoMode()) this.loadReorderHistory();
+    else {
+      const reorder = document.getElementById('reorderSection');
+      if (reorder) reorder.classList.add('hidden');
+    }
   },
 
   ensurePinAccess() {
+    if (isDemoMode()) return true;
     if (!TablePin.isProtected(this.tableNumber) || TablePin.isAuthenticated(this.tableNumber)) return true;
     while (true) {
       const pin = prompt(`テーブル${this.tableNumber}の暗証番号を入力してください`);
@@ -50,13 +59,13 @@ const CartPage = {
 
   loadCart() {
     try {
-      const saved = localStorage.getItem('mos_cart');
+      const saved = localStorage.getItem(cartStorageKey());
       if (saved) this.cart = JSON.parse(saved);
     } catch (e) { this.cart = []; }
   },
 
   saveCart() {
-    localStorage.setItem('mos_cart', JSON.stringify(this.cart));
+    localStorage.setItem(cartStorageKey(), JSON.stringify(this.cart));
   },
 
   render() {
@@ -74,7 +83,7 @@ const CartPage = {
           <span class="emoji">🛒</span>
           <h3>カートが空です</h3>
           <p>メニューからお好みの料理を<br>選んでカートに追加してください</p>
-          <a href="index.html?table=${this.tableNumber}" class="menu-link-btn">← メニューに戻る</a>
+          <a href="${withDemo(`index.html?table=${encodeURIComponent(this.tableNumber)}`)}" class="menu-link-btn">← メニューに戻る</a>
         </div>`;
       return;
     }
@@ -205,10 +214,10 @@ const CartPage = {
   async placeOrder() {
     if (this.cart.length === 0) return;
     const btn = document.getElementById('placeOrderBtn');
-    btn.textContent = '⏳ 注文を送信中...';
+    btn.textContent = isDemoMode() ? 'テスト注文を送信中...' : '注文を送信中...';
     btn.disabled = true;
 
-    const orderId = 'ORD-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    const orderId = (isDemoMode() ? 'DEMO-' : 'ORD-') + Math.random().toString(36).substring(2, 8).toUpperCase();
     const subtotal = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
     const tax = Math.floor(subtotal * 0.1);
     const order = {
@@ -220,15 +229,22 @@ const CartPage = {
       total: subtotal + tax,
       timestamp: Date.now(),
       status: 'received',
+      demo: isDemoMode(),
     };
 
     try {
+      if (isDemoMode()) {
+        sessionStorage.setItem('mos_demo_order_' + orderId, JSON.stringify(order));
+        localStorage.removeItem(cartStorageKey());
+        location.href = withDemo(`status.html?order=${orderId}&table=${encodeURIComponent(this.tableNumber)}`);
+        return;
+      }
       await setDoc(doc(db, 'orders', orderId), order);
-      localStorage.removeItem('mos_cart');
+      localStorage.removeItem(cartStorageKey());
       location.href = `status.html?order=${orderId}&table=${this.tableNumber}`;
     } catch (e) {
       console.error(e);
-      btn.textContent = '⚠️ エラーが発生しました。再度お試しください';
+      btn.textContent = 'エラーが発生しました。再度お試しください';
       btn.disabled = false;
     }
   },

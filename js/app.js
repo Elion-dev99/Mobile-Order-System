@@ -1,6 +1,7 @@
 import { TablePin } from './pin.js';
 import { loadShop, loadMenu, getShop, getMenu } from './shop.js';
 import { ITEM_I18N, CAT_I18N, ALLERGEN_I18N, UI_I18N } from './i18n-menu.js';
+import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -26,11 +27,14 @@ const App = {
   scrollSpyBound: false,
 
   async init() {
-    this.tableNumber = new URLSearchParams(location.search).get('table') || '1';
+    activateDemoFromUrl();
+    ensureDemoBanner();
+    this.tableNumber = new URLSearchParams(location.search).get('table') || (isDemoMode() ? 'デモ' : '1');
     await Promise.all([loadShop(), loadMenu()]);
     const shop = getShop();
-    document.querySelectorAll('.nav-large-title').forEach(el => { el.textContent = shop.name || 'QuickOrder'; });
-    document.title = shop.name || 'Menu';
+    const brand = isDemoMode() ? `${shop.name || 'QuickOrder'}（デモ）` : (shop.name || 'QuickOrder');
+    document.querySelectorAll('.nav-large-title').forEach(el => { el.textContent = brand; });
+    document.title = isDemoMode() ? `${shop.name || 'QuickOrder'} | テストモード` : (shop.name || 'Menu');
 
     try {
       this.locale = localStorage.getItem('mos_locale') || shop.locale || 'ja';
@@ -114,6 +118,10 @@ const App = {
   renderPinControl() {
     const area = document.getElementById('pinControlArea');
     if (!area) return;
+    if (isDemoMode()) {
+      area.innerHTML = '';
+      return;
+    }
     const protectedState = TablePin.isProtected(this.tableNumber);
     area.innerHTML = `
       <button class="nav-action pin-action" id="pinSetupBtn" type="button">
@@ -123,6 +131,7 @@ const App = {
   },
 
   ensurePinAccess() {
+    if (isDemoMode()) return true;
     if (!TablePin.isProtected(this.tableNumber) || TablePin.isAuthenticated(this.tableNumber)) return true;
     while (true) {
       const pin = prompt(`${this.t('table')}${this.tableNumber} PIN`);
@@ -170,13 +179,13 @@ const App = {
 
   loadCart() {
     try {
-      const saved = localStorage.getItem('mos_cart');
+      const saved = localStorage.getItem(cartStorageKey());
       if (saved) this.cart = JSON.parse(saved);
     } catch (e) { this.cart = []; }
   },
 
   saveCart() {
-    localStorage.setItem('mos_cart', JSON.stringify(this.cart));
+    localStorage.setItem(cartStorageKey(), JSON.stringify(this.cart));
   },
 
   isCustomizable(item) {
@@ -609,7 +618,7 @@ const App = {
       if (e.target === document.getElementById('itemModal')) this.closeModal();
     });
     document.getElementById('cartBarBtn')?.addEventListener('click', () => {
-      location.href = `cart.html?table=${this.tableNumber}`;
+      location.href = withDemo(`cart.html?table=${encodeURIComponent(this.tableNumber)}`);
     });
   },
 };
