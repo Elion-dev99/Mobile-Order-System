@@ -284,7 +284,11 @@ export function suggestSetCombos(cart = [], menuItems = [], limit = 2) {
 }
 
 export function ordersToCsv(orders = []) {
-  const header = ['orderId', 'shopId', 'table', 'status', 'timestamp', 'iso', 'subtotal', 'tax', 'total', 'items'];
+  const header = [
+    'orderId', 'shopId', 'table', 'status', 'timestamp', 'iso',
+    'subtotal', 'discount', 'coupon', 'serviceCharge', 'tip', 'tax', 'total',
+    'platformFee', 'items',
+  ];
   const lines = [header.join(',')];
   for (const o of orders) {
     const items = (o.items || [])
@@ -300,12 +304,31 @@ export function ordersToCsv(orders = []) {
       csv(o.timestamp),
       csv(iso),
       csv(o.subtotal),
+      csv(o.discount || 0),
+      csv(o.couponCode || ''),
+      csv(o.serviceCharge || 0),
+      csv(o.tip || 0),
       csv(o.tax),
       csv(o.total),
+      csv(o.platformFee || 0),
       `"${items}"`,
     ].join(','));
   }
   return lines.join('\n');
+}
+
+/** Filter orders by local-date range (inclusive). from/to as 'YYYY-MM-DD' or Date. */
+export function filterOrdersByDateRange(orders = [], from, to) {
+  const start = from ? new Date(from) : null;
+  if (start) start.setHours(0, 0, 0, 0);
+  const end = to ? new Date(to) : null;
+  if (end) end.setHours(23, 59, 59, 999);
+  return orders.filter((o) => {
+    const t = Number(o.timestamp) || 0;
+    if (start && t < start.getTime()) return false;
+    if (end && t > end.getTime()) return false;
+    return true;
+  });
 }
 
 function csv(v) {

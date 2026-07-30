@@ -317,3 +317,74 @@
 /* order history uses shared .oh-* from guest.css — store tweaks */
 #storeOrderHistory .oh-card { background: #fff; }
 #storeOrderHistory .oh-card-head.is-open { background: rgba(13,92,77,0.06); }
+
+.store-fieldset {
+  border: 1px solid rgba(13, 92, 77, 0.18);
+  border-radius: 14px;
+  padding: 12px 14px 4px;
+  margin: 8px 0 12px;
+}
+.store-fieldset legend {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0D5C4D;
+}
+.store-stock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.store-stock-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #5a6b66;
+}
+.store-stock-input input {
+  width: 72px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(13,92,77,0.2);
+}
+.store-coupon-row {
+  display: grid;
+  grid-template-columns: 1fr 64px 72px auto auto;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.store-coupon-row input,
+.store-coupon-row select {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(13,92,77,0.2);
+  font: inherit;
+}
+.store-table-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+}
+.table-board-cell {
+  border-radius: 12px;
+  padding: 10px 8px;
+  text-align: center;
+  background: #f3f6f5;
+  border: 1px solid rgba(13,92,77,0.12);
+  display: grid;
+  gap: 2px;
+}
+.table-board-cell strong { font-size: 13px; }
+.table-board-cell span { font-size: 12px; font-weight: 700; }
+.table-board-cell em { font-style: normal; font-size: 11px; color: #6a7a75; }
+.table-board-cell.is-empty { opacity: 0.7; }
+.table-board-cell.is-waiting { background: #fff4e5; border-color: #f0b35a; }
+.table-board-cell.is-cooking { background: #ffe8e5; border-color: #e06a5c; }
+.table-board-cell.is-finishing { background: #e7f8f1; border-color: #3dcf9a; }
+@media (max-width: 560px) {
+  .store-coupon-row { grid-template-columns: 1fr 1fr; }
+}

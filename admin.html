@@ -43,8 +43,16 @@
     <button class="admin-tab" data-filter="all">すべて</button>
   </div>
   <div style="padding:10px 16px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <button type="button" id="exportCsvBtn" class="admin-link-btn" style="border:none;cursor:pointer;">本日CSV出力</button>
+    <div id="kdsModeBar" class="kds-mode-bar" hidden>
+      <button type="button" class="kds-mode active" data-kds="timeline">時系列</button>
+      <button type="button" class="kds-mode" data-kds="byTable">卓別</button>
+      <button type="button" class="kds-mode" data-kds="byItem">商品別</button>
+    </div>
+    <label class="admin-date-range">From <input type="date" id="csvFrom"></label>
+    <label class="admin-date-range">To <input type="date" id="csvTo"></label>
+    <button type="button" id="exportCsvBtn" class="admin-link-btn" style="border:none;cursor:pointer;">期間CSV</button>
     <button type="button" id="printKitchenBtn" class="admin-link-btn" style="border:none;cursor:pointer;">厨房伝票印刷</button>
+    <span class="admin-muted" id="staffRoleBadge" style="margin:0;"></span>
   </div>
   <div class="admin-content" id="adminContent">
     <div style="text-align:center;padding:60px 20px;color:#8E8E93;">
@@ -175,18 +183,51 @@
     <label class="admin-field">管理者PIN（任意）
       <input id="settingAdminPin" type="password" placeholder="空なら未設定" autocomplete="new-password">
     </label>
+
+    <h3 class="admin-subhead" id="opsFeaturesHead">Growth+ 運用設定</h3>
+    <label class="admin-field" id="settingServiceWrap">サービス料（%）
+      <input id="settingServiceCharge" type="number" min="0" max="30" step="1" value="0">
+    </label>
+    <label class="admin-field admin-check" id="settingTipWrap">
+      <input id="settingTipEnabled" type="checkbox">
+      <span>客席でチップ選択を表示</span>
+    </label>
+
+    <div id="staffPinsBlock" hidden>
+      <h3 class="admin-subhead">スタッフ権限PIN（Business+）</h3>
+      <p class="admin-muted">厨房 / ホール / 店長で画面操作を制限。店長は管理者PINでも可。</p>
+      <label class="admin-field">厨房PIN
+        <input id="settingPinKitchen" type="password" autocomplete="new-password" placeholder="任意">
+      </label>
+      <label class="admin-field">ホールPIN
+        <input id="settingPinFloor" type="password" autocomplete="new-password" placeholder="任意">
+      </label>
+      <label class="admin-field">店長PIN
+        <input id="settingPinManager" type="password" autocomplete="new-password" placeholder="空なら管理者PIN">
+      </label>
+    </div>
+
+    <div id="couponsBlock" hidden>
+      <h3 class="admin-subhead">クーポン</h3>
+      <p class="admin-muted">％割引または定額。時間帯・最低金額・利用上限に対応。</p>
+      <div id="couponEditorList"></div>
+      <button type="button" class="admin-link-btn" id="addCouponBtn" style="border:none;cursor:pointer;margin:8px 0 16px;">＋ クーポン追加</button>
+    </div>
+
     <button class="admin-save-btn" id="saveSettingsBtn">設定を保存</button>
   </div>
 </div>
 
 <div id="adminGate" class="admin-gate hidden">
   <div class="admin-gate-card">
-    <h2>管理者PIN</h2>
-    <p>店舗設定でPINが有効です</p>
+    <h2 id="adminGateTitle">管理者PIN</h2>
+    <p id="adminGateHint">店舗設定でPINが有効です</p>
     <input id="adminPinInput" type="password" placeholder="PINを入力" autocomplete="current-password">
     <button class="admin-save-btn" id="adminPinSubmit">解除する</button>
   </div>
 </div>
+
+<div id="kitchenPrintRoot" class="kitchen-print-root" aria-hidden="true"></div>
 
 <script type="module" src="js/admin.js"></script>
 </body>

@@ -14,7 +14,8 @@ import {
   recommendUpsells,
 } from './guest-features.js';
 import { mountGuestOrderHistory } from './order-history.js';
-import { placeGuestOrder } from './place-order.js';
+import { placeGuestOrder, computeOrderTotals } from './place-order.js';
+import { validateCoupon, setAppliedCoupon, getAppliedCoupon } from './coupons.js';
 import {
   applyBrandTheme, mountQuickFilters, mountPartySizePrompt, mountShareTableLink,
   loadFavorites, toggleFavorite, isFavorite, itemHasTag, confirmAlcoholAge,
@@ -47,6 +48,7 @@ const App = {
   scrollSpyBound: false,
   menuDelegated: false,
   view: 'menu',
+  tipPercent: 0,
   splitPeople: 1,
   spaCartBound: false,
   quickFilters: new Set(),
@@ -982,14 +984,14 @@ const App = {
   updateCartBar() {
     const bar = document.getElementById('cartBar');
     if (!bar) return;
-    const total = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
+    const totals = computeOrderTotals(this.cart, getShop(), { tipPercent: this.tipPercent });
     const count = this.cart.reduce((s, e) => s + e.qty, 0);
     if (count === 0) { bar.classList.remove('visible'); return; }
     bar.classList.add('visible');
     const pill = bar.querySelector('.cart-count-pill');
     if (pill) pill.textContent = `${count}${this.locale === 'en' ? '' : this.t('points')}`;
     if (pill && this.locale === 'en') pill.textContent = String(count);
-    bar.querySelector('.cart-bar-total').textContent = `¥${total.toLocaleString()}`;
+    bar.querySelector('.cart-bar-total').textContent = `¥${totals.total.toLocaleString()}`;
     const cartLabel = document.querySelector('.cart-bar-left > span:first-child');
     if (cartLabel) cartLabel.textContent = this.t('cart');
   },
@@ -1053,6 +1055,7 @@ const App = {
       if (!btn) return;
       this.updateSpaCartQty(btn.dataset.id, btn.dataset.action);
     });
+    this.bindCheckoutExtras();
   },
 
   showView(view, { skipHistory = false, replace = false } = {}) {
@@ -1219,20 +1222,62 @@ const App = {
   },
 
   renderSpaCartSummary() {
-    const subtotal = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
-    const tax = Math.floor(subtotal * 0.1);
-    const total = subtotal + tax;
+    const shop = getShop();
+    const totals = computeOrderTotals(this.cart, shop, { tipPercent: this.tipPercent });
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    set('subtotalAmount', `¥${subtotal.toLocaleString()}`);
-    set('taxAmount', `¥${tax.toLocaleString()}`);
-    set('totalAmount', `¥${total.toLocaleString()}`);
+    const show = (id, on) => { const el = document.getElementById(id); if (el) el.hidden = !on; };
+    set('subtotalAmount', `¥${totals.subtotal.toLocaleString()}`);
+    set('discountAmount', `-¥${totals.discount.toLocaleString()}`);
+    show('discountRow', totals.discount > 0);
+    set('serviceAmount', `¥${totals.serviceCharge.toLocaleString()}`);
+    set('serviceLabel', `サービス料（${totals.servicePct}%）`);
+    show('serviceRow', totals.serviceCharge > 0);
+    set('tipAmount', `¥${totals.tip.toLocaleString()}`);
+    show('tipSummaryRow', totals.tip > 0);
+    set('taxAmount', `¥${totals.tax.toLocaleString()}`);
+    set('totalAmount', `¥${totals.total.toLocaleString()}`);
     set('splitNum', String(this.splitPeople));
     if (this.splitPeople > 1) {
-      set('splitAmount', `お一人様 ¥${Math.ceil(total / this.splitPeople).toLocaleString()}`);
+      set('splitAmount', `お一人様 ¥${Math.ceil(totals.total / this.splitPeople).toLocaleString()}`);
       document.getElementById('splitResult')?.classList.remove('hidden');
     } else {
       document.getElementById('splitResult')?.classList.add('hidden');
     }
+    // Tip UI visibility
+    const tipRow = document.getElementById('tipRow');
+    if (tipRow) tipRow.hidden = !(shopCanUse('tip') && shop.tipEnabled);
+    const couponRow = document.getElementById('couponRow');
+    if (couponRow) couponRow.style.display = shopCanUse('coupons') ? '' : 'none';
+  },
+
+  bindCheckoutExtras() {
+    document.getElementById('couponApplyBtn')?.addEventListener('click', () => {
+      const code = document.getElementById('couponInput')?.value || '';
+      const subtotal = this.cart.reduce((s, e) => s + e.price * e.qty, 0);
+      const v = validateCoupon(code, subtotal, getShop());
+      const msg = document.getElementById('couponMsg');
+      if (!v.ok) {
+        setAppliedCoupon(getShopId(), null);
+        if (msg) { msg.hidden = false; msg.textContent = v.error; }
+        this.renderSpaCartSummary();
+        this.updateCartBar();
+        return;
+      }
+      setAppliedCoupon(getShopId(), v.coupon);
+      if (msg) { msg.hidden = false; msg.textContent = `${v.coupon.label || v.coupon.code} を適用しました`; }
+      this.renderSpaCartSummary();
+      this.updateCartBar();
+    });
+    document.getElementById('tipRow')?.querySelectorAll('[data-tip]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.tipPercent = Number(btn.dataset.tip) || 0;
+        document.getElementById('tipRow')?.querySelectorAll('[data-tip]').forEach((b) => {
+          b.classList.toggle('active', b === btn);
+        });
+        this.renderSpaCartSummary();
+        this.updateCartBar();
+      });
+    });
   },
 
   updateSpaPlaceBtn() {
@@ -1281,6 +1326,7 @@ const App = {
       cart: this.cart,
       tableNumber: this.tableNumber,
       partySize: party,
+      tipPercent: this.tipPercent,
     });
     this.cart = [];
     this.saveCart();

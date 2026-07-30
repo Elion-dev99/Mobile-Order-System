@@ -81,9 +81,24 @@
   <div class="cart-content spa-cart-body">
     <div class="cart-section-title">注文内容</div>
     <div id="cartItems"></div>
+    <div class="cart-section-title">クーポン</div>
+    <div class="coupon-row" id="couponRow">
+      <input id="couponInput" type="text" placeholder="クーポンコード" autocomplete="off" maxlength="24">
+      <button type="button" id="couponApplyBtn" class="menu-link-btn">適用</button>
+    </div>
+    <p class="coupon-msg" id="couponMsg" hidden></p>
+    <div class="cart-section-title">チップ（任意）</div>
+    <div class="tip-row" id="tipRow" hidden>
+      <button type="button" class="tip-btn active" data-tip="0">なし</button>
+      <button type="button" class="tip-btn" data-tip="5">5%</button>
+      <button type="button" class="tip-btn" data-tip="10">10%</button>
+    </div>
     <div class="cart-section-title">お会計</div>
     <div class="order-summary">
       <div class="summary-row"><span>小計</span><span id="subtotalAmount">¥0</span></div>
+      <div class="summary-row" id="discountRow" hidden><span>クーポン割引</span><span id="discountAmount">-¥0</span></div>
+      <div class="summary-row" id="serviceRow" hidden><span id="serviceLabel">サービス料</span><span id="serviceAmount">¥0</span></div>
+      <div class="summary-row" id="tipSummaryRow" hidden><span>チップ</span><span id="tipAmount">¥0</span></div>
       <div class="summary-row"><span>消費税（10%）</span><span id="taxAmount">¥0</span></div>
       <div class="summary-row total"><span>合計</span><span class="amount" id="totalAmount">¥0</span></div>
     </div>

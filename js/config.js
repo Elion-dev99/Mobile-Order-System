@@ -20,7 +20,7 @@ export const PRODUCT = {
   /** LP希少性（運用で更新可） */
   introSlotsRemaining: 7,
   introSlotsLabel: '今月の優先導入枠',
-  competitorNote: '大手は月額1〜3万円＋初期10万円超が一般的。QuickOrderは機能段階で最適化。',
+  competitorNote: '大手は月額1〜3万円＋初期10万円超が一般的。QuickOrderはクーポン・在庫・KDS・権限まで段階搭載。',
 };
 
 /**
@@ -55,8 +55,8 @@ export const PLANS = [
     highlights: [
       '客席QR注文・カート・ステータス',
       '厨房リアルタイムモニター',
-      'メニュー編集（基本）',
-      'テーブルPIN',
+      'メニュー編集・テーブルPIN',
+      'テーブル状況ボード',
       'メールサポート',
     ],
     features: {
@@ -72,6 +72,14 @@ export const PLANS = [
       multiStore: false,
       prioritySupport: false,
       exportCsv: false,
+      inventory: false,
+      coupons: false,
+      kdsModes: false,
+      kitchenTickets: false,
+      staffRoles: false,
+      serviceCharge: false,
+      tableBoard: true,
+      tip: false,
     },
     cta: 'Liteで相談する',
   },
@@ -88,11 +96,12 @@ export const PLANS = [
     recommended: true,
     highlights: [
       'Liteの全機能',
-      '売上・時間帯分析',
-      '人気メニュー自動ハイライト',
-      '日英メニュー切替',
+      '売上分析・期間CSV',
+      'クーポン（％/円）',
+      '在庫数＆自動売切',
+      'KDS表示切替・厨房伝票印刷',
+      'サービス料設定・日英メニュー',
       '音付き厨房アラート',
-      'チャット優先サポート',
     ],
     features: {
       menuEdit: true,
@@ -107,6 +116,14 @@ export const PLANS = [
       multiStore: false,
       prioritySupport: true,
       exportCsv: true,
+      inventory: true,
+      coupons: true,
+      kdsModes: true,
+      kitchenTickets: true,
+      staffRoles: false,
+      serviceCharge: true,
+      tableBoard: true,
+      tip: true,
     },
     cta: 'Growthで始める',
   },
@@ -121,10 +138,10 @@ export const PLANS = [
     orderFeePercent: 0,
     highlights: [
       'Growthの全機能',
-      'テーブル数無制限',
-      '最大3店舗まで',
-      '配膳SLAタイマー',
-      '店舗ブランディング',
+      'テーブル数無制限・最大3店舗',
+      'スタッフ権限（厨房/ホール/店長）',
+      '配膳SLA・テーブル状況ボード',
+      '店舗ブランディング・伝票印刷',
       '導入マネージャー付き',
     ],
     features: {
@@ -140,6 +157,14 @@ export const PLANS = [
       multiStore: true,
       prioritySupport: true,
       exportCsv: true,
+      inventory: true,
+      coupons: true,
+      kdsModes: true,
+      kitchenTickets: true,
+      staffRoles: true,
+      serviceCharge: true,
+      tableBoard: true,
+      tip: true,
     },
     cta: 'Businessを見積もる',
   },
@@ -156,10 +181,10 @@ export const PLANS = [
     highlights: [
       'Businessの全機能',
       '店舗数無制限（追加店舗¥0）',
-      '本部ダッシュボード',
-      '注文手数料 0.8%（決済なしでも利用可）',
-      'SLA・専任サポート',
-      'カスタム導入・研修',
+      '本部ダッシュボード・横断CSV',
+      '注文手数料 0.8%',
+      '全機能解放＋優先導入枠',
+      'SLA・専任サポート・研修',
     ],
     features: {
       menuEdit: true,
@@ -175,6 +200,14 @@ export const PLANS = [
       prioritySupport: true,
       exportCsv: true,
       hqDashboard: true,
+      inventory: true,
+      coupons: true,
+      kdsModes: true,
+      kitchenTickets: true,
+      staffRoles: true,
+      serviceCharge: true,
+      tableBoard: true,
+      tip: true,
     },
     cta: 'Chainを相談する',
   },
@@ -214,6 +247,16 @@ export const DEFAULT_SHOP = {
   partySizeRequired: false,
   ageGateEnabled: true,
   quickServiceEnabled: true,
+  /** Revenue-justifying ops features */
+  serviceChargePercent: 0,
+  tipEnabled: false,
+  tipPresets: [0, 5, 10],
+  coupons: [],
+  /** itemId -> remaining stock (null/absent = unlimited) */
+  stock: {},
+  /** staff role PINs (Business+) */
+  staffPins: { kitchen: '', floor: '', manager: '' },
+  kdsMode: 'timeline', // timeline | byTable | byItem
 };
 
 /** @deprecated 互換用。Growth 月額を返す */
