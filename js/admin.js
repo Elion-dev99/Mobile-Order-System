@@ -103,8 +103,11 @@ const AdminPage = {
     const shop = getShop();
     const plan = getPlan(shop.planId);
     const title = document.getElementById('adminShopName');
-    if (title) title.textContent = `${shop.name} · ${plan.name}`;
-    document.title = `管理画面 | ${shop.name} (${getShopId()})`;
+    if (title) {
+      title.textContent = shop.name || '厨房モニター';
+      title.title = `${shop.name || ''} · ${plan.name} · ${getShopId()}`;
+    }
+    document.title = `管理画面 | ${shop.name || 'QuickOrder'}`;
   },
 
   updateClock() {
@@ -348,19 +351,28 @@ const AdminPage = {
     const list = document.getElementById('menuEditorList');
     if (!list || !this.menuDraft) return;
     list.innerHTML = this.menuDraft.items.map((item, idx) => `
-      <div class="menu-edit-row" data-idx="${idx}">
-        <input class="me-emoji" value="${item.emoji || ''}" maxlength="4" title="絵文字">
-        <input class="me-name" value="${this.escapeAttr(item.name)}" placeholder="商品名">
-        <input class="me-price" type="number" value="${item.price}" min="0" step="10" placeholder="価格">
-        <select class="me-cat">
-          ${this.menuDraft.categories.filter(c => c.id !== 'all').map(c =>
-            `<option value="${c.id}" ${c.id === item.category ? 'selected' : ''}>${c.label}</option>`
-          ).join('')}
-        </select>
-        <label class="me-pop"><input type="checkbox" class="me-popular" ${item.popular ? 'checked' : ''}>人気</label>
-        <label class="me-pop"><input type="checkbox" class="me-soldout" data-id="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}>品切れ</label>
-        <button type="button" class="me-del" data-idx="${idx}">削除</button>
-      </div>
+      <article class="menu-edit-card" data-idx="${idx}">
+        <div class="menu-edit-main">
+          <input class="me-emoji" value="${item.emoji || ''}" maxlength="4" title="絵文字" aria-label="絵文字">
+          <input class="me-name" value="${this.escapeAttr(item.name)}" placeholder="商品名" aria-label="商品名">
+          <div class="me-price-wrap">
+            <span>¥</span>
+            <input class="me-price" type="number" value="${item.price}" min="0" step="10" placeholder="価格" aria-label="価格">
+          </div>
+        </div>
+        <div class="menu-edit-meta">
+          <label class="me-field">カテゴリ
+            <select class="me-cat" aria-label="カテゴリ">
+              ${this.menuDraft.categories.filter(c => c.id !== 'all').map(c =>
+                `<option value="${c.id}" ${c.id === item.category ? 'selected' : ''}>${c.label}</option>`
+              ).join('')}
+            </select>
+          </label>
+          <label class="me-check"><input type="checkbox" class="me-popular" ${item.popular ? 'checked' : ''}><span>人気</span></label>
+          <label class="me-check"><input type="checkbox" class="me-soldout" data-id="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}><span>品切れ</span></label>
+          <button type="button" class="me-del" data-idx="${idx}">削除</button>
+        </div>
+      </article>
     `).join('');
 
     list.querySelectorAll('.me-del').forEach(btn => {
@@ -382,7 +394,7 @@ const AdminPage = {
   },
 
   syncMenuDraftFromDom() {
-    const rows = document.querySelectorAll('#menuEditorList .menu-edit-row');
+    const rows = document.querySelectorAll('#menuEditorList .menu-edit-card, #menuEditorList .menu-edit-row');
     rows.forEach((row, idx) => {
       if (!this.menuDraft.items[idx]) return;
       this.menuDraft.items[idx] = {

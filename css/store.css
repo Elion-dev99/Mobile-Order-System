@@ -243,3 +243,31 @@
   cursor: pointer;
 }
 .store-muted { color: var(--g-muted); font-size: 0.86rem; }
+
+.store-quick {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.store-quick a {
+  white-space: nowrap;
+  padding: 8px 12px;
+  line-height: 1.2;
+}
+.store-header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.store-header h1 {
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+  font-size: clamp(1.4rem, 6vw, 2rem);
+}
+.store-soldout-row,
+.store-req-row {
+  flex-wrap: wrap;
+}
+.store-table-row code {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  font-size: 11px;
+}
