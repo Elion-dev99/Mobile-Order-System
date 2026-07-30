@@ -1,5 +1,5 @@
 import { TablePin } from './pin.js';
-import { loadMenu, getMenu, getShopId, loadShop, isItemSoldOut } from './shop.js';
+import { loadMenu, getMenu, getShopId, loadShop, isItemSoldOut, getShop } from './shop.js';
 import { db } from './firebase.js';
 import {
   collection, doc, setDoc, getDocs, query, where, orderBy, limit
@@ -7,6 +7,7 @@ import {
 import { activateDemoFromUrl, cartStorageKey, withDemo, ensureDemoBanner, isDemoMode } from './demo.js';
 import { resolveShopId } from './tenant.js';
 import { recommendUpsells } from './guest-features.js';
+import { notifyOrderRevenue } from './notify.js';
 
 function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -292,6 +293,11 @@ const CartPage = {
         return;
       }
       await setDoc(doc(db, 'orders', orderId), order);
+      try {
+        await notifyOrderRevenue(order, getShop()?.name || '');
+      } catch (notifyErr) {
+        console.warn('revenue notify failed', notifyErr);
+      }
       localStorage.removeItem(cartStorageKey());
       location.href = withDemo(`status.html?order=${orderId}&table=${encodeURIComponent(this.tableNumber)}`);
     } catch (e) {

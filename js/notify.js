@@ -23,17 +23,19 @@ const LEGACY = {
 };
 
 export const NOTIFY_EVENTS = [
+  { id: 'order_revenue', label: '注文売上（GMV）', defaultOn: true },
   { id: 'shop_created', label: '店舗の追加', defaultOn: true },
   { id: 'shop_deleted', label: '店舗の削除', defaultOn: true },
   { id: 'item_added', label: '商品の追加', defaultOn: true },
   { id: 'item_removed', label: '商品の削除', defaultOn: true },
   { id: 'lead_new', label: '新規契約のお問い合わせ（LP）', defaultOn: true },
   { id: 'lead_won', label: 'リード成約', defaultOn: true },
-  { id: 'contract_activated', label: '課金・契約の有効化', defaultOn: true },
+  { id: 'contract_activated', label: '課金・契約の有効化（MRR）', defaultOn: true },
   { id: 'plan_changed', label: 'プラン変更', defaultOn: true },
 ];
 
 const EVENT_COLORS = {
+  order_revenue: 0xfee75c,
   shop_created: 0x3dcf9a,
   shop_deleted: 0xff6b6b,
   item_added: 0x57f287,
@@ -350,6 +352,20 @@ export async function testSlackNotify() {
 
 const ALL_EVENT_SAMPLES = [
   {
+    event: 'order_revenue',
+    title: '注文売上',
+    emoji: '💰',
+    fields: {
+      店舗: 'テスト焼肉',
+      注文ID: 'ORD-TEST01',
+      席: 3,
+      売上: '¥2,420',
+      本日累計: '¥18,700',
+      商品: '特選カルビ ×2, ビール ×2',
+      種別: 'テスト通知',
+    },
+  },
+  {
     event: 'shop_created',
     title: '店舗を追加しました',
     emoji: '🏪',
@@ -474,34 +490,36 @@ export function notifyMenuItemsRemoved(shopId, shopName, items = []) {
   }, '❌', 'item_removed');
 }
 
-export function notifyContractActivated(shop) {
-  return notifyDiscordEvent('新規契約を有効化しました', {
-    店舗: shop?.name || shop?.id,
-    店舗ID: shop?.id || '',
-    プラン: shop?.planId,
-    課金: shop?.billingCycle || 'monthly',
-  }, '🤝', 'contract_activated');
-}
-
 export function notifyLeadSubmitted(lead) {
-  return notifyDiscordEvent('新規契約のお問い合わせ', {
+  return notifyDiscordEvent('新規契約のお問い合わせ（見込み収益）', {
     店舗名: lead?.shopName,
     メール: lead?.email,
     電話: lead?.phone,
     プラン: lead?.planName || lead?.planId,
-    見込みMRR: lead?.estimatedMrr != null ? `¥${lead.estimatedMrr}` : '',
+    見込みMRR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr).toLocaleString('ja-JP')}` : '',
+    見込みARR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr * 12).toLocaleString('ja-JP')}` : '',
     席数: lead?.tables,
     メッセージ: (lead?.message || '').slice(0, 200),
   }, '📝', 'lead_new');
 }
 
 export function notifyLeadWon(lead) {
-  return notifyDiscordEvent('成約（リード）', {
+  return notifyDiscordEvent('成約（SaaS収益）', {
     店舗名: lead?.shopName,
     プラン: lead?.planName || lead?.planId,
-    見込みMRR: lead?.estimatedMrr != null ? `¥${lead.estimatedMrr}` : '',
+    見込みMRR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr).toLocaleString('ja-JP')}` : '',
+    見込みARR: lead?.estimatedMrr != null ? `¥${Number(lead.estimatedMrr * 12).toLocaleString('ja-JP')}` : '',
     メール: lead?.email,
   }, '🎉', 'lead_won');
+}
+
+export function notifyContractActivated(shop) {
+  return notifyDiscordEvent('新規契約を有効化しました（MRR）', {
+    店舗: shop?.name || shop?.id,
+    店舗ID: shop?.id || '',
+    プラン: shop?.planId,
+    課金: shop?.billingCycle || 'monthly',
+  }, '🤝', 'contract_activated');
 }
 
 export function notifyPlanChanged(shop, prevPlanId, nextPlanId) {
@@ -512,4 +530,49 @@ export function notifyPlanChanged(shop, prevPlanId, nextPlanId) {
     変更前: prevPlanId,
     変更後: nextPlanId,
   }, '🔄', 'plan_changed');
+}
+
+function yenText(n) {
+  return `¥${Number(n || 0).toLocaleString('ja-JP')}`;
+}
+
+function dayKey(shopId) {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `mos_day_gmv_${shopId || 'default'}_${y}${m}${day}`;
+}
+
+function bumpDayGmv(shopId, amount) {
+  const key = dayKey(shopId);
+  let total = 0;
+  try {
+    total = Number(localStorage.getItem(key) || 0) || 0;
+  } catch (_) {}
+  total += Number(amount) || 0;
+  try { localStorage.setItem(key, String(total)); } catch (_) {}
+  return total;
+}
+
+/** Real (non-demo) order GMV → Discord */
+export function notifyOrderRevenue(order, shopName = '') {
+  if (!order || order.demo) return Promise.resolve({ ok: true, skipped: true, reason: 'demo' });
+  const items = Array.isArray(order.items) ? order.items : [];
+  const qty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+  const itemLine = items
+    .map(i => `${i.name || '商品'}×${i.qty || 1}`)
+    .join(', ')
+    .slice(0, 400);
+  const dayGmv = bumpDayGmv(order.shopId, order.total);
+  return notifyDiscordEvent('注文売上', {
+    店舗: shopName || order.shopId || '',
+    店舗ID: order.shopId || '',
+    注文ID: order.id,
+    席: order.tableNumber,
+    売上: yenText(order.total),
+    点数: qty,
+    本日累計GMV: yenText(dayGmv),
+    商品: itemLine,
+  }, '💰', 'order_revenue');
 }
