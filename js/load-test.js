@@ -204,6 +204,7 @@ export async function runFullLoadTest(opts = {}) {
       stats.errors.push(`shop ${id}: ${e?.message || e}`);
     }
     await sleep(canDiscord ? 450 : 50);
+  }
 
   await trackDiscord(notifyLoadTestProgress({
     phase: 'shops_done',
