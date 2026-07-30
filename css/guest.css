@@ -1032,3 +1032,46 @@ body.spa-cart-open .cart-bar { display: none !important; }
   body.admin-page #printKitchenBtn { display: none !important; }
   .admin-order-card { break-inside: avoid; border: 1px solid #000; margin-bottom: 12px; }
 }
+
+/* Checkout extras: coupons / tip */
+.coupon-row {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+.coupon-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--g-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  background: #fff;
+}
+.coupon-msg {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--g-accent);
+}
+.tip-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.tip-btn {
+  flex: 1;
+  border: 1px solid var(--g-line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-ink);
+  cursor: pointer;
+}
+.tip-btn.active {
+  background: var(--g-accent);
+  border-color: var(--g-accent);
+  color: #fff;
+}

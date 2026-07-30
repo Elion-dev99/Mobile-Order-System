@@ -1,6 +1,7 @@
 import {
   loadShop, saveShop, getShop, isSubscribed, getShopId, getMenu, loadMenu,
   setItemSoldOut, isItemSoldOut, ensureTrialStarted, getShopAccess,
+  shopCanUse, getItemStock, setItemStock,
 } from './shop.js';
 import { getPlan, yen, paymentCta } from './plans.js';
 import { db } from './firebase.js';
@@ -10,11 +11,13 @@ import {
 import { resolveShopId, guestEntryUrl } from './tenant.js';
 import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
 import { orderDetailHtml, bindOrderHistoryToggles } from './order-history.js';
+import { listCoupons, normalizeCoupon, saveCoupons } from './coupons.js';
 
 const StorePage = {
   orders: [],
   requests: [],
   _knownReqIds: new Set(),
+  couponDraft: [],
 
   async init() {
     resolveShopId();
@@ -26,6 +29,8 @@ const StorePage = {
     this.renderTables();
     this.renderMeta();
     this.renderSoldOut();
+    this.renderCoupons();
+    this.renderTableBoard();
     this.subscribeOrders();
     this.subscribeRequests();
     setInterval(() => this.tickClock(), 1000);
@@ -51,6 +56,22 @@ const StorePage = {
       this.renderMeta();
     });
     document.getElementById('regenTables')?.addEventListener('click', () => this.renderTables());
+    document.getElementById('addStoreCoupon')?.addEventListener('click', () => {
+      this.couponDraft.push(normalizeCoupon({ code: 'WELCOME', type: 'percent', value: 10, label: 'Welcome' }));
+      this.renderCoupons();
+    });
+    document.getElementById('saveStoreCoupons')?.addEventListener('click', async () => {
+      this.syncStoreCouponsFromDom();
+      try {
+        await saveCoupons(this.couponDraft);
+        this.renderCoupons();
+        alert('クーポンを保存しました');
+      } catch (e) {
+        console.error(e);
+        alert('保存に失敗しました');
+      }
+    });
+    document.getElementById('printQrSheet')?.addEventListener('click', () => this.printQrSheet());
     document.getElementById('storeForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const status = document.getElementById('storeStatus');
@@ -74,10 +95,18 @@ const StorePage = {
           partySizeRequired: !!document.getElementById('storePartyRequired')?.checked,
           ageGateEnabled: !!document.getElementById('storeAgeGate')?.checked,
           quickServiceEnabled: !!document.getElementById('storeQuickService')?.checked,
+          serviceChargePercent: Math.max(0, Number(document.getElementById('storeServiceCharge')?.value) || 0),
+          tipEnabled: !!document.getElementById('storeTipEnabled')?.checked,
+          staffPins: {
+            kitchen: document.getElementById('storePinKitchen')?.value || '',
+            floor: document.getElementById('storePinFloor')?.value || '',
+            manager: document.getElementById('storePinManager')?.value || '',
+          },
         });
         this.renderProfile();
         this.renderMeta();
         this.renderTables();
+        this.renderTableBoard();
         status.textContent = '保存しました';
       } catch (err) {
         console.error(err);
@@ -163,6 +192,21 @@ const StorePage = {
     if (ageGate) ageGate.checked = shop.ageGateEnabled !== false;
     const quick = document.getElementById('storeQuickService');
     if (quick) quick.checked = shop.quickServiceEnabled !== false;
+    const svc = document.getElementById('storeServiceCharge');
+    if (svc) svc.value = Number(shop.serviceChargePercent) || 0;
+    const tip = document.getElementById('storeTipEnabled');
+    if (tip) tip.checked = !!shop.tipEnabled;
+    const pins = shop.staffPins || {};
+    const pk = document.getElementById('storePinKitchen');
+    const pf = document.getElementById('storePinFloor');
+    const pm = document.getElementById('storePinManager');
+    if (pk) pk.value = pins.kitchen || '';
+    if (pf) pf.value = pins.floor || '';
+    if (pm) pm.value = pins.manager || '';
+    const ops = document.getElementById('storeOpsFields');
+    if (ops) {
+      ops.hidden = !(shopCanUse('serviceCharge') || shopCanUse('tip') || shopCanUse('staffRoles'));
+    }
   },
 
   tableUrl(n) {
@@ -206,23 +250,146 @@ const StorePage = {
       host = document.createElement('section');
       host.id = 'soldOutPanel';
       host.className = 'store-card';
-      host.innerHTML = `<h2>品切れ管理</h2><div id="soldOutList"></div>`;
+      host.innerHTML = `<h2>品切れ・在庫</h2><div id="soldOutList"></div>`;
       document.querySelector('main')?.appendChild(host)
         || document.body.appendChild(host);
     }
     const list = document.getElementById('soldOutList');
     const items = getMenu().items || [];
-    list.innerHTML = items.map(item => `
-      <label class="store-soldout-row">
-        <input type="checkbox" data-soldout="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}>
-        <span>${item.emoji || ''} ${item.name}</span>
-      </label>
-    `).join('');
+    const inv = shopCanUse('inventory');
+    list.innerHTML = items.map(item => {
+      const stock = getItemStock(item.id);
+      return `
+      <div class="store-soldout-row store-stock-row">
+        <label>
+          <input type="checkbox" data-soldout="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}>
+          <span>${item.emoji || ''} ${item.name}</span>
+        </label>
+        ${inv ? `<label class="store-stock-input">在庫
+          <input type="number" min="0" data-stock="${item.id}" value="${stock == null ? '' : stock}" placeholder="∞">
+        </label>` : ''}
+      </div>`;
+    }).join('');
     list.querySelectorAll('[data-soldout]').forEach(input => {
       input.addEventListener('change', async () => {
         await setItemSoldOut(input.dataset.soldout, input.checked);
       });
     });
+    list.querySelectorAll('[data-stock]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        const raw = input.value;
+        await setItemStock(input.dataset.stock, raw === '' ? null : Number(raw));
+      });
+    });
+  },
+
+  renderCoupons() {
+    const panel = document.getElementById('couponPanel');
+    if (!panel) return;
+    const on = shopCanUse('coupons');
+    panel.hidden = !on;
+    if (!on) return;
+    this.couponDraft = listCoupons(getShop()).map((c) => ({ ...c }));
+    const list = document.getElementById('storeCouponList');
+    if (!list) return;
+    if (!this.couponDraft.length) {
+      list.innerHTML = '<p class="store-muted">クーポン未設定</p>';
+      return;
+    }
+    list.innerHTML = this.couponDraft.map((c, i) => `
+      <div class="store-coupon-row" data-ci="${i}">
+        <input class="sc-code" value="${c.code}" placeholder="CODE" maxlength="24">
+        <select class="sc-type">
+          <option value="percent" ${c.type === 'percent' ? 'selected' : ''}>%</option>
+          <option value="fixed" ${c.type === 'fixed' ? 'selected' : ''}>¥</option>
+        </select>
+        <input class="sc-value" type="number" min="0" value="${c.value}">
+        <label class="store-check"><input type="checkbox" class="sc-on" ${c.enabled !== false ? 'checked' : ''}><span>有効</span></label>
+        <button type="button" data-del-c="${i}">削除</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('[data-del-c]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.syncStoreCouponsFromDom();
+        this.couponDraft.splice(Number(btn.dataset.delC), 1);
+        this.renderCoupons();
+      });
+    });
+  },
+
+  syncStoreCouponsFromDom() {
+    const rows = document.querySelectorAll('#storeCouponList .store-coupon-row');
+    if (!rows.length) return;
+    this.couponDraft = [...rows].map((row) => normalizeCoupon({
+      ...this.couponDraft[Number(row.dataset.ci)],
+      code: row.querySelector('.sc-code')?.value,
+      type: row.querySelector('.sc-type')?.value,
+      value: row.querySelector('.sc-value')?.value,
+      enabled: !!row.querySelector('.sc-on')?.checked,
+    }));
+  },
+
+  renderTableBoard() {
+    const panel = document.getElementById('tableBoardPanel');
+    if (!panel) return;
+    const on = shopCanUse('tableBoard');
+    panel.hidden = !on;
+    if (!on) return;
+    const board = document.getElementById('tableBoard');
+    if (!board) return;
+    const count = Math.min(Math.max(Number(getShop().tableCount) || 12, 1), 80);
+    const open = this.orders.filter((o) => (o.status || 'received') !== 'done');
+    const byTable = {};
+    open.forEach((o) => {
+      const t = String(o.tableNumber);
+      if (!byTable[t]) byTable[t] = [];
+      byTable[t].push(o);
+    });
+    board.innerHTML = Array.from({ length: count }, (_, i) => {
+      const n = String(i + 1);
+      const rows = byTable[n] || [];
+      const status = !rows.length
+        ? 'empty'
+        : rows.some((o) => (o.status || '') === 'received')
+          ? 'waiting'
+          : rows.some((o) => (o.status || '') === 'cooking')
+            ? 'cooking'
+            : 'finishing';
+      const label = { empty: '空席', waiting: '受付', cooking: '調理中', finishing: '仕上げ' }[status];
+      return `
+        <div class="table-board-cell is-${status}">
+          <strong>席 ${n}</strong>
+          <span>${label}</span>
+          <em>${rows.length ? `${rows.length}件` : '—'}</em>
+        </div>`;
+    }).join('');
+  },
+
+  printQrSheet() {
+    const shop = getShop();
+    const count = Math.min(Math.max(Number(shop.tableCount) || 12, 1), 40);
+    const w = window.open('', '_blank', 'noopener,width=900,height=700');
+    if (!w) {
+      alert('ポップアップを許可してください');
+      return;
+    }
+    const cards = Array.from({ length: count }, (_, i) => {
+      const n = i + 1;
+      const url = this.tableUrl(n);
+      return `<div class="qr-card"><h2>${shop.name || 'QuickOrder'}</h2><p>テーブル ${n}</p><code>${url}</code><p class="hint">カメラで読み取り / URLを開く</p></div>`;
+    }).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>QR台紙</title>
+      <style>
+        body{font-family:sans-serif;margin:16px;color:#111}
+        .sheet{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+        .qr-card{border:2px solid #111;padding:20px;border-radius:8px;break-inside:avoid}
+        h2{margin:0 0 8px;font-size:20px} p{margin:4px 0;font-size:18px;font-weight:700}
+        code{display:block;font-size:11px;word-break:break-all;margin:12px 0;background:#f4f4f4;padding:8px}
+        .hint{font-size:12px;font-weight:400;color:#444}
+        @media print{.qr-card{page-break-inside:avoid}}
+      </style></head><body><div class="sheet">${cards}</div>
+      <script>onload=()=>{print();}</script></body></html>`);
+    w.document.close();
   },
 
   subscribeOrders() {
@@ -360,6 +527,7 @@ const StorePage = {
     document.getElementById('statToday').textContent = String(today.length);
     document.getElementById('statGmv').textContent = `¥${yen(gmv)}`;
     this.renderOrderHistory();
+    this.renderTableBoard();
   },
 };
 

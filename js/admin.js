@@ -2,7 +2,7 @@ import { db } from './firebase.js';
 import {
   loadShop, saveShop, ensureMenuSeeded, saveMenu, getMenu, getShop, getShopId,
   isSubscribed, markSubscribed, setItemSoldOut, isItemSoldOut,
-  ensureTrialStarted, getShopAccess, shopCanUse,
+  ensureTrialStarted, getShopAccess, shopCanUse, getItemStock, setItemStock,
 } from './shop.js';
 import { PLANS, PRODUCT } from './config.js';
 import {
@@ -21,8 +21,12 @@ import {
   notifyPlanChanged,
 } from './notify.js';
 import { maybeNotifySystemLoad } from './load-monitor.js';
-import { ordersToCsv, downloadCsv, applyBrandTheme } from './guest-extras.js';
+import { ordersToCsv, downloadCsv, applyBrandTheme, filterOrdersByDateRange } from './guest-extras.js';
 import { notifyOrderStatus } from './notify-orders.js';
+import { listCoupons, normalizeCoupon, saveCoupons } from './coupons.js';
+import {
+  getStaffRole, setStaffRole, verifyStaffPin, staffCan, staffRoleLabel,
+} from './staff-auth.js';
 
 const AdminPage = {
   filter: 'received',
@@ -35,6 +39,8 @@ const AdminPage = {
   knownOrderIds: new Set(),
   soundReady: false,
   _loadNotifyTimer: null,
+  kdsMode: 'timeline',
+  couponDraft: [],
 
   async init() {
     resolveShopId();
@@ -52,11 +58,13 @@ const AdminPage = {
     await ensureTrialStarted();
     this.menuDraft = await ensureMenuSeeded();
     this._menuSnapshot = JSON.parse(JSON.stringify(this.menuDraft?.items || []));
+    this.kdsMode = getShop().kdsMode || 'timeline';
     this.applyShopBranding();
     applyBrandTheme(getShop());
     this.bindChrome();
     this.patchNavLinks();
     this.renderRevenueBanner();
+    this.syncOpsChrome();
 
     if (!this.ensureAdminAccess()) return;
 
@@ -67,6 +75,7 @@ const AdminPage = {
     this.renderBilling();
     this.renderAnalytics();
     this.renderSettingsForm();
+    this.applyStaffUiGates();
 
     if (params.get('view')) this.setView(params.get('view'));
   },
@@ -126,22 +135,45 @@ const AdminPage = {
 
   ensureAdminAccess() {
     const shop = getShop();
-    if (!shop.adminPin) {
+    const staffOn = shopCanUse('staffRoles');
+    const hasAnyStaffPin = !!(shop.staffPins?.kitchen || shop.staffPins?.floor || shop.staffPins?.manager);
+    const needsPin = !!(shop.adminPin || (staffOn && hasAnyStaffPin));
+
+    if (!needsPin) {
       this.unlocked = true;
+      if (staffOn) setStaffRole('manager');
       return true;
     }
     try {
       if (sessionStorage.getItem(scopedKey('mos_admin_ok')) === '1') {
         this.unlocked = true;
+        if (staffOn && !getStaffRole()) setStaffRole('manager');
+        return true;
+      }
+      if (staffOn && getStaffRole()) {
+        this.unlocked = true;
         return true;
       }
     } catch (_) {}
 
+    const title = document.getElementById('adminGateTitle');
+    const hint = document.getElementById('adminGateHint');
+    if (title) title.textContent = staffOn ? 'スタッフPIN' : '管理者PIN';
+    if (hint) {
+      hint.textContent = staffOn
+        ? '厨房 / ホール / 店長のPIN、または管理者PINを入力'
+        : '店舗設定でPINが有効です';
+    }
+
     document.getElementById('adminGate')?.classList.remove('hidden');
     document.getElementById('adminPinSubmit')?.addEventListener('click', () => {
       const val = document.getElementById('adminPinInput')?.value || '';
-      if (val === shop.adminPin) {
+      let role = null;
+      if (staffOn) role = verifyStaffPin(val);
+      if (!role && shop.adminPin && val === shop.adminPin) role = 'manager';
+      if (role) {
         try { sessionStorage.setItem(scopedKey('mos_admin_ok'), '1'); } catch (_) {}
+        if (staffOn) setStaffRole(role);
         document.getElementById('adminGate')?.classList.add('hidden');
         this.unlocked = true;
         this.subscribeToOrders();
@@ -151,11 +183,58 @@ const AdminPage = {
         this.renderBilling();
         this.renderAnalytics();
         this.renderSettingsForm();
+        this.syncOpsChrome();
+        this.applyStaffUiGates();
       } else {
         alert('PINが違います');
       }
-    });
+    }, { once: false });
     return false;
+  },
+
+  syncOpsChrome() {
+    const kdsBar = document.getElementById('kdsModeBar');
+    if (kdsBar) {
+      const on = shopCanUse('kdsModes');
+      kdsBar.hidden = !on;
+      kdsBar.querySelectorAll('[data-kds]').forEach((b) => {
+        b.classList.toggle('active', b.dataset.kds === this.kdsMode);
+      });
+    }
+    const printBtn = document.getElementById('printKitchenBtn');
+    if (printBtn) printBtn.style.display = shopCanUse('kitchenTickets') ? '' : 'none';
+    const csvBtn = document.getElementById('exportCsvBtn');
+    if (csvBtn) csvBtn.style.display = shopCanUse('exportCsv') ? '' : 'none';
+    const badge = document.getElementById('staffRoleBadge');
+    if (badge) {
+      badge.textContent = shopCanUse('staffRoles') ? `権限: ${staffRoleLabel()}` : '';
+    }
+  },
+
+  applyStaffUiGates() {
+    if (!shopCanUse('staffRoles')) return;
+    const manager = staffCan('*') || getStaffRole() === 'manager';
+    const canOrders = staffCan('orders') || manager;
+    const canMenu = manager;
+    const canBilling = manager;
+    const canSettings = manager;
+    const canAnalytics = manager;
+    const canLeads = manager;
+    document.querySelectorAll('#adminViewTabs .admin-tab').forEach((btn) => {
+      const v = btn.dataset.view;
+      let ok = true;
+      if (v === 'orders') ok = canOrders;
+      if (v === 'menu') ok = canMenu;
+      if (v === 'billing') ok = canBilling;
+      if (v === 'settings') ok = canSettings;
+      if (v === 'analytics') ok = canAnalytics;
+      if (v === 'leads') ok = canLeads;
+      btn.hidden = !ok;
+    });
+    if (!canOrders && this.view === 'orders') {
+      if (canMenu) this.setView('menu');
+      else if (canSettings) this.setView('settings');
+    }
   },
 
   applyShopBranding() {
@@ -187,8 +266,27 @@ const AdminPage = {
     document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.persistSettings());
     document.getElementById('activateSubBtn')?.addEventListener('click', () => this.activateSubscription());
     document.getElementById('billingUpgradeBtn')?.addEventListener('click', () => this.upgradeToGrowthAnnual());
-    document.getElementById('exportCsvBtn')?.addEventListener('click', () => this.exportTodayCsv());
-    document.getElementById('printKitchenBtn')?.addEventListener('click', () => window.print());
+    document.getElementById('exportCsvBtn')?.addEventListener('click', () => this.exportRangeCsv());
+    document.getElementById('printKitchenBtn')?.addEventListener('click', () => this.printKitchenTickets());
+    document.getElementById('kdsModeBar')?.querySelectorAll('[data-kds]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!shopCanUse('kdsModes')) return;
+        this.kdsMode = btn.dataset.kds || 'timeline';
+        saveShop({ kdsMode: this.kdsMode }).catch(() => {});
+        this.syncOpsChrome();
+        this.renderOrders();
+      });
+    });
+    document.getElementById('addCouponBtn')?.addEventListener('click', () => {
+      this.couponDraft.push(normalizeCoupon({ code: 'NEW', type: 'percent', value: 10, label: '新規クーポン' }));
+      this.renderCouponEditor();
+    });
+    // default CSV range = today
+    const today = new Date().toISOString().slice(0, 10);
+    const from = document.getElementById('csvFrom');
+    const to = document.getElementById('csvTo');
+    if (from && !from.value) from.value = today;
+    if (to && !to.value) to.value = today;
     document.body.addEventListener('click', () => { this.soundReady = true; }, { once: true });
   },
 
@@ -362,74 +460,138 @@ const AdminPage = {
       return;
     }
 
+    const mode = shopCanUse('kdsModes') ? this.kdsMode : 'timeline';
+    if (mode === 'byItem') {
+      container.innerHTML = this.renderKdsByItem(filtered);
+      this.bindOrderActions(container);
+      return;
+    }
+    if (mode === 'byTable') {
+      const groups = {};
+      filtered.forEach((o) => {
+        const t = String(o.tableNumber ?? '?');
+        if (!groups[t]) groups[t] = [];
+        groups[t].push(o);
+      });
+      container.innerHTML = Object.keys(groups).sort((a, b) => Number(a) - Number(b)).map((t) => `
+        <section class="kds-group">
+          <h3 class="kds-group-title">テーブル ${t}</h3>
+          ${groups[t].map((o) => this.renderOrderCard(o)).join('')}
+        </section>
+      `).join('');
+      this.bindOrderActions(container);
+      return;
+    }
+
+    container.innerHTML = filtered.map((order) => this.renderOrderCard(order)).join('');
+    this.bindOrderActions(container);
+  },
+
+  renderKdsByItem(orders) {
+    const map = new Map();
+    orders.forEach((o) => {
+      (o.items || []).forEach((item) => {
+        const key = item.itemId || item.name;
+        const hit = map.get(key) || { name: item.name, emoji: item.emoji, qty: 0, tables: [] };
+        hit.qty += Number(item.qty) || 1;
+        hit.tables.push({ table: o.tableNumber, qty: item.qty, orderId: o.id, status: o.status || 'received' });
+        map.set(key, hit);
+      });
+    });
+    const rows = [...map.values()].sort((a, b) => b.qty - a.qty);
+    if (!rows.length) return '<p class="admin-muted">集計対象なし</p>';
+    return `
+      <div class="kds-item-board">
+        ${rows.map((r) => `
+          <article class="kds-item-card">
+            <div class="kds-item-head">
+              <span>${r.emoji || '🍽️'}</span>
+              <strong>${r.name}</strong>
+              <em>×${r.qty}</em>
+            </div>
+            <ul>${r.tables.map((t) => `
+              <li>卓${t.table} · ×${t.qty} · ${t.status}
+                ${t.status !== 'done' ? `<button type="button" class="admin-action-btn complete" data-id="${t.orderId}" data-status="done">完了</button>` : ''}
+              </li>`).join('')}
+            </ul>
+          </article>
+        `).join('')}
+      </div>`;
+  },
+
+  renderOrderCard(order) {
     const menu = this.menuDraft || getMenu();
     const slaOn = shopCanUse('slaTimer');
+    const status = order.status || 'received';
+    const cardClass = status === 'cooking' ? 'cooking' : status === 'finishing' ? 'finishing' : status === 'done' ? 'done' : '';
+    const statusLabel = {
+      received: '📥 受付済み',
+      cooking: '🔥 調理中',
+      finishing: '✨ 仕上げ',
+      done: '✅ 完了',
+    }[status] || '';
+    const elapsed = Math.floor((Date.now() - order.timestamp) / 60000);
+    const slaClass = slaOn && status !== 'done' && elapsed >= 15 ? 'sla-late' : slaOn && status !== 'done' && elapsed >= 8 ? 'sla-warn' : '';
+    const party = order.partySize ? ` · ${order.partySize}名` : '';
+    const extras = [];
+    if (order.couponCode) extras.push(`クーポン ${order.couponCode}`);
+    if (order.serviceCharge) extras.push(`サ料 ¥${order.serviceCharge.toLocaleString()}`);
+    if (order.tip) extras.push(`チップ ¥${order.tip.toLocaleString()}`);
 
-    container.innerHTML = filtered.map(order => {
-      const status = order.status || 'received';
-      const cardClass = status === 'cooking' ? 'cooking' : status === 'finishing' ? 'finishing' : status === 'done' ? 'done' : '';
-      const statusLabel = {
-        received: '📥 受付済み',
-        cooking: '🔥 調理中',
-        finishing: '✨ 仕上げ',
-        done: '✅ 完了',
-      }[status] || '';
-      const elapsed = Math.floor((Date.now() - order.timestamp) / 60000);
-      const slaClass = slaOn && status !== 'done' && elapsed >= 15 ? 'sla-late' : slaOn && status !== 'done' && elapsed >= 8 ? 'sla-warn' : '';
-      const party = order.partySize ? ` · ${order.partySize}名` : '';
+    const actionBtns = status === 'received' ? `
+      <button class="admin-action-btn start" data-id="${order.id}" data-status="cooking">🔥 調理開始</button>
+      <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
+    ` : status === 'cooking' ? `
+      <button class="admin-action-btn start" data-id="${order.id}" data-status="finishing">✨ 仕上げへ</button>
+      <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
+    ` : status === 'finishing' ? `
+      <button class="admin-action-btn complete" style="flex:1;" data-id="${order.id}" data-status="done">✅ 配膳完了</button>
+    ` : `<div style="font-size:13px;color:#4A5568;text-align:center;padding:8px;">配膳完了</div>`;
 
-      const actionBtns = status === 'received' ? `
-        <button class="admin-action-btn start" data-id="${order.id}" data-status="cooking">🔥 調理開始</button>
-        <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
-      ` : status === 'cooking' ? `
-        <button class="admin-action-btn start" data-id="${order.id}" data-status="finishing">✨ 仕上げへ</button>
-        <button class="admin-action-btn complete" data-id="${order.id}" data-status="done">✅ 完了</button>
-      ` : status === 'finishing' ? `
-        <button class="admin-action-btn complete" style="flex:1;" data-id="${order.id}" data-status="done">✅ 配膳完了</button>
-      ` : `<div style="font-size:13px;color:#4A5568;text-align:center;padding:8px;">配膳完了</div>`;
-
-      return `
-        <div class="admin-order-card ${cardClass} ${slaClass}">
-          <div class="admin-order-top">
-            <div>
-              <div class="admin-order-id">${order.id}</div>
-              <div class="admin-order-time">${elapsed === 0 ? 'たった今' : elapsed + '分前'} — ${statusLabel}${party}${slaOn && status !== 'done' ? ` · SLA ${elapsed}分` : ''}</div>
-            </div>
-            <div class="admin-table-badge">テーブル ${order.tableNumber}</div>
+    return `
+      <div class="admin-order-card ${cardClass} ${slaClass}">
+        <div class="admin-order-top">
+          <div>
+            <div class="admin-order-id">${order.id}</div>
+            <div class="admin-order-time">${elapsed === 0 ? 'たった今' : elapsed + '分前'} — ${statusLabel}${party}${slaOn && status !== 'done' ? ` · SLA ${elapsed}分` : ''}</div>
           </div>
-          <div class="admin-items">
-            ${(order.items || []).map(item => {
-              const customParts = [];
-              const menuItem = menu.items.find(i => i.id === item.itemId);
-              if (menuItem) {
-                (menuItem.customizable || []).forEach(opt => {
-                  if (opt.type === 'select' && item.customizations?.[opt.id]) customParts.push(item.customizations[opt.id]);
-                  if (opt.type === 'toggle' && item.toggles?.[opt.id]) customParts.push(opt.label + 'あり');
-                });
-              }
-              return `
-                <div class="admin-item-row">
-                  <span>${item.emoji}</span>
-                  <span class="admin-item-qty">×${item.qty}</span>
-                  <span>${item.name}</span>
-                  ${customParts.length ? `<span class="admin-item-custom">(${customParts.join('/')})</span>` : ''}
-                  ${item.note ? `<span class="admin-item-custom">📝${item.note}</span>` : ''}
-                </div>`;
-            }).join('')}
-          </div>
-          <div style="font-size:13px;font-weight:700;color:#A0AEC0;margin-bottom:10px;">
-            小計 ¥${(order.subtotal || 0).toLocaleString()} · 税 ¥${(order.tax || 0).toLocaleString()} · 合計 ¥${(order.total || 0).toLocaleString()}
-          </div>
-          <div class="admin-action-row">${actionBtns}</div>
-        </div>`;
-    }).join('');
+          <div class="admin-table-badge">テーブル ${order.tableNumber}</div>
+        </div>
+        <div class="admin-items">
+          ${(order.items || []).map(item => {
+            const customParts = [];
+            const menuItem = menu.items.find(i => i.id === item.itemId);
+            if (menuItem) {
+              (menuItem.customizable || []).forEach(opt => {
+                if (opt.type === 'select' && item.customizations?.[opt.id]) customParts.push(item.customizations[opt.id]);
+                if (opt.type === 'toggle' && item.toggles?.[opt.id]) customParts.push(opt.label + 'あり');
+              });
+            }
+            return `
+              <div class="admin-item-row">
+                <span>${item.emoji}</span>
+                <span class="admin-item-qty">×${item.qty}</span>
+                <span>${item.name}</span>
+                ${customParts.length ? `<span class="admin-item-custom">(${customParts.join('/')})</span>` : ''}
+                ${item.note ? `<span class="admin-item-custom">📝${item.note}</span>` : ''}
+              </div>`;
+          }).join('')}
+        </div>
+        <div style="font-size:13px;font-weight:700;color:#A0AEC0;margin-bottom:10px;">
+          小計 ¥${(order.subtotal || 0).toLocaleString()} · 税 ¥${(order.tax || 0).toLocaleString()} · 合計 ¥${(order.total || 0).toLocaleString()}
+          ${extras.length ? `<br><span style="font-weight:500;">${extras.join(' · ')}</span>` : ''}
+        </div>
+        <div class="admin-action-row">${actionBtns}</div>
+      </div>`;
+  },
 
+  bindOrderActions(container) {
     container.querySelectorAll('[data-id][data-status]').forEach(btn => {
       btn.addEventListener('click', () => this.updateStatus(btn.dataset.id, btn.dataset.status));
     });
   },
 
-  exportTodayCsv() {
+  exportRangeCsv() {
     if (!shopCanUse('exportCsv')) {
       const pay = paymentCta();
       const access = getShopAccess();
@@ -443,11 +605,54 @@ const AdminPage = {
       }
       return;
     }
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const rows = this.orders.filter((o) => (o.timestamp || 0) >= start.getTime());
+    const from = document.getElementById('csvFrom')?.value || '';
+    const to = document.getElementById('csvTo')?.value || '';
+    const rows = filterOrdersByDateRange(this.orders, from, to);
     const csv = ordersToCsv(rows);
-    downloadCsv(`orders-${getShopId()}-${start.toISOString().slice(0, 10)}.csv`, csv);
+    const stamp = (from || 'all') + '_' + (to || 'all');
+    downloadCsv(`orders-${getShopId()}-${stamp}.csv`, csv);
+  },
+
+  printKitchenTickets() {
+    if (!shopCanUse('kitchenTickets')) {
+      const pay = paymentCta();
+      if (confirm(`厨房伝票印刷は Growth 以上です。\n\n${pay.label}へ進みますか？`)) {
+        location.href = pay.href;
+      }
+      return;
+    }
+    const open = this.orders.filter((o) => (o.status || 'received') !== 'done');
+    const root = document.getElementById('kitchenPrintRoot');
+    if (!root) {
+      window.print();
+      return;
+    }
+    if (!open.length) {
+      alert('印刷対象の未完了注文がありません');
+      return;
+    }
+    root.innerHTML = open.map((o) => {
+      const items = (o.items || []).map((i) =>
+        `<li><strong>×${i.qty}</strong> ${i.emoji || ''} ${i.name}${i.note ? ` <em>${i.note}</em>` : ''}</li>`
+      ).join('');
+      return `
+        <article class="kitchen-ticket">
+          <header>
+            <div class="kt-table">卓 ${o.tableNumber}</div>
+            <div class="kt-id">${o.id}</div>
+          </header>
+          <p class="kt-meta">${new Date(o.timestamp || Date.now()).toLocaleString('ja-JP')} · ${o.status || 'received'}</p>
+          <ul>${items}</ul>
+          <footer>合計 ¥${(o.total || 0).toLocaleString()}</footer>
+        </article>`;
+    }).join('');
+    document.body.classList.add('printing-kitchen');
+    const cleanup = () => {
+      document.body.classList.remove('printing-kitchen');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
   },
 
   async updateStatus(orderId, status) {
@@ -512,6 +717,12 @@ const AdminPage = {
           <label class="me-check"><input type="checkbox" class="me-popular" ${item.popular ? 'checked' : ''}><span>人気</span></label>
           <label class="me-check"><input type="checkbox" class="me-alcohol" ${item.alcohol || tags.includes('alcohol') ? 'checked' : ''}><span>アルコール</span></label>
           <label class="me-check"><input type="checkbox" class="me-soldout" data-id="${item.id}" ${isItemSoldOut(item.id) ? 'checked' : ''}><span>品切れ</span></label>
+          ${shopCanUse('inventory') ? `
+          <label class="me-field me-stock-field">在庫
+            <input class="me-stock" type="number" min="0" step="1" data-stock-id="${item.id}"
+              value="${getItemStock(item.id) == null ? '' : getItemStock(item.id)}"
+              placeholder="無制限" title="空欄=無制限">
+          </label>` : ''}
           <button type="button" class="me-del" data-idx="${idx}">削除</button>
         </div>
         <div class="me-tag-row">
@@ -573,6 +784,12 @@ const AdminPage = {
     list.querySelectorAll('.me-soldout').forEach(input => {
       input.addEventListener('change', async () => {
         await setItemSoldOut(input.dataset.id, input.checked);
+      });
+    });
+    list.querySelectorAll('.me-stock').forEach((input) => {
+      input.addEventListener('change', async () => {
+        const raw = input.value;
+        await setItemStock(input.dataset.stockId, raw === '' ? null : Number(raw));
       });
     });
     list.querySelectorAll('[data-add-custom]').forEach(btn => {
@@ -967,9 +1184,105 @@ const AdminPage = {
     document.getElementById('settingTables').value = shop.tableCount || 12;
     document.getElementById('settingLocale').value = shop.locale || 'ja';
     document.getElementById('settingAdminPin').value = shop.adminPin || '';
+
+    const svc = document.getElementById('settingServiceCharge');
+    if (svc) svc.value = Number(shop.serviceChargePercent) || 0;
+    const tip = document.getElementById('settingTipEnabled');
+    if (tip) tip.checked = !!shop.tipEnabled;
+
+    const showSvc = shopCanUse('serviceCharge') || shopCanUse('tip');
+    document.getElementById('settingServiceWrap')?.toggleAttribute('hidden', !shopCanUse('serviceCharge'));
+    document.getElementById('settingTipWrap')?.toggleAttribute('hidden', !shopCanUse('tip'));
+    document.getElementById('opsFeaturesHead')?.toggleAttribute('hidden', !showSvc && !shopCanUse('coupons') && !shopCanUse('staffRoles'));
+
+    const pins = shop.staffPins || {};
+    const staffBlock = document.getElementById('staffPinsBlock');
+    if (staffBlock) staffBlock.hidden = !shopCanUse('staffRoles');
+    const pk = document.getElementById('settingPinKitchen');
+    const pf = document.getElementById('settingPinFloor');
+    const pm = document.getElementById('settingPinManager');
+    if (pk) pk.value = pins.kitchen || '';
+    if (pf) pf.value = pins.floor || '';
+    if (pm) pm.value = pins.manager || '';
+
+    const couponsBlock = document.getElementById('couponsBlock');
+    if (couponsBlock) couponsBlock.hidden = !shopCanUse('coupons');
+    this.couponDraft = listCoupons(shop).map((c) => ({ ...c }));
+    this.renderCouponEditor();
+    this.syncOpsChrome();
+  },
+
+  renderCouponEditor() {
+    const list = document.getElementById('couponEditorList');
+    if (!list) return;
+    if (!this.couponDraft.length) {
+      list.innerHTML = '<p class="admin-muted">クーポンはまだありません</p>';
+      return;
+    }
+    list.innerHTML = this.couponDraft.map((c, i) => `
+      <article class="coupon-edit-card" data-ci="${i}">
+        <label class="admin-field">コード
+          <input class="ce-code" value="${this.escapeAttr(c.code)}" maxlength="24">
+        </label>
+        <label class="admin-field">表示名
+          <input class="ce-label" value="${this.escapeAttr(c.label || '')}">
+        </label>
+        <label class="admin-field">種別
+          <select class="ce-type">
+            <option value="percent" ${c.type === 'percent' ? 'selected' : ''}>％割引</option>
+            <option value="fixed" ${c.type === 'fixed' ? 'selected' : ''}>定額</option>
+          </select>
+        </label>
+        <label class="admin-field">値
+          <input class="ce-value" type="number" min="0" value="${Number(c.value) || 0}">
+        </label>
+        <label class="admin-field">最低金額
+          <input class="ce-min" type="number" min="0" value="${Number(c.minSubtotal) || 0}">
+        </label>
+        <label class="admin-field">利用上限（空=無制限）
+          <input class="ce-max" type="number" min="0" value="${c.maxUses == null ? '' : c.maxUses}">
+        </label>
+        <label class="admin-field">開始
+          <input class="ce-from" type="time" value="${this.escapeAttr(c.from || '00:00')}">
+        </label>
+        <label class="admin-field">終了
+          <input class="ce-until" type="time" value="${this.escapeAttr(c.until || '23:59')}">
+        </label>
+        <label class="admin-field admin-check">
+          <input type="checkbox" class="ce-enabled" ${c.enabled !== false ? 'checked' : ''}>
+          <span>有効</span>
+        </label>
+        <button type="button" class="me-del ce-del" data-ci="${i}">削除</button>
+      </article>
+    `).join('');
+    list.querySelectorAll('.ce-del').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.syncCouponDraftFromDom();
+        this.couponDraft.splice(Number(btn.dataset.ci), 1);
+        this.renderCouponEditor();
+      });
+    });
+  },
+
+  syncCouponDraftFromDom() {
+    const rows = document.querySelectorAll('#couponEditorList .coupon-edit-card');
+    if (!rows.length) return;
+    this.couponDraft = [...rows].map((row) => normalizeCoupon({
+      ...this.couponDraft[Number(row.dataset.ci)],
+      code: row.querySelector('.ce-code')?.value,
+      label: row.querySelector('.ce-label')?.value,
+      type: row.querySelector('.ce-type')?.value,
+      value: row.querySelector('.ce-value')?.value,
+      minSubtotal: row.querySelector('.ce-min')?.value,
+      maxUses: row.querySelector('.ce-max')?.value,
+      from: row.querySelector('.ce-from')?.value,
+      until: row.querySelector('.ce-until')?.value,
+      enabled: !!row.querySelector('.ce-enabled')?.checked,
+    }));
   },
 
   async persistSettings() {
+    this.syncCouponDraftFromDom();
     const payload = {
       name: document.getElementById('settingName')?.value?.trim() || 'QuickOrder',
       subtitle: document.getElementById('settingSubtitle')?.value?.trim() || '',
@@ -979,14 +1292,25 @@ const AdminPage = {
       tableCount: Number(document.getElementById('settingTables')?.value) || 12,
       locale: document.getElementById('settingLocale')?.value || 'ja',
       adminPin: document.getElementById('settingAdminPin')?.value || '',
+      serviceChargePercent: Math.max(0, Number(document.getElementById('settingServiceCharge')?.value) || 0),
+      tipEnabled: !!document.getElementById('settingTipEnabled')?.checked,
+      staffPins: {
+        kitchen: document.getElementById('settingPinKitchen')?.value || '',
+        floor: document.getElementById('settingPinFloor')?.value || '',
+        manager: document.getElementById('settingPinManager')?.value || '',
+      },
+      kdsMode: this.kdsMode || 'timeline',
     };
     const prevPlan = getShop()?.planId;
     try {
       await saveShop(payload);
+      if (shopCanUse('coupons')) await saveCoupons(this.couponDraft);
       notifyPlanChanged({ ...getShop(), id: getShopId() }, prevPlan, payload.planId);
       this.applyShopBranding();
       this.renderBilling();
       this.renderAnalytics();
+      this.renderSettingsForm();
+      this.applyStaffUiGates();
       alert('設定を保存しました');
     } catch (e) {
       console.error(e);

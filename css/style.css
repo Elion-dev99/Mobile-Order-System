@@ -1928,3 +1928,137 @@ img { max-width: 100%; }
   padding: 4px 8px;
   cursor: pointer;
 }
+
+/* ——— Feature pack: KDS / CSV / kitchen tickets / coupons ——— */
+.kds-mode-bar {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+}
+.kds-mode {
+  border: 0;
+  background: transparent;
+  color: #A0AEC0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.kds-mode.active {
+  background: #3dcf9a;
+  color: #06261b;
+}
+.admin-date-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #A0AEC0;
+}
+.admin-date-range input {
+  background: #2C2C2E;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+}
+.kds-group { margin-bottom: 18px; }
+.kds-group-title {
+  margin: 8px 16px;
+  font-size: 14px;
+  color: #3dcf9a;
+}
+.kds-item-board {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px;
+}
+.kds-item-card {
+  background: #2C2C2E;
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.kds-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.kds-item-head em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 800;
+  color: #3dcf9a;
+}
+.kds-item-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.kds-item-card li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #CBD5E0;
+}
+.coupon-edit-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #2C2C2E;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.admin-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+}
+.admin-check input { width: auto; }
+.me-stock-field input { max-width: 88px; }
+.kitchen-print-root { display: none; }
+body.printing-kitchen .kitchen-print-root { display: block; }
+body.printing-kitchen .admin-header,
+body.printing-kitchen .admin-tabs,
+body.printing-kitchen .admin-revenue-banner,
+body.printing-kitchen #ordersPanel,
+body.printing-kitchen #menuPanel,
+body.printing-kitchen #analyticsPanel,
+body.printing-kitchen #billingPanel,
+body.printing-kitchen #settingsPanel,
+body.printing-kitchen #leadsPanel,
+body.printing-kitchen #adminGate { display: none !important; }
+.kitchen-ticket {
+  border: 1px solid #111;
+  padding: 12px 14px;
+  margin: 0 0 12px;
+  color: #111;
+  background: #fff;
+  break-inside: avoid;
+}
+.kitchen-ticket header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 800;
+}
+.kitchen-ticket .kt-table { font-size: 22px; }
+.kitchen-ticket ul { margin: 8px 0; padding-left: 18px; }
+.kitchen-ticket footer { font-weight: 700; border-top: 1px dashed #999; padding-top: 6px; }
+@media print {
+  body.printing-kitchen { background: #fff; }
+  body.printing-kitchen .kitchen-print-root { display: block !important; }
+}

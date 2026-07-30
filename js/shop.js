@@ -241,7 +241,52 @@ export async function ensureMenuSeeded(shopId = resolveShopId()) {
 
 export function isItemSoldOut(itemId) {
   const map = shopCache.soldOut || {};
-  return !!map[itemId];
+  if (map[itemId]) return true;
+  // Auto sold-out when inventory tracked and qty <= 0
+  const stock = shopCache.stock || {};
+  if (Object.prototype.hasOwnProperty.call(stock, itemId)) {
+    const n = Number(stock[itemId]);
+    if (Number.isFinite(n) && n <= 0) return true;
+  }
+  return false;
+}
+
+export function getItemStock(itemId) {
+  const stock = shopCache.stock || {};
+  if (!Object.prototype.hasOwnProperty.call(stock, itemId)) return null;
+  const n = Number(stock[itemId]);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function setItemStock(itemId, qty) {
+  const stock = { ...(shopCache.stock || {}) };
+  if (qty == null || qty === '' || Number(qty) < 0) {
+    delete stock[itemId];
+  } else {
+    stock[itemId] = Math.floor(Number(qty));
+  }
+  const soldOut = { ...(shopCache.soldOut || {}) };
+  if (stock[itemId] === 0) soldOut[itemId] = true;
+  else if (stock[itemId] > 0) delete soldOut[itemId];
+  return saveShop({ stock, soldOut });
+}
+
+/** Decrement stock for ordered items; auto mark sold out at 0. Growth+ inventory. */
+export async function consumeStockForCart(cart = []) {
+  if (!shopCanUse('inventory')) return shopCache;
+  const stock = { ...(shopCache.stock || {}) };
+  const soldOut = { ...(shopCache.soldOut || {}) };
+  let changed = false;
+  for (const line of cart) {
+    const id = line.itemId || line.id;
+    if (!id || !Object.prototype.hasOwnProperty.call(stock, id)) continue;
+    const qty = Math.max(1, Number(line.qty) || 1);
+    stock[id] = Math.max(0, Number(stock[id]) - qty);
+    if (stock[id] <= 0) soldOut[id] = true;
+    changed = true;
+  }
+  if (!changed) return shopCache;
+  return saveShop({ stock, soldOut });
 }
 
 export async function setItemSoldOut(itemId, soldOut) {

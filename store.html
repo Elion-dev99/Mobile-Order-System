@@ -96,9 +96,49 @@
         <input type="checkbox" id="storeQuickService" name="quickServiceEnabled" checked>
         <span>お水・おしぼり・カトラリーのクイック依頼を表示</span>
       </label>
+
+      <fieldset class="store-fieldset" id="storeOpsFields">
+        <legend>Growth+ 運用</legend>
+        <label>サービス料（%）
+          <input id="storeServiceCharge" type="number" min="0" max="30" step="1" value="0">
+        </label>
+        <label class="store-check">
+          <input type="checkbox" id="storeTipEnabled">
+          <span>客席でチップ選択を表示</span>
+        </label>
+        <label>厨房スタッフPIN（Business+）
+          <input id="storePinKitchen" type="password" autocomplete="new-password" placeholder="任意">
+        </label>
+        <label>ホールスタッフPIN
+          <input id="storePinFloor" type="password" autocomplete="new-password" placeholder="任意">
+        </label>
+        <label>店長PIN
+          <input id="storePinManager" type="password" autocomplete="new-password" placeholder="空なら管理者PIN">
+        </label>
+      </fieldset>
+
       <button type="submit" class="store-save">保存する</button>
       <p class="store-status" id="storeStatus" hidden></p>
     </form>
+  </section>
+
+  <section class="store-card" id="couponPanel" hidden>
+    <div class="store-card-head">
+      <h2>クーポン</h2>
+      <button type="button" class="store-mini-btn" id="addStoreCoupon">追加</button>
+    </div>
+    <p class="store-help">Growth以上。客席カートでコード入力。</p>
+    <div id="storeCouponList"></div>
+    <button type="button" class="store-save" id="saveStoreCoupons" style="margin-top:12px;">クーポンを保存</button>
+  </section>
+
+  <section class="store-card" id="tableBoardPanel" hidden>
+    <div class="store-card-head">
+      <h2>テーブル状況</h2>
+      <button type="button" class="store-mini-btn" id="printQrSheet">QR印刷</button>
+    </div>
+    <p class="store-help">席ごとの注文ステータス。印刷して卓札・QR台紙に。</p>
+    <div id="tableBoard" class="store-table-board"></div>
   </section>
 </main>
 
