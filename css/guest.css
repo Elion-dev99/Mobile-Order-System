@@ -259,16 +259,19 @@ body.guest .menu-card {
   border: 1px solid var(--g-line);
   border-radius: var(--g-radius);
   border-bottom: 1px solid var(--g-line);
-  backdrop-filter: blur(8px);
-  transition: transform var(--g-ease), border-color var(--g-ease), background var(--g-ease);
-  animation: guestRise 0.5s var(--g-ease) both;
+  /* no backdrop-filter / enter animation here — they freeze iOS on every qty update */
+  transition: border-color 0.15s ease, background 0.15s ease;
+  content-visibility: auto;
+  contain: layout style;
+}
+body.guest .menu-card.menu-card-enter {
+  animation: guestRise 0.35s var(--g-ease) both;
 }
 body.guest .menu-card.in-cart {
   border-color: rgba(13, 92, 77, 0.35);
   background: rgba(255,255,255,0.92);
 }
 body.guest .menu-card:active {
-  transform: scale(0.985);
   background: #fff;
 }
 
