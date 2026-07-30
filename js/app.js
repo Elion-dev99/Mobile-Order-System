@@ -839,6 +839,7 @@ const App = {
     document.getElementById('itemModal').classList.add('open');
     document.body.classList.add('scroll-locked');
     document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
   },
 
   renderModal(item) {

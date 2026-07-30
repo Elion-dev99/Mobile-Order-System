@@ -84,18 +84,33 @@ body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bil
   z-index: 1;
 }
 
-body.guest {
-  overscroll-behavior-y: contain;
+/* Document (html) is the only vertical scrollport. Body overflow-y:auto made
+   window.scrollY stick at 0 while content moved — upward swipe → browser reload. */
+html {
   overflow-x: hidden;
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-html {
-  overflow-y: auto;
   height: auto;
+  overscroll-behavior-y: none;
+}
+body.guest {
+  overscroll-behavior-y: none;
+  overflow-x: hidden;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
 }
 body.guest.scroll-locked {
   overflow: hidden !important;
+}
+@media (max-width: 900px) {
+  /* feTurbulence grain + blur are major paint costs on phones */
+  body.guest::before {
+    display: none;
+  }
+  .guest-header {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(244, 247, 246, 0.98);
+  }
 }
 
 /* Header — keep compact; action bars live BELOW sticky header */
@@ -185,6 +200,8 @@ body.guest .search-input:focus {
 }
 
 body.guest .category-tabs {
+  overscroll-behavior: contain;
+  touch-action: pan-x;
   background: transparent;
   border: none;
   margin: 0 -16px;
@@ -917,6 +934,9 @@ body.spa-cart-open .cart-bar { display: none !important; }
   display: flex;
   gap: 8px;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
   padding: 10px 16px 4px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
