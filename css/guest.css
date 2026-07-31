@@ -79,7 +79,7 @@ body.guest::before {
    fixed overlays (modal / cart bar / toast / bill lock). That override
    made #itemModal position:relative, so customize "+" opened a sheet
    thousands of px below the fold and looked like dead buttons. */
-body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bill-lock-overlay):not(.party-size-overlay):not(.guest-service-bar):not(.guest-reserve-bar) {
+body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bill-lock-overlay):not(.party-size-overlay):not(.guest-service-bar):not(.guest-reserve-bar):not(.qo-growth-mark):not(#platformMaintenanceBanner) {
   position: relative;
   z-index: 1;
 }
@@ -1403,10 +1403,10 @@ body.spa-cart-open .tonight-rail { display: none !important; }
 
 /* Zero-cash growth watermark + status CTA */
 .qo-growth-mark {
-  position: fixed;
+  position: fixed !important;
   left: 12px;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  z-index: 60;
+  z-index: 60 !important;
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
@@ -1433,6 +1433,9 @@ body.spa-cart-open .tonight-rail { display: none !important; }
 body.spa-cart-open .qo-growth-mark,
 body.guest .cart-bar.visible ~ .qo-growth-mark {
   bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+}
+body.spa-cart-open .qo-growth-mark {
+  display: none !important;
 }
 .qo-status-growth {
   margin: 18px 14px 28px;

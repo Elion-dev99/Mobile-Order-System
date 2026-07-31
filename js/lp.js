@@ -250,7 +250,10 @@ form.addEventListener('submit', async (e) => {
     chargeNow: cycle === 'annual' ? ap.chargeNow + plan.priceSetup : plan.priceMonthly + plan.priceSetup,
     annualSavings: cycle === 'annual' ? annualSavings(plan) : 0,
     ...leadAttributionFields(),
-    source: leadAttributionFields().source || 'lp_revenue_max',
+    source: 'lp_revenue_max',
+    acquisition: leadAttributionFields().referralShopId
+      ? 'referral'
+      : (leadAttributionFields().utmSource ? 'utm' : 'organic'),
   };
 
   try {

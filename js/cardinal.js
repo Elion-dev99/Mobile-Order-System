@@ -247,14 +247,14 @@ export async function runCardinalCycle({
   await loadNotifySettings().catch(() => {});
   const prefs = loadCardinalPrefs();
   const heal = await runAutoHealCycle({ escalateAfterFails });
-  // Respect capability: undo auto-maintenance intent messaging is in auto-heal;
-  // if capability off, try not to leave new auto locks from this cycle's heal result
-  if (!isCapabilityOn('autoMaintenance', prefs)
-      && heal.maintenance?.ok
-      && heal.maintenance?.enabled) {
+  // Capability off → clear Cardinal-owned auto maintenance even if already ON
+  if (!isCapabilityOn('autoMaintenance', prefs)) {
     try {
-      const { syncAutoMaintenance } = await import('./maintenance.js');
-      await syncAutoMaintenance({ shouldMaintain: false, reason: 'capability_off' });
+      const { syncAutoMaintenance, getMaintenance } = await import('./maintenance.js');
+      const cur = getMaintenance();
+      if (cur?.maintenance && (cur.source === 'cardinal' || cur.source === 'auto')) {
+        await syncAutoMaintenance({ shouldMaintain: false, reason: 'capability_off' });
+      }
     } catch (_) {}
   }
   const health = heal.health || await checkSystemHealth();
@@ -262,14 +262,10 @@ export async function runCardinalCycle({
   state.cycles = (state.cycles || 0) + 1;
   state.lastCycleAt = Date.now();
 
-  // Ops session acts as soft stand-in for both roles until Automations are wired
+  // Ops session soft-beats Guardian only. Soft-beating Executor hid watchdog stale checks.
   const beatDetail = `health=${health.status}; pending=${listPendingOrders().length}; streak=${heal.streak || 0}; via=ops`;
   await recordHeartbeat('guardian', {
     status: health.status === 'ok' ? 'ok' : 'alert',
-    detail: beatDetail,
-  });
-  await recordHeartbeat('executor', {
-    status: health.status === 'ok' ? 'ok' : 'standby',
     detail: beatDetail,
   });
   const refreshed = loadCardinalState();
@@ -285,8 +281,9 @@ export async function runCardinalCycle({
     });
   }
 
-  // Persistent outage → Executor
-  if (health.status === 'down' || (health.status === 'degraded' && (heal.streak || 0) >= escalateAfterFails)) {
+  // Persistent outage → Executor (skip if auto-heal already escalated this cycle)
+  if (!heal.escalated?.ok
+      && (health.status === 'down' || (health.status === 'degraded' && (heal.streak || 0) >= escalateAfterFails))) {
     const r = await dispatchRole('executor', {
       kind: 'incident',
       severity: health.status === 'down' ? 'critical' : 'warning',

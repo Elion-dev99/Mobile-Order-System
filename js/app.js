@@ -355,7 +355,7 @@ const App = {
     const picks = curateTonightPicks({
       cart: this.cart,
       favorites: this.favorites,
-      partySize: getPartySize() || this.splitPeople || 0,
+      partySize: getPartySize() || 0,
       limit: 6,
     });
     if (title) title.textContent = curatorTitle(this.locale, hourBucket());
@@ -410,7 +410,7 @@ const App = {
     host.hidden = false;
     const copy = tablePulseCopy({
       waitMin: this.waitMinutes,
-      partySize: getPartySize() || this.splitPeople || 0,
+      partySize: getPartySize() || 0,
       channel: this.channel,
       locale: this.locale,
     });
