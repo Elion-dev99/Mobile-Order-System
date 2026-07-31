@@ -57,6 +57,24 @@ export const CARDINAL_CAPABILITIES = [
     description: 'Cardinal の判断を Ops に残す',
     defaultOn: true,
   },
+  {
+    id: 'proactiveSteward',
+    label: '予防保守ステュワード',
+    description: '健全時も日次で Cursor が小さな修正・レビューを回す（自律90%）',
+    defaultOn: true,
+  },
+  {
+    id: 'ciDispatch',
+    label: 'CI失敗→Executor',
+    description: 'Deploy 失敗時に GitHub から Executor を起動（サーバ側ワークフロー）',
+    defaultOn: true,
+  },
+  {
+    id: 'prGuardian',
+    label: 'PR→Guardianレビュー',
+    description: 'cursor/* の PR で Guardian を起動（サーバ側ワークフロー）',
+    defaultOn: true,
+  },
 ];
 
 export function defaultCardinalPrefs() {

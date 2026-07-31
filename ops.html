@@ -432,9 +432,10 @@
 
     <section data-ops-panel="cardinal" hidden>
       <h2>Cardinal — 双AI相互監視</h2>
-      <p class="ops-muted">SAOのカーディナルに着想した <strong>Guardian（監視）</strong> と <strong>Executor（実行）</strong> の2体構成です。お互いの心拍を監視し、障害時は人の手を借りず調査・修正・再起動判断まで回します。</p>
+      <p class="ops-muted">目標: 運営・保守・不具合修正の<strong>約90%</strong>を Cursor が担う（<code>docs/autonomy.md</code>）。人間はマージと escalate のみ。Guardian（監視）と Executor（実行）が相互監視します。</p>
 
       <div class="ops-cards" id="cardinalCards">
+        <div class="ops-card"><span>自律目標</span><strong id="cardinalAutonomyPct">90%</strong></div>
         <div class="ops-card"><span>Guardian</span><strong id="cardinalGuardianStatus">—</strong></div>
         <div class="ops-card"><span>Executor</span><strong id="cardinalExecutorStatus">—</strong></div>
         <div class="ops-card"><span>サイクル</span><strong id="cardinalCycles">0</strong></div>
@@ -446,17 +447,33 @@
       </div>
 
       <div class="ops-health-playbook">
+        <h2>自律 90% — Cursor が回すもの</h2>
+        <ul class="ops-checklist" id="cardinalAutonomyList">
+          <li>毎時プローブ・自動メンテ・障害時 Executor / 継続時 followup</li>
+          <li>Deploy CI 失敗 → Executor</li>
+          <li>cursor/* PR → Guardian レビュー → <strong>自動 squash マージ</strong></li>
+          <li>Deploy 後 canary（表示/API）→ 失敗なら <strong>即ロールバック</strong></li>
+          <li>日次予防保守（steward）・週次 Guardian</li>
+        </ul>
+        <p class="ops-muted" id="cardinalHumanGate">人間ゲート: シークレット初回 / escalate・高リスクパス / 課金・破壊的操作（マージ日常は不要）</p>
+        <pre id="cardinalLedger" class="ops-muted" style="white-space:pre-wrap;max-height:140px;overflow:auto;margin-top:8px;padding:10px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
+      </div>
+
+      <div class="ops-health-playbook">
         <h2>いま動いていること</h2>
         <ul class="ops-checklist">
           <li>Ops を開いている間、クライアント側 Cardinal が 60秒ごとにヘルス＋心拍・異常スキャン・日次ダイジェストを回します</li>
           <li>障害が続くと自動メンテ＋ Executor 起動、相手の心拍が途切れると監視側を起こします</li>
           <li>静穏時間中は warning 以下の通知/起動を抑制（down / critical は通す）</li>
+          <li>GitHub cron が Ops を閉じても毎時 tick / 日次 steward を回します（常駐の本体）</li>
         </ul>
         <div class="ops-toolbar" style="flex-wrap:wrap;">
           <button type="button" id="opsCardinalCycle" class="ops-btn-secondary">今すぐ1サイクル実行</button>
           <button type="button" id="opsCardinalDiagnose" class="ops-btn">自己診断</button>
           <button type="button" id="opsCardinalDigest" class="ops-btn-secondary">ダイジェスト送信</button>
           <button type="button" id="opsCardinalAnomaly" class="ops-btn-secondary">異常スキャン</button>
+          <button type="button" id="opsCardinalSteward" class="ops-btn">予防保守ステュワード</button>
+          <button type="button" id="opsCardinalFollowup" class="ops-btn-secondary">フォローアップ起動</button>
           <button type="button" id="opsCardinalDrill" class="ops-btn">2体ドリル起動</button>
           <button type="button" id="opsCardinalRefresh" class="ops-btn-secondary">状態更新</button>
         </div>
@@ -506,12 +523,14 @@
       </div>
 
       <div class="ops-health-playbook" id="opsCardinalSetup">
-        <h2>運用ステータス</h2>
+        <h2>運用ステータス（自律 90%）</h2>
         <ol class="ops-steps">
           <li><strong>CURSOR_API_KEY</strong> — Cloudflare に設定済み（オンデマンド起動可）</li>
-          <li><strong>GitHub cron</strong> — 毎時本番プローブ。異常時だけ Executor 起動</li>
-          <li><strong>Discord</strong> — 通知タブの Webhook があれば心拍・起動通知が届きます（任意）</li>
-          <li>マージ判断だけは当面人間ゲート。詳細: <code>docs/cardinal.md</code></li>
+          <li><strong>GitHub cron</strong> — 毎時 tick + 日次 steward + 週次 Guardian</li>
+          <li><strong>CI / PR</strong> — Deploy 失敗→Executor、cursor/* →Guardian→<strong>auto-merge</strong></li>
+          <li><strong>Canary</strong> — Deploy 後の表示/API 検査。失敗で <strong>マージ前に即ロールバック</strong></li>
+          <li><strong>Discord</strong> — 心拍・起動・ロールバック通知（任意）</li>
+          <li>人間ゲートは escalate / 高リスクのみ。詳細: <code>docs/autonomy.md</code></li>
         </ol>
         <p class="ops-muted">追加の Cursor Automations（PRレビュー専用など）は任意です。今の構成だけで双AI起動は動きます。</p>
       </div>
@@ -556,7 +575,7 @@
   </main>
 </div>
 
-<script type="module" src="js/ops.js?v=harden1"></script>
+<script type="module" src="js/ops.js?v=harden2"></script>
 <script>
   // モジュール読み込み失敗時のフォールバック表示
   setTimeout(() => {

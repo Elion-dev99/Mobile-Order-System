@@ -1,0 +1,88 @@
+name: Cardinal canary / rollback
+
+# Manual or scheduled production canary. On failure, restore main to previous SHA.
+# Also usable after auto-merge without waiting only on deploy job.
+
+on:
+  schedule:
+    - cron: '35 * * * *' # ~20 min after hourly Cardinal tick
+  workflow_dispatch:
+    inputs:
+      before_sha:
+        description: "SHA to restore if canary fails (optional; default HEAD~1)"
+        required: false
+        type: string
+      force_rollback:
+        description: "Rollback even if canary passes (emergency)"
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+permissions:
+  contents: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Probe
+        id: canary
+        continue-on-error: true
+        run: |
+          set +e
+          node scripts/canary-probe.mjs | tee /tmp/canary.json
+          if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rollback if needed
+        if: steps.canary.outputs.ok == 'false' || github.event.inputs.force_rollback == 'true'
+        env:
+          INPUT_BEFORE: ${{ github.event.inputs.before_sha || '' }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
+        run: |
+          set -euo pipefail
+          git config user.name "Cardinal Canary"
+          git config user.email "cardinal-canary@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          HEAD=$(git rev-parse HEAD)
+          BEFORE="${INPUT_BEFORE:-}"
+          if [ -z "$BEFORE" ]; then
+            BEFORE=$(git rev-parse HEAD~1)
+          fi
+          echo "Rollback $HEAD → $BEFORE"
+          git reset --hard "$BEFORE"
+          git push --force-with-lease origin main
+
+          if [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+            curl -sS -X POST -H 'content-type: application/json' \
+              -d "{\"username\":\"QuickOrder Cardinal\",\"embeds\":[{\"title\":\"Canary rollback\",\"description\":\"Restored main to \`$BEFORE\` (was \`$HEAD\`).\",\"color\":15158332}]}" \
+              "$DISCORD_WEBHOOK_URL" >/dev/null || true
+          fi
+
+          if [ -n "${OPS_API_SECRET:-}" ]; then
+            curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
+              -H 'content-type: application/json' \
+              -H "x-ops-secret: $OPS_API_SECRET" \
+              -d "{\"action\":\"dispatch\",\"role\":\"executor\",\"source\":\"canary-cron\",\"task\":{\"kind\":\"incident\",\"severity\":\"critical\",\"force\":true,\"title\":\"Scheduled canary failed\",\"summary\":\"Production canary failed; main rolled back.\",\"message\":\"bad=$HEAD restored=$BEFORE — fix regression and open draft PR.\",\"acceptance\":[\"原因特定\",\"draft PR\"]}}" \
+              || true
+          fi
+
+      - name: Fail if canary failed
+        if: steps.canary.outputs.ok == 'false'
+        run: exit 1

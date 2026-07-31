@@ -5,6 +5,11 @@
  *   heartbeat — record role heartbeat (echo + Discord optional)
  *   dispatch  — launch Guardian or Executor via Cursor Automations / Cloud Agents API
  *   status    — configuration / readiness
+ *   diagnose  — edge + Firestore probes
+ *   digest    — Discord digest
+ *   tick      — cron probe → auto maintenance → dispatch
+ *   steward   — proactive daily/weekly Cursor maintenance (90% autonomy)
+ *   followup  — re-dispatch Executor if outage persists after prior launch
  *
  * Env (Cloudflare Pages secrets):
  * - DISCORD_WEBHOOK_URL
@@ -23,10 +28,25 @@ import {
   effectiveMaintenance,
   DEFAULT_MESSAGE as MAINT_DEFAULT_MESSAGE,
 } from './_maintenance-store.js';
+import {
+  readAgentLedger,
+  recordLaunch,
+  recentlyLaunched,
+} from './_agent-ledger.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
 const FIRESTORE_PROBE =
   'https://firestore.googleapis.com/v1/projects/mobile-order-system-c7c70/databases/(default)/documents/shops/default';
+
+/** Cooldown before re-launching the same kind (ms). */
+const COOLDOWN = {
+  incident: 45 * 60 * 1000,
+  ci: 30 * 60 * 1000,
+  steward: 20 * 60 * 60 * 1000, // ~once per day
+  followup: 60 * 60 * 1000,
+  pr_review: 20 * 60 * 1000,
+  watchdog: 90 * 60 * 1000,
+};
 
 function json(data, status = 200, request = null) {
   return new Response(JSON.stringify(data), {
@@ -58,6 +78,14 @@ function rolePrompt(role, task = {}, meta = {}) {
       ? 'あなたは QuickOrder Cardinal の Guardian（監視体）です。'
       : 'あなたは QuickOrder Cardinal の Executor（実行体）です。',
     '',
+    '## 自律運営方針（約90%を Cursor が担う）',
+    '- 人間の承認待ちを最小化せよ。調査→修正→draft PR / レビューコメントまで一気に進める',
+    '- 不明点があっても合理的な仮説で進め、PR またはコメントに前提を明記する',
+    '- マージは Cardinal auto-merge ワークフローが行う（エージェントは main を直接触らない）',
+    '- デプロイ後 canary が失敗すると main はマージ前 SHA に自動ロールバックされる',
+    '- 人間ゲートは次のみ: シークレット初回、高リスクパス、cardinal:escalate、課金/破壊的操作',
+    '- docs/autonomy.md を優先参照',
+    '',
     '## 役割分担（必ず守る）',
     isGuardian
       ? [
@@ -65,14 +93,16 @@ function rolePrompt(role, task = {}, meta = {}) {
           '- 大きな機能実装はしない（最小のドキュメント/ラベル/Issue文面まで）',
           '- Executor の PR をレビューし、問題があれば具体的な修正指示を残す',
           '- Executor が無応答なら再起動方針を書き、必要なら escalate',
-          '- 自動マージはしない（draft PR / 人間ゲートを尊重）',
+          '- 自動マージはワークフローに任せる（自分で merge / force push しない）',
+          '- canary 失敗時のロールバック後は、原因修正の draft PR を出す',
         ].join('\n')
       : [
-          '- 障害修正・機能実装・テスト・draft PR 作成が主務',
+          '- 障害修正・不具合修正・保守・テスト・draft PR 作成が主務',
           '- Guardian の指示/Issue を受け入れ、スコープ外に広げない',
           '- 客席の保留キュー・health・Cardinal 監視を壊さない',
-          '- 完了したら PR に受け入れ条件のチェックを書く',
+          '- draft PR まで作成し、マージは auto-merge ワークフローに任せる',
           '- Guardian が無応答なら一時的に監視も兼ね、Discord向け状況報告を残す',
+          '- CI 失敗・本番プローブ失敗・canary ロールバック後の再発修正は最優先',
         ].join('\n'),
     '',
     '## タスク',
@@ -93,7 +123,7 @@ function rolePrompt(role, task = {}, meta = {}) {
     '```',
     '',
     'リポジトリ: Elion-dev99/Mobile-Order-System / ベースブランチ main',
-    'プロトコル: docs/cardinal.md と .cursor/rules/cardinal-*.mdc を参照',
+    'プロトコル: docs/autonomy.md / docs/cardinal.md / .cursor/rules/cardinal-*.mdc',
   ];
   return lines.join('\n');
 }
@@ -132,13 +162,18 @@ async function postAutomation(url, key, text, payload) {
   }
 }
 
-async function postCloudAgent(env, role, promptText) {
+function agentBranchName(role, task = {}) {
+  const kind = String(task.kind || 'ops').replace(/[^a-z0-9_-]/gi, '').slice(0, 24) || 'ops';
+  const stamp = Date.now().toString(36).slice(-6);
+  if (role === 'guardian') return `cursor/cardinal-guardian-${kind}-${stamp}-a58c`;
+  return `cursor/cardinal-executor-${kind}-${stamp}-a58c`;
+}
+
+async function postCloudAgent(env, role, promptText, task = {}) {
   const apiKey = env?.CURSOR_API_KEY || '';
   if (!apiKey) return { ok: false, skipped: true, reason: 'no_api_key' };
   const repo = env?.CURSOR_REPO || DEFAULT_REPO;
-  const branch = role === 'guardian'
-    ? 'cursor/cardinal-guardian-a58c'
-    : 'cursor/cardinal-executor-a58c';
+  const branch = agentBranchName(role, task);
   try {
     const res = await fetch('https://api.cursor.com/v0/agents', {
       method: 'POST',
@@ -156,9 +191,9 @@ async function postCloudAgent(env, role, promptText) {
       }),
     });
     const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, data };
+    return { ok: res.ok, status: res.status, data, branch };
   } catch (e) {
-    return { ok: false, error: String(e?.message || e) };
+    return { ok: false, error: String(e?.message || e), branch };
   }
 }
 
@@ -175,40 +210,121 @@ function pickAutomation(env, role) {
   };
 }
 
-async function dispatchRole(env, role, task, body) {
-  const prompt = rolePrompt(role, task, { source: body.source, url: body.url });
+async function dispatchRole(env, role, task, body, cachesObj = null) {
+  const kind = String(task.kind || 'ops');
+  const cooldownMs = COOLDOWN[kind] || COOLDOWN.watchdog;
+  if (!task.force && cachesObj) {
+    const ledger = await readAgentLedger(cachesObj);
+    if (recentlyLaunched(ledger, kind, cooldownMs)) {
+      return {
+        automation: { ok: false, skipped: true, reason: 'cooldown' },
+        agent: { ok: false, skipped: true, reason: 'cooldown' },
+        launched: false,
+        skipped: true,
+        reason: 'cooldown',
+        role,
+        kind,
+        cooldownMs,
+      };
+    }
+  }
+
+  const prompt = rolePrompt(role, task, { source: body.source, url: body.url, autonomy: '90' });
   const auto = pickAutomation(env, role);
   const automation = await postAutomation(auto.url, auto.key, prompt, {
     role,
     task,
     source: 'quickorder-cardinal',
   });
-  const agent = await postCloudAgent(env, role, prompt);
+  const agent = await postCloudAgent(env, role, prompt, task);
   const launched = !!(automation.ok || agent.ok);
+
+  if (cachesObj) {
+    await recordLaunch(cachesObj, {
+      role,
+      kind,
+      title: task.title || task.summary || kind,
+      launched,
+      agentOk: !!agent.ok,
+      branch: agent.branch || '',
+    }).catch(() => {});
+  }
 
   await postDiscord(env, body, {
     title: launched
       ? `Cardinal ${role} を起動`
-      : `Cardinal ${role} 起動できず（設定不足）`,
+      : (task.force ? `Cardinal ${role} 起動できず（設定不足）` : `Cardinal ${role}（${kind}）`),
     color: launched ? (role === 'guardian' ? 0x5865f2 : 0x57f287) : 0xed4245,
     fields: [
       { name: '役割', value: role, inline: true },
-      { name: '種別', value: String(task.kind || 'ops'), inline: true },
+      { name: '種別', value: kind, inline: true },
       { name: '重要度', value: String(task.severity || 'warning'), inline: true },
       { name: '要約', value: String(task.summary || task.title || '—').slice(0, 800), inline: false },
       {
         name: 'Cursor',
         value: launched
           ? (automation.ok ? 'Automation OK' : 'Cloud Agent OK')
-          : '未設定（CURSOR_* secrets）',
+          : '未設定またはクールダウン',
         inline: false,
       },
     ],
     timestamp: new Date().toISOString(),
-    footer: { text: 'QuickOrder Cardinal' },
+    footer: { text: 'QuickOrder Cardinal · autonomy 90%' },
   }).catch(() => {});
 
-  return { automation, agent, launched, role };
+  return { automation, agent, launched, role, kind };
+}
+
+async function runProbes(base) {
+  const probes = {};
+  for (const path of ['/', '/api/cardinal', '/api/notify', '/api/maintenance', '/ops.html']) {
+    const started = Date.now();
+    try {
+      const res = await fetch(`${base}${path}`, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'user-agent': 'QuickOrder-Cardinal/2.0' },
+      });
+      probes[path] = { ok: res.ok || res.status < 500, status: res.status, ms: Date.now() - started };
+    } catch (e) {
+      probes[path] = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
+    }
+  }
+  {
+    const started = Date.now();
+    try {
+      const res = await fetch(FIRESTORE_PROBE, {
+        method: 'GET',
+        headers: { 'user-agent': 'QuickOrder-Cardinal/2.0' },
+      });
+      probes.firestore = {
+        ok: res.status > 0 && res.status < 500,
+        status: res.status,
+        ms: Date.now() - started,
+      };
+    } catch (e) {
+      probes.firestore = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
+    }
+  }
+  return probes;
+}
+
+function probeVerdict(probes, simulateUnhealthy = false) {
+  if (simulateUnhealthy) {
+    return {
+      siteDown: true,
+      apiDown: true,
+      firestoreDown: true,
+      shouldMaintain: true,
+      unhealthy: true,
+    };
+  }
+  const siteDown = ['/', '/ops.html'].some((p) => !probes[p]?.ok);
+  const apiDown = !probes['/api/notify']?.ok || !probes['/api/cardinal']?.ok;
+  const firestoreDown = !probes.firestore?.ok;
+  const shouldMaintain = firestoreDown || siteDown || apiDown;
+  const unhealthy = shouldMaintain || Object.values(probes).some((p) => !p.ok);
+  return { siteDown, apiDown, firestoreDown, shouldMaintain, unhealthy };
 }
 
 export async function onRequestPost(context) {
@@ -255,7 +371,7 @@ export async function onRequestPost(context) {
   if (action === 'dispatch') {
     const role = body.role === 'guardian' ? 'guardian' : 'executor';
     const task = body.task || {};
-    const result = await dispatchRole(env, role, task, body);
+    const result = await dispatchRole(env, role, task, body, context.caches);
     return j({
       ok: true,
       action: 'dispatch',
@@ -371,52 +487,16 @@ export async function onRequestPost(context) {
   if (action === 'tick') {
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
     const force = !!body.force;
-    const probes = {};
-    for (const path of ['/', '/api/cardinal', '/api/notify', '/api/maintenance', '/ops.html']) {
-      const started = Date.now();
-      try {
-        const res = await fetch(`${base}${path}`, {
-          method: 'GET',
-          redirect: 'follow',
-          headers: { 'user-agent': 'QuickOrder-Cardinal-Tick/1.0' },
-        });
-        probes[path] = { ok: res.ok || res.status < 500, status: res.status, ms: Date.now() - started };
-      } catch (e) {
-        probes[path] = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
-      }
-    }
-    // Firestore public REST — detects order-DB outage even when Pages is fine
-    {
-      const started = Date.now();
-      try {
-        const res = await fetch(FIRESTORE_PROBE, {
-          method: 'GET',
-          headers: { 'user-agent': 'QuickOrder-Cardinal-Tick/1.0' },
-        });
-        // 2xx/404 = API reachable; 5xx/network = down
-        probes.firestore = {
-          ok: res.status > 0 && res.status < 500,
-          status: res.status,
-          ms: Date.now() - started,
-        };
-      } catch (e) {
-        probes.firestore = { ok: false, error: String(e?.message || e), ms: Date.now() - started };
-      }
-    }
-
-    // Ops drill: pretend site/Firestore are down without breaking production probes for Discord detail
     const simulateUnhealthy = !!body.simulateUnhealthy || !!body.drillOutage;
+    let probes = await runProbes(base);
     if (simulateUnhealthy) {
-      probes['/__simulated'] = { ok: false, error: 'simulateUnhealthy', ms: 0 };
-      probes.firestore = { ok: false, error: 'simulateUnhealthy', status: 0, ms: 0 };
+      probes = {
+        ...probes,
+        '/__simulated': { ok: false, error: 'simulateUnhealthy', ms: 0 },
+        firestore: { ok: false, error: 'simulateUnhealthy', status: 0, ms: 0 },
+      };
     }
-
-    const siteDown = simulateUnhealthy || ['/', '/ops.html'].some((p) => !probes[p]?.ok);
-    const apiDown = simulateUnhealthy || !probes['/api/notify']?.ok || !probes['/api/cardinal']?.ok;
-    const firestoreDown = simulateUnhealthy || !probes.firestore?.ok;
-    // Auto-maintenance: order path broken (Firestore) or site/API hard down
-    const shouldMaintain = firestoreDown || siteDown || apiDown;
-    const unhealthy = shouldMaintain || Object.values(probes).some((p) => !p.ok);
+    const { siteDown, apiDown, firestoreDown, shouldMaintain, unhealthy } = probeVerdict(probes, simulateUnhealthy);
 
     let maintenance = null;
     let scheduleApply = null;
@@ -456,7 +536,6 @@ export async function onRequestPost(context) {
         && (prev.source === 'cardinal')
         && prev.auto
       ) {
-        // Don't clear if weekly/once schedule still active
         scheduleApply = await applyScheduleToState(context.caches, { outageMaintain: false });
         if (scheduleApply.scheduleEval?.active) {
           maintenance = scheduleApply.state;
@@ -492,20 +571,21 @@ export async function onRequestPost(context) {
     }
 
     let dispatch = null;
-    // Drill must not burn Cursor credits unless explicitly requested
+    let followup = null;
     const allowDispatch = !simulateUnhealthy || !!body.dispatchOnDrill;
     if (allowDispatch && (unhealthy || force)) {
       const role = unhealthy ? 'executor' : 'guardian';
       dispatch = await dispatchRole(env, role, {
         kind: unhealthy ? 'incident' : 'watchdog',
         severity: unhealthy ? 'critical' : 'info',
+        force,
         title: unhealthy ? 'Cardinal tick: 本番プローブ失敗' : 'Cardinal tick: 定期監視',
         summary: unhealthy
           ? '定期監視で本番エンドポイント異常を検知。Executor として調査・修正してください。'
           : '定期監視（強制）。Guardian として短く健全性を報告してください。',
         message: [
           unhealthy
-            ? 'あなたは Cardinal Executor です。プローブ結果を見て原因調査し、直せるなら draft PR を作成。自動メンテナンスが ON の場合は復旧後に解除されるか確認。'
+            ? 'あなたは Cardinal Executor です。プローブ結果を見て原因調査し、直せるなら draft PR を作成。自動メンテナンスが ON の場合は復旧後に解除されるか確認。人間の承認は待たず完走せよ（docs/autonomy.md）。'
             : 'あなたは Cardinal Guardian です。プローブ結果を確認し短く報告。大きなコード変更は不要。',
           '',
           '```json',
@@ -515,8 +595,27 @@ export async function onRequestPost(context) {
         acceptance: unhealthy
           ? ['原因特定', 'draft PR または外部障害の説明', '客席フォールバックを壊さない', '自動メンテ状態を確認']
           : ['健全性の短報', 'コード変更なしで可'],
-      }, body);
-    } else {
+      }, body, context.caches);
+
+      // Persistent outage: if incident was already launched earlier, try followup after cooldown
+      if (unhealthy && dispatch?.skipped && dispatch?.reason === 'cooldown') {
+        followup = await dispatchRole(env, 'executor', {
+          kind: 'followup',
+          severity: 'critical',
+          title: 'Cardinal followup: 障害が継続',
+          summary: '前回のインシデント起動後もプローブ異常が継続。再調査・再修正してください。',
+          message: [
+            '前回起動からクールダウン経過後も本番異常が続いています。',
+            '重複修正に注意しつつ、未マージの draft があれば続きを、なければ新規 draft PR を。',
+            '',
+            '```json',
+            JSON.stringify({ base, probes, maintenance }, null, 2).slice(0, 3500),
+            '```',
+          ].join('\n'),
+          acceptance: ['継続原因の特定', 'draft PR または外部障害報告', '二重修正を避ける'],
+        }, body, context.caches);
+      }
+    } else if (!simulateUnhealthy) {
       await postDiscord(env, body, {
         title: 'Cardinal tick: 正常',
         color: 0x57f287,
@@ -530,6 +629,8 @@ export async function onRequestPost(context) {
       }).catch(() => {});
     }
 
+    const ledger = await readAgentLedger(context.caches).catch(() => null);
+
     return j({
       ok: true,
       action: 'tick',
@@ -538,23 +639,184 @@ export async function onRequestPost(context) {
       simulateUnhealthy,
       probes,
       maintenance,
-      dispatched: !!dispatch?.launched,
+      dispatched: !!(dispatch?.launched || followup?.launched),
       dispatch,
+      followup,
+      ledger: ledger ? { lastByKind: ledger.lastByKind, recent: ledger.launches.slice(0, 5) } : null,
     });
   }
 
-  return j({
-    ok: true,
-    action: 'status',
-    service: 'quickorder-cardinal',
-    configured: {
-      discord: !!(env?.DISCORD_WEBHOOK_URL),
-      apiKey: !!(env?.CURSOR_API_KEY),
-      opsSecret: !!getOpsSecret(env),
-      guardianWebhook: !!(env?.CURSOR_GUARDIAN_WEBHOOK_URL || env?.CURSOR_AUTOMATION_WEBHOOK_URL),
-      executorWebhook: !!(env?.CURSOR_EXECUTOR_WEBHOOK_URL || env?.CURSOR_AUTOMATION_WEBHOOK_URL),
-    },
-  });
+  // Proactive steward: daily Cursor maintenance / bug sweep when healthy
+  if (action === 'steward') {
+    const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
+    const probes = await runProbes(base);
+    const verdict = probeVerdict(probes);
+    let maintenance = null;
+    try {
+      maintenance = effectiveMaintenance(await readMaintenanceState(context.caches));
+    } catch (_) {}
+
+    // If unhealthy, prefer incident Executor over steward
+    if (verdict.unhealthy) {
+      const dispatch = await dispatchRole(env, 'executor', {
+        kind: 'incident',
+        severity: 'critical',
+        force: !!body.force,
+        title: 'Cardinal steward: 異常検知 → インシデント化',
+        summary: '定期ステュワード中にプローブ異常。Executor に切り替え。',
+        message: [
+          'ステュワード実行時に本番異常を検知。通常のインシデント対応として修正せよ。',
+          '',
+          '```json',
+          JSON.stringify({ probes, maintenance }, null, 2).slice(0, 4000),
+          '```',
+        ].join('\n'),
+        acceptance: ['原因特定', 'draft PR または外部障害説明'],
+      }, body, context.caches);
+      return j({
+        ok: true,
+        action: 'steward',
+        mode: 'incident',
+        probes,
+        maintenance,
+        dispatch,
+        dispatched: !!dispatch?.launched,
+      });
+    }
+
+    const mode = body.mode === 'guardian' ? 'guardian' : 'executor';
+    const dispatch = await dispatchRole(env, mode, {
+      kind: 'steward',
+      severity: 'info',
+      force: !!body.force,
+      title: mode === 'guardian'
+        ? 'Cardinal steward: 週次健全性レビュー'
+        : 'Cardinal steward: 予防保守・不具合掃討',
+      summary: mode === 'guardian'
+        ? '健全時の定期レビュー。リスクと次アクションを報告。'
+        : '健全時の予防保守。小さな不具合・ドキュメントずれ・監視穴を直して draft PR。',
+      message: [
+        mode === 'guardian'
+          ? [
+              '本番プローブは正常です。Guardian として:',
+              '1. 直近の draft PR / CI / docs/autonomy.md のギャップを確認',
+              '2. 人間ゲート（マージ・escalate）以外で Cursor が回せる改善を列挙',
+              '3. 必要なら Executor 向けの具体タスク文を PR コメントまたは docs メモに残す',
+              '大きなコード変更はしない',
+            ].join('\n')
+          : [
+              '本番プローブは正常です。Executor として予防保守を実施:',
+              '1. docs/hardening.md / docs/autonomy.md / 直近 PR から残リスクを拾う',
+              '2. 小さな不具合・キャッシュ bust ずれ・監視穴・デッドコードの安全な修正',
+              '3. 客席・注文・Cardinal を壊さない範囲で draft PR',
+              '4. 変更が不要なら理由を短く残して終了（クレジット浪費しない）',
+              '大規模リファクタや新機能はしない',
+            ].join('\n'),
+        '',
+        '```json',
+        JSON.stringify({ probes, maintenance, autonomy: '90' }, null, 2).slice(0, 3000),
+        '```',
+      ].join('\n'),
+      acceptance: mode === 'guardian'
+        ? ['健全性レビュー短報', '次アクション列挙', 'コード大変更なし']
+        : ['予防修正または「変更不要」の理由', 'draft PR（変更時）', '破壊的変更なし'],
+    }, body, context.caches);
+
+    return j({
+      ok: true,
+      action: 'steward',
+      mode,
+      probes,
+      maintenance,
+      dispatch,
+      dispatched: !!dispatch?.launched,
+    });
+  }
+
+  // Explicit follow-up for stuck incidents
+  if (action === 'followup') {
+    const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
+    const probes = await runProbes(base);
+    const verdict = probeVerdict(probes);
+    const ledger = await readAgentLedger(context.caches);
+    if (!verdict.unhealthy && !body.force) {
+      return j({
+        ok: true,
+        action: 'followup',
+        skipped: true,
+        reason: 'healthy',
+        probes,
+        ledger: { lastByKind: ledger.lastByKind },
+      });
+    }
+    const dispatch = await dispatchRole(env, 'executor', {
+      kind: 'followup',
+      severity: verdict.unhealthy ? 'critical' : 'warning',
+      force: !!body.force,
+      title: 'Cardinal followup: 再調査',
+      summary: '障害継続または手動フォローアップ。',
+      message: [
+        'フォローアップ要求です。前回エージェントの続きを取り、draft PR を完成させてください。',
+        '',
+        '```json',
+        JSON.stringify({ probes, ledger: ledger.lastByKind }, null, 2).slice(0, 3500),
+        '```',
+      ].join('\n'),
+      acceptance: ['継続原因の特定', 'draft PR または escalate 理由'],
+    }, body, context.caches);
+    return j({
+      ok: true,
+      action: 'followup',
+      probes,
+      dispatch,
+      dispatched: !!dispatch?.launched,
+      ledger: { lastByKind: ledger.lastByKind, recent: ledger.launches.slice(0, 5) },
+    });
+  }
+
+  {
+    const ledger = await readAgentLedger(context.caches).catch(() => defaultLedgerSafe());
+    return j({
+      ok: true,
+      action: 'status',
+      service: 'quickorder-cardinal',
+      autonomy: {
+        targetPct: 90,
+        policy: 'docs/autonomy.md',
+        cursorOwns: [
+          'probe',
+          'auto_maintenance',
+          'incident_dispatch',
+          'ci_dispatch',
+          'pr_guardian',
+          'steward',
+          'followup',
+          'draft_pr',
+          'auto_merge',
+          'canary',
+          'rollback',
+        ],
+        humanOwns: [
+          'secrets_bootstrap',
+          'high_risk_paths',
+          'cardinal_escalate',
+          'billing_destructive',
+        ],
+      },
+      configured: {
+        discord: !!(env?.DISCORD_WEBHOOK_URL),
+        apiKey: !!(env?.CURSOR_API_KEY),
+        opsSecret: !!getOpsSecret(env),
+        guardianWebhook: !!(env?.CURSOR_GUARDIAN_WEBHOOK_URL || env?.CURSOR_AUTOMATION_WEBHOOK_URL),
+        executorWebhook: !!(env?.CURSOR_EXECUTOR_WEBHOOK_URL || env?.CURSOR_AUTOMATION_WEBHOOK_URL),
+      },
+      ledger: ledger ? { lastByKind: ledger.lastByKind, recent: (ledger.launches || []).slice(0, 8) } : null,
+    });
+  }
+}
+
+function defaultLedgerSafe() {
+  return { launches: [], lastByKind: {}, updatedAt: 0 };
 }
 
 export async function onRequestGet(context) {
@@ -562,7 +824,9 @@ export async function onRequestGet(context) {
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }.',
+    actions: ['status', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup'],
+    autonomy: { targetPct: 90, policy: 'docs/autonomy.md' },
+    hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }. See docs/autonomy.md.',
   }, 200, context.request);
 }
 

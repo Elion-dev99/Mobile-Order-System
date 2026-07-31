@@ -47,27 +47,70 @@ async function tryFlushOrders() {
 }
 
 /**
- * Escalate to /api/incident → Discord + Cursor Cloud Agent (if secrets configured).
+ * Escalate via Cardinal bus (preferred) → legacy /api/incident fallback.
+ * Discord + Cursor Cloud Agent when secrets configured.
  */
 export async function escalateToCursor(incident = {}) {
   const webhook = getDiscordWebhook();
-  const body = {
+  const role = incident.cardinalRole === 'guardian' ? 'guardian' : 'executor';
+  const base = {
     ...incident,
     source: 'quickorder-autoheal',
     url: typeof location !== 'undefined' ? location.href : '',
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
     pendingOrders: listPendingOrders().length,
   };
-  if (webhook && isLikelyDiscordWebhook(webhook)) body.webhook = webhook;
+  if (webhook && isLikelyDiscordWebhook(webhook)) base.webhook = webhook;
+
+  const cardinalBody = {
+    action: 'dispatch',
+    role,
+    source: 'quickorder-autoheal',
+    url: base.url,
+    task: {
+      kind: 'incident',
+      severity: base.severity || (base.status === 'down' ? 'critical' : 'warning'),
+      title: base.summary || 'AutoHeal incident',
+      summary: base.summary || base.message || 'ヘルス連続失敗',
+      message: [
+        base.message || 'Ops/客席のヘルスチェックが連続失敗したため、Cursor自動対処を依頼します。',
+        '',
+        'docs/autonomy.md に従い、人間の承認待ちで止めず draft PR まで進めてください。',
+        '',
+        '```json',
+        JSON.stringify(base, null, 2).slice(0, 4000),
+        '```',
+      ].join('\n'),
+      acceptance: [
+        '原因特定',
+        'draft PR または外部障害の説明',
+        '客席フォールバックを壊さない',
+      ],
+    },
+  };
+
+  try {
+    const res = await fetch('/api/cardinal', {
+      method: 'POST',
+      headers: opsAuthHeaders(),
+      body: JSON.stringify(cardinalBody),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && (data.launched || data.ok)) {
+      return { ok: true, via: 'cardinal', data };
+    }
+  } catch (_) {
+    // fall through to legacy incident
+  }
 
   try {
     const res = await fetch(INCIDENT_PATH, {
       method: 'POST',
       headers: opsAuthHeaders(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(base),
     });
     const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, data };
+    return { ok: res.ok, via: 'incident', data };
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
   }
