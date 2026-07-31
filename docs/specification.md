@@ -7,7 +7,7 @@
 | 文書種別 | システム全体仕様（プロダクト / 画面 / モジュール / データ / 運用） |
 | 読者 | PM・オーナー・導入支援・Cursor エージェント |
 | 本番 URL | `https://mobile-order-system.pages.dev` |
-| 関連文書 | [`revenue.md`](./revenue.md) / [`pl.md`](./pl.md) / [`security.md`](./security.md) / [`cardinal.md`](./cardinal.md) / [`enterprise-parity.md`](./enterprise-parity.md) |
+| 関連文書 | [`revenue.md`](./revenue.md) / [`pl.md`](./pl.md) / [`security.md`](./security.md) / [`cardinal.md`](./cardinal.md) / [`autonomy.md`](./autonomy.md) / [`enterprise-parity.md`](./enterprise-parity.md) |
 | 版 | **2.0**（2026-07-30 · 現行 `main` 実装ベース） |
 
 ---
@@ -497,13 +497,15 @@ HQ / 店舗 / 注文 / リード / 手数料 / 通知 / 呼出 / アンケート
 6. 負荷試験店舗の消し忘れ防止（`loadTest` / cleanup）  
 7. Store の Auth フリー狭いパッチ  
 
-### 12.4 人間が残す判断
+### 12.4 人間が残す判断（約10%）
+
+目標は **運営・保守・不具合修正の約90%を Cursor**（詳細: [`autonomy.md`](./autonomy.md)）。
 
 1. Cloudflare / Cursor / Discord の初回シークレット  
 2. draft PR のマージ  
 3. `cardinal:escalate` 時の最終確認  
 4. Chain 未請求手数料の月末請求  
-5. `introSlotsRemaining` の月次更新  
+5. `introSlotsRemaining` の月次更新 / 破壊的データ操作  
 
 ---
 
