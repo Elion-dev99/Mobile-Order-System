@@ -56,16 +56,30 @@ export function normalizeMaintenance(raw = {}) {
   };
 }
 
-/** Effective public view: flag OR active schedule window */
+/**
+ * Effective public view: flag OR active schedule window.
+ *
+ * `normalizeMaintenance()` rebuilds a state object from only the known
+ * schema fields, so it silently drops `persisted` / `persistError` that
+ * `writeMaintenanceState()` attaches to surface Cache API write failures.
+ * Callers (outage drill, Ops) rely on those flags, so carry them through
+ * explicitly instead of losing them here.
+ */
 export function effectiveMaintenance(raw, nowMs = Date.now()) {
   const state = normalizeMaintenance(raw);
   const ev = evaluateSchedule(state.schedule, nowMs);
+  const persistInfo = {};
+  if (raw && typeof raw === 'object') {
+    if ('persisted' in raw) persistInfo.persisted = raw.persisted;
+    if ('persistError' in raw) persistInfo.persistError = raw.persistError;
+  }
   if (state.maintenance) {
-    return { ...state, effective: true, scheduleEval: ev };
+    return { ...state, ...persistInfo, effective: true, scheduleEval: ev };
   }
   if (ev.active) {
     return {
       ...state,
+      ...persistInfo,
       maintenance: true,
       effective: true,
       message: ev.message || SCHEDULE_DEFAULT_MESSAGE,
@@ -74,7 +88,7 @@ export function effectiveMaintenance(raw, nowMs = Date.now()) {
       scheduleEval: ev,
     };
   }
-  return { ...state, effective: false, scheduleEval: ev };
+  return { ...state, ...persistInfo, effective: false, scheduleEval: ev };
 }
 
 export async function readMaintenanceState(cachesObj) {
