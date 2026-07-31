@@ -50,6 +50,7 @@
 
 ### 毎週（30〜60分相当のエージェント作業）
 
+0. **製品ゲート** — `cardinal-product-cycle.yml` が市場スカウト → Guardian/Executor レビュー → 双方 approve 後に実装（`docs/cardinal-product-gate.md`）
 1. **デモURLを1本、投稿用に磨く**  
    `https://mobile-order-system.pages.dev/index.html?shop=default&table=1&demo=1`  
    スクショ or 短文を `docs/` か Discord 下書きに残す（有料ツール不要）。

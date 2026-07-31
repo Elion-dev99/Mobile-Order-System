@@ -46,6 +46,7 @@ SAO のカーディナルシステムに着想した、**監視体（Guardian）
 | **異常スキャン** | 営業中店舗の注文ゼロ（履歴あり）・保留キュー過多・メンテ中を検知し Discord 通知 |
 | **日次ダイジェスト** | 設定した JST 時刻に 1日1回、注文数/GMV/ヘルスを Discord へ（手動強制送信あり） |
 | **アクション履歴** | サイクル・起動・診断などの判断ログを Ops に表示 |
+| **製品ゲート** | 市場スカウト → Guardian+Executor レビュー → 双方 approve 後に実装（`docs/cardinal-product-gate.md`） |
 
 ## いま動いている常駐ルート（推奨・設定済み）
 
@@ -59,11 +60,12 @@ Cursor Automations UI なしでも運用できます（**自律 90%**: `docs/aut
    - 日次 `digest` / 日次 `steward`（Executor 予防保守） / 週次 Guardian steward  
 4. **Deploy 失敗** → `cardinal-ci-dispatch` が Executor を起動  
 5. **`cursor/*` PR** → `cardinal-pr-guardian` が Guardian レビューを起動  
-6. 客席は `GET /api/maintenance` と Firestore `platform/config` をマージして参照  
-7. **定期スケジュール** — Ops HQ で曜日＋時間帯 / 単発窓を設定。tick でも評価  
-8. **障害メンテテスト** — Ops → Cardinal タブのドリル（エージェントは起動しない）  
-9. **Ops → 鍵** タブに `OPS_API_SECRET` を保存（ブラウザからの dispatch / AutoHeal 用）  
-10. 詳細: `docs/security.md` / `docs/autonomy.md`
+6. **週次製品ゲート** → `cardinal-product-cycle` が `product_cycle`（スカウト・双方向レビュー・実装）  
+7. 客席は `GET /api/maintenance` と Firestore `platform/config` をマージして参照  
+8. **定期スケジュール** — Ops HQ で曜日＋時間帯 / 単発窓を設定。tick でも評価  
+9. **障害メンテテスト** — Ops → Cardinal タブのドリル（エージェントは起動しない）  
+10. **Ops → 鍵** タブに `OPS_API_SECRET` を保存（ブラウザからの dispatch / AutoHeal 用）  
+11. 詳細: `docs/security.md` / `docs/autonomy.md`
 
 手動で今すぐ tick:
 

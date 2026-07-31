@@ -454,6 +454,7 @@
           <li>cursor/* PR → Guardian レビュー → <strong>自動 squash マージ</strong></li>
           <li>Deploy 後 canary（表示/API）→ 失敗なら <strong>即ロールバック</strong></li>
           <li>日次予防保守（steward）・週次 Guardian</li>
+          <li><strong>製品ゲート</strong>: 市場スカウト → Guardian+Executor レビュー → 双方 approve 後に実装（<code>docs/cardinal-product-gate.md</code>）</li>
         </ul>
         <p class="ops-muted" id="cardinalHumanGate">人間ゲート: シークレット初回 / escalate・高リスクパス / 課金・破壊的操作（マージ日常は不要）</p>
         <pre id="cardinalLedger" class="ops-muted" style="white-space:pre-wrap;max-height:140px;overflow:auto;margin-top:8px;padding:10px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
@@ -468,6 +469,7 @@
           <li>GitHub cron が Ops を閉じても毎時 tick / 日次 steward を回します（常駐の本体）</li>
         </ul>
         <div class="ops-toolbar" style="flex-wrap:wrap;">
+          <button type="button" id="opsCardinalProductCycle" class="ops-btn">製品ゲート1サイクル</button>
           <button type="button" id="opsCardinalCycle" class="ops-btn-secondary">今すぐ1サイクル実行</button>
           <button type="button" id="opsCardinalDiagnose" class="ops-btn">自己診断</button>
           <button type="button" id="opsCardinalDigest" class="ops-btn-secondary">ダイジェスト送信</button>

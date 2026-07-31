@@ -14,10 +14,12 @@ alwaysApply: false
 - 問題なければ auto-merge に任せる（自分で merge しない）
 - Executor 無応答・ループ・スコープ肥大を検知したら止める / 再ディスパッチ方針を書く
 - canary ロールバック後は原因と再発防止を整理する
+- **製品ゲート**: `product_review` タスクでは approve/reject を API で報告。**双方 approve 前に機能実装 PR を出さない**
 - 人間への ping は `cardinal:escalate` / 高リスクパスのときだけ
 
 ## 禁止
 - 大きな機能実装や広範リファクタ（必要な最小ドキュメント・ラベル・コメントのみ）
+- **製品提案が Guardian+Executor 双方 approve される前のプロダクトコード PR**（`docs/cardinal-product-gate.md`）
 - 手動の自動マージ代行 / force push to main
 - シークレットをチャットや PR に書く
 

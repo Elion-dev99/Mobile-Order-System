@@ -52,6 +52,7 @@ import {
   scanBusinessAnomalies,
   maybeNotifyAnomalies,
   maybeSendDailyDigest,
+  isCapabilityOn,
 } from './cardinal.js';
 import { escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
 import { ordersToCsv, downloadCsv } from './guest-extras.js';
@@ -198,7 +199,11 @@ const OpsPage = {
       ledgerEl.textContent = JSON.stringify({
         lastByKind: L.lastByKind || {},
         recent: L.recent || [],
+        productGate: apiRes.data.productGate || null,
       }, null, 2);
+    } else if (ledgerEl && apiRes?.data?.productGate) {
+      ledgerEl.hidden = false;
+      ledgerEl.textContent = JSON.stringify({ productGate: apiRes.data.productGate }, null, 2);
     }
     this.renderCardinalCaps(prefs);
     this.renderCardinalTimeline(snap.timeline || listCardinalTimeline(20));
@@ -906,6 +911,39 @@ const OpsPage = {
     document.getElementById('opsHealthAutoFix')?.addEventListener('click', (e) => requestAutoFix(e.currentTarget));
 
     document.getElementById('opsCardinalRefresh')?.addEventListener('click', () => this.refreshCardinal());
+    document.getElementById('opsCardinalProductCycle')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      const prefs = loadCardinalPrefs();
+      if (!isCapabilityOn('productGate', prefs)) {
+        if (st) { st.hidden = false; st.textContent = '製品ゲートは Ops 設定で OFF です'; }
+        return;
+      }
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = '製品ゲート: 市場→レビュー→実装サイクル起動中...'; }
+      try {
+        const res = await cardinalApi('product_cycle', { force: false, forceScout: false });
+        if (log) { log.hidden = false; log.textContent = JSON.stringify(res, null, 2); }
+        if (st) {
+          const step = res?.data?.step || '—';
+          st.textContent = res?.data?.dispatched || res?.data?.dispatch?.launched
+            ? `製品ゲート: ${step} — Cursor 起動依頼済`
+            : (res?.data?.reason === 'cooldown' || res?.data?.dispatch?.reason === 'cooldown'
+              ? `製品ゲート: クールダウン（${step}）`
+              : (res?.ok ? `製品ゲート: ${step}（起動スキップ）` : `失敗: ${res?.error || res?.data?.error || 'unknown'}`));
+        }
+        pushCardinalTimeline({
+          type: 'product_gate',
+          severity: 'info',
+          summary: `product_cycle step=${res?.data?.step || '?'} dispatched=${!!(res?.data?.dispatched || res?.data?.dispatch?.launched)}`,
+        });
+        await this.refreshCardinal();
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
+    });
     document.getElementById('opsCardinalCycle')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       const st = document.getElementById('opsCardinalStatus');
