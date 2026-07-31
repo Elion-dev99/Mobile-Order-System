@@ -563,6 +563,8 @@ export async function onRequestPost(context) {
       }
       maintenance = {
         ...effectiveMaintenance(maintenance),
+        persisted: maintenance?.persisted,
+        persistError: maintenance?.persistError ?? null,
         scheduleApply,
         simulated: simulateUnhealthy,
       };
