@@ -33,6 +33,7 @@ import {
 import { createReservation, createWaitlistEntry, estimateWaitlistMinutes } from './reservations.js';
 import { startOfflineSync } from './offline-sync.js';
 import { applyLangToDocument, ensureA11yBasics, normalizeLang, t as tUi } from './i18n-ui.js';
+import { captureGrowthAttribution, mountGrowthWatermark } from './growth.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -76,6 +77,7 @@ const App = {
   async init() {
     activateDemoFromUrl();
     resolveShopId();
+    captureGrowthAttribution();
     ensureDemoBanner();
     ensureA11yBasics();
     startOfflineSync();
@@ -132,6 +134,7 @@ const App = {
     this.mountOrderGateBanner();
     this.subscribeKitchenLoad();
     this.primeLastOrder();
+    mountGrowthWatermark({ locale: this.locale });
     // Defer history so first paint / taps stay snappy
     const defer = window.requestIdleCallback || ((fn) => setTimeout(fn, 600));
     defer(() => this.loadGuestHistory());
