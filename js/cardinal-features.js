@@ -75,6 +75,24 @@ export const CARDINAL_CAPABILITIES = [
     description: 'cursor/* の PR で Guardian を起動（サーバ側ワークフロー）',
     defaultOn: true,
   },
+  {
+    id: 'productGate',
+    label: '製品ゲート（双方向）',
+    description: '市場提案 → Guardian+Executor approve → 実装',
+    defaultOn: true,
+  },
+  {
+    id: 'marketScout',
+    label: '市場スカウト',
+    description: '週次でゼロ現金成長に沿った機能案を調査',
+    defaultOn: true,
+  },
+  {
+    id: 'dualFeatureReview',
+    label: '機能デュアルレビュー',
+    description: '新機能は Guardian と Executor の両方が approve するまで実装しない',
+    defaultOn: true,
+  },
 ];
 
 export function defaultCardinalPrefs() {

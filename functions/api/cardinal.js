@@ -10,6 +10,7 @@
  *   tick      — cron probe → auto maintenance → dispatch
  *   steward   — proactive daily/weekly Cursor maintenance (90% autonomy)
  *   followup  — re-dispatch Executor if outage persists after prior launch
+ *   product_* — market scout → dual review → implement (docs/cardinal-product-gate.md)
  *
  * Env (Cloudflare Pages secrets):
  * - DISCORD_WEBHOOK_URL
@@ -33,6 +34,14 @@ import {
   recordLaunch,
   recentlyLaunched,
 } from './_agent-ledger.js';
+import {
+  readProductGate,
+  addProposal,
+  applyProductReview,
+  markProposalImplemented,
+  planProductCycle,
+  summarizeProductGate,
+} from './_product-gate.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
 const FIRESTORE_PROBE =
@@ -46,6 +55,9 @@ const COOLDOWN = {
   followup: 60 * 60 * 1000,
   pr_review: 20 * 60 * 1000,
   watchdog: 90 * 60 * 1000,
+  product_scout: 7 * 24 * 60 * 60 * 1000,
+  product_review: 2 * 60 * 60 * 1000,
+  product_implement: 24 * 60 * 60 * 1000,
 };
 
 function json(data, status = 200, request = null) {
@@ -126,6 +138,116 @@ function rolePrompt(role, task = {}, meta = {}) {
     'プロトコル: docs/autonomy.md / docs/cardinal.md / .cursor/rules/cardinal-*.mdc',
   ];
   return lines.join('\n');
+}
+
+function productGateRulesBlock(role) {
+  const isGuardian = role === 'guardian';
+  return [
+    '',
+    '## 製品ゲート（必須 — docs/cardinal-product-gate.md）',
+    '- 創業者は広告費を出さない（docs/growth-zero-cash.md）',
+    '- **Guardian と Executor の双方が approve するまで、プロダクトコード（js/ store/ functions/ 等）を変更する PR を作らない**',
+    isGuardian
+      ? '- あなたは Guardian: セキュリティ・客席影響・スコープ・マーケ整合をレビューし、POST /api/cardinal { action: product_review, role: guardian, proposalId, verdict, notes } を実行（Ops secret 付き）'
+      : '- あなたは Executor: 実装可能性・canary リスク・工数をレビューし、同 API で role: executor を報告',
+    '- reject なら理由を notes に明記',
+    '- approve 後のみ product_implement タスクで実装 PR を作成',
+  ].join('\n');
+}
+
+function productTaskPrompt(role, step, proposal = null) {
+  const isGuardian = role === 'guardian';
+  const propJson = proposal
+    ? JSON.stringify(proposal, null, 2).slice(0, 3500)
+    : '(新規提案なし — 市場調査から開始)';
+  if (step === 'scout') {
+    return {
+      kind: 'product_scout',
+      severity: 'info',
+      title: 'Cardinal product: 市場調査・機能提案',
+      summary: 'ゼロ現金成長に沿った機能/マーケ案を1件提案し、ゲートに登録する',
+      message: [
+        'Executor として製品パイプラインのスカウトフェーズです。',
+        '1. docs/growth-zero-cash.md / docs/product-backlog.md / LP・Store 導線を読む',
+        '2. 広告費ゼロで効く改善を **1件だけ** 選び、根拠（市場シグナル）を書く',
+        '3. docs/product-backlog.md に追記（マーケ文案のみ — 実装コードはまだ触らない）',
+        '4. Cloudflare Pages の POST /api/cardinal に action: product_propose を送る（x-ops-secret は GitHub/Cloudflare secret と同じ OPS_API_SECRET）',
+        '   例: { "action":"product_propose", "title":"...", "summary":"...", "marketSignal":"...", "marketingAngle":"...", "acceptance":["..."] }',
+        '5. 実装 PR は **作らない**（Guardian+Executor レビュー待ち）',
+        '',
+        '現在の提案:',
+        '```json',
+        propJson,
+        '```',
+      ].join('\n'),
+      acceptance: [
+        'product-backlog.md 更新',
+        'product_propose API 成功',
+        'プロダクトコード変更なし',
+      ],
+    };
+  }
+  if (step === 'guardian_review') {
+    return {
+      kind: 'product_review',
+      severity: 'warning',
+      title: `Cardinal product: Guardian レビュー — ${proposal?.title || ''}`,
+      summary: '提案のリスク・マーケ整合を判定し product_review を POST',
+      message: [
+        'Guardian として製品提案をレビューしてください。',
+        productGateRulesBlock('guardian'),
+        '',
+        '判定後、必ず API を呼ぶ:',
+        '{ "action":"product_review", "role":"guardian", "proposalId":"...", "verdict":"approve|reject", "notes":"..." }',
+        '',
+        '```json',
+        propJson,
+        '```',
+      ].join('\n'),
+      acceptance: ['approve または reject', 'product_review API 実行', '大規模コード変更なし'],
+    };
+  }
+  if (step === 'executor_review') {
+    return {
+      kind: 'product_review',
+      severity: 'warning',
+      title: `Cardinal product: Executor レビュー — ${proposal?.title || ''}`,
+      summary: '実装可能性・スコープを判定し product_review を POST',
+      message: [
+        'Executor として製品提案をレビューしてください（実装はまだしない）。',
+        productGateRulesBlock('executor'),
+        '',
+        'Guardian が approve 済みの場合のみ implement フェーズへ進める。',
+        '{ "action":"product_review", "role":"executor", "proposalId":"...", "verdict":"approve|reject", "notes":"..." }',
+        '',
+        '```json',
+        propJson,
+        '```',
+      ].join('\n'),
+      acceptance: ['approve または reject', 'product_review API 実行', '実装 PR なし'],
+    };
+  }
+  if (step === 'implement') {
+    return {
+      kind: 'product_implement',
+      severity: 'info',
+      title: `Cardinal product: 実装 — ${proposal?.title || ''}`,
+      summary: '双方 approve 済み — 最小スコープで draft PR',
+      message: [
+        'Executor として **双方 approve 済み** の提案を実装してください。',
+        '- 受け入れ条件を満たす最小 diff',
+        '- draft PR（cursor/*-a58c）',
+        '- マージは auto-merge に任せる',
+        '- 完了後 action: product_implemented { proposalId, branch } を POST',
+        '',
+        '```json',
+        propJson,
+        '```',
+      ].join('\n'),
+      acceptance: ['draft PR', 'canary を壊さない', 'product_implemented 報告'],
+    };
+  }
+  return null;
 }
 
 async function postDiscord(env, body, embed) {
@@ -735,7 +857,6 @@ export async function onRequestPost(context) {
     });
   }
 
-  // Explicit follow-up for stuck incidents
   if (action === 'followup') {
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
     const probes = await runProbes(base);
@@ -776,8 +897,125 @@ export async function onRequestPost(context) {
     });
   }
 
+  if (action === 'product_status') {
+    const gate = await readProductGate(context.caches);
+    return j({
+      ok: true,
+      action: 'product_status',
+      ...summarizeProductGate(gate),
+      policy: 'docs/cardinal-product-gate.md',
+    });
+  }
+
+  if (action === 'product_propose') {
+    const result = await addProposal(context.caches, {
+      title: body.title,
+      summary: body.summary,
+      marketSignal: body.marketSignal,
+      marketingAngle: body.marketingAngle,
+      acceptance: body.acceptance,
+      scoutSource: body.source || body.scoutSource || 'api',
+    });
+    await postDiscord(env, body, {
+      title: `製品提案: ${result.proposal.title}`,
+      color: 0x5865f2,
+      fields: [
+        { name: 'ID', value: result.proposal.id, inline: true },
+        { name: '次', value: 'Guardian レビュー待ち', inline: true },
+        { name: '要約', value: result.proposal.summary.slice(0, 900) || '—', inline: false },
+      ],
+      timestamp: new Date().toISOString(),
+      footer: { text: 'QuickOrder Cardinal · product gate' },
+    }).catch(() => {});
+    return j({
+      ok: true,
+      action: 'product_propose',
+      proposal: result.proposal,
+      summary: summarizeProductGate(result.gate),
+    });
+  }
+
+  if (action === 'product_review') {
+    const review = await applyProductReview(context.caches, {
+      proposalId: body.proposalId || body.id,
+      role: body.role,
+      verdict: body.verdict,
+      notes: body.notes || body.message,
+    });
+    if (!review.ok) return j({ ok: false, action: 'product_review', ...review }, 400);
+    const p = review.proposal;
+    await postDiscord(env, body, {
+      title: `製品レビュー (${body.role}): ${p.title} → ${body.role === 'guardian' ? p.guardianVerdict : p.executorVerdict}`,
+      color: (body.verdict === 'reject' || String(body.verdict).includes('reject')) ? 0xed4245 : 0x57f287,
+      fields: [
+        { name: '提案', value: p.id, inline: true },
+        { name: 'status', value: p.status, inline: true },
+        { name: 'notes', value: String(body.notes || '—').slice(0, 800), inline: false },
+      ],
+      timestamp: new Date().toISOString(),
+      footer: { text: 'QuickOrder Cardinal · product gate' },
+    }).catch(() => {});
+    return j({
+      ok: true,
+      action: 'product_review',
+      proposal: p,
+      summary: summarizeProductGate(review.gate),
+    });
+  }
+
+  if (action === 'product_implemented') {
+    const done = await markProposalImplemented(context.caches, {
+      proposalId: body.proposalId || body.id,
+      branch: body.branch,
+    });
+    if (!done.ok) return j({ ok: false, action: 'product_implemented', ...done }, 400);
+    return j({
+      ok: true,
+      action: 'product_implemented',
+      proposal: done.proposal,
+      summary: summarizeProductGate(done.gate),
+    });
+  }
+
+  if (action === 'product_cycle') {
+    const force = !!body.force;
+    const forceScout = !!body.forceScout;
+    const gate = await readProductGate(context.caches);
+    const plan = planProductCycle(gate, { forceScout: forceScout || force });
+    if (plan.step === 'idle') {
+      return j({
+        ok: true,
+        action: 'product_cycle',
+        step: 'idle',
+        reason: plan.reason,
+        summary: summarizeProductGate(gate),
+        dispatched: false,
+      });
+    }
+
+    let role = 'executor';
+    if (plan.step === 'guardian_review') role = 'guardian';
+    const task = productTaskPrompt(role, plan.step, plan.proposal);
+    if (!task) {
+      return j({ ok: false, action: 'product_cycle', error: 'no_task', step: plan.step }, 500);
+    }
+    if (force) task.force = true;
+    const dispatch = await dispatchRole(env, role, task, body, context.caches);
+    const saved = await readProductGate(context.caches);
+    return j({
+      ok: true,
+      action: 'product_cycle',
+      step: plan.step,
+      proposal: plan.proposal ? { id: plan.proposal.id, title: plan.proposal.title, status: plan.proposal.status } : null,
+      dispatch,
+      dispatched: !!dispatch?.launched,
+      summary: summarizeProductGate(saved),
+    });
+  }
+
   {
     const ledger = await readAgentLedger(context.caches).catch(() => defaultLedgerSafe());
+    const productGate = await readProductGate(context.caches).catch(() => null);
     return j({
       ok: true,
       action: 'status',
@@ -797,6 +1035,7 @@ export async function onRequestPost(context) {
           'auto_merge',
           'canary',
           'rollback',
+          'product_gate',
         ],
         humanOwns: [
           'secrets_bootstrap',
@@ -813,6 +1052,7 @@ export async function onRequestPost(context) {
         executorWebhook: !!(env?.CURSOR_EXECUTOR_WEBHOOK_URL || env?.CURSOR_AUTOMATION_WEBHOOK_URL),
       },
       ledger: ledger ? { lastByKind: ledger.lastByKind, recent: (ledger.launches || []).slice(0, 8) } : null,
+      productGate: productGate ? summarizeProductGate(productGate) : null,
     });
   }
 }
@@ -826,7 +1066,7 @@ export async function onRequestGet(context) {
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    actions: ['status', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup'],
+    actions: ['status', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
     autonomy: { targetPct: 90, policy: 'docs/autonomy.md' },
     hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }. See docs/autonomy.md.',
   }, 200, context.request);

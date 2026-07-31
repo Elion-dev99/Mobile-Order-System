@@ -55,6 +55,7 @@ export {
   buildDailyDigest,
   maybeSendDailyDigest,
   isQuietHours,
+  isCapabilityOn,
 } from './cardinal-features.js';
 
 export const ROLES = {

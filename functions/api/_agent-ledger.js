@@ -5,6 +5,16 @@
 const CACHE_URL = 'https://mobile-order-system.pages.dev/__cardinal_agent_ledger_v1';
 const MAX_LAUNCHES = 40;
 
+function resolveCache(cachesObj) {
+  try {
+    if (typeof caches !== 'undefined' && caches?.default) return caches.default;
+  } catch (_) {}
+  try {
+    if (cachesObj?.default) return cachesObj.default;
+  } catch (_) {}
+  return null;
+}
+
 export function defaultLedger() {
   return {
     launches: [],
@@ -25,7 +35,7 @@ export function normalizeLedger(raw = {}) {
 
 export async function readAgentLedger(cachesObj) {
   try {
-    const cache = cachesObj?.default;
+    const cache = resolveCache(cachesObj);
     if (!cache) return defaultLedger();
     const hit = await cache.match(CACHE_URL);
     if (!hit) return defaultLedger();
@@ -41,7 +51,7 @@ export async function writeAgentLedger(cachesObj, next) {
     updatedAt: Date.now(),
   });
   try {
-    const cache = cachesObj?.default;
+    const cache = resolveCache(cachesObj);
     if (!cache) return normalized;
     await cache.put(
       CACHE_URL,

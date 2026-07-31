@@ -81,6 +81,7 @@ GitHub 仕様で、`GITHUB_TOKEN` による merge の `push` は他ワークフ�
 | Deploy 後表示/API異常 | ロールバック + Executor | deploy canary |
 | `cursor/*` PR | Guardian → auto-merge | workflows |
 | 予防保守 | Executor steward | cron |
+| 製品・マーケ | スカウト → 双方向レビュー → 実装 | `product_cycle` / `cardinal-product-cycle.yml` |
 | Ops ヘルス連続失敗 | Executor | AutoHeal |
 
 ## 人間だけがやること（縮小した ~10%）
@@ -107,6 +108,7 @@ Cardinal タブの **自律 90%** パネル。API `action: status` の `autonomy
 ## 関連
 
 - `docs/cardinal.md`
+- `docs/cardinal-product-gate.md`
 - `scripts/canary-probe.mjs`
 - `.github/workflows/cardinal-auto-merge.yml`
 - `.github/workflows/deploy-cloudflare-pages.yml`
@@ -115,4 +117,5 @@ Cardinal タブの **自律 90%** パネル。API `action: status` の `autonomy
 - `.github/workflows/cardinal-ci-dispatch.yml`
 - `.github/workflows/cardinal-pr-guardian.yml`
 - `.github/workflows/cardinal-outage-drill.yml` — 鯖落ち模擬（エージェント起動なし）
+- `.github/workflows/cardinal-product-cycle.yml` — 市場スカウト・製品ゲート
 - `scripts/outage-drill.sh`

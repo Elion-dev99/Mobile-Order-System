@@ -1,0 +1,51 @@
+name: Cardinal product gate cycle
+
+# Market scout → Guardian review → Executor review → implement (dual approve)
+# See docs/cardinal-product-gate.md
+
+on:
+  schedule:
+    # Monday 03:30 UTC ≈ 12:30 JST — after weekly Guardian steward
+    - cron: '30 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force dispatch (bypass scout cooldown where API allows)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+      force_scout:
+        description: 'Force new scout even if waiting'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+jobs:
+  product-cycle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run product gate cycle
+        env:
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
+          FORCE_SCOUT: ${{ github.event.inputs.force_scout || 'false' }}
+        run: |
+          if [ -z "$OPS_API_SECRET" ]; then
+            echo "Missing GitHub secret OPS_API_SECRET"
+            exit 1
+          fi
+          FORCE_JSON=$( [ "$FORCE" = "true" ] && echo true || echo false )
+          SCOUT_JSON=$( [ "$FORCE_SCOUT" = "true" ] && echo true || echo false )
+          BODY=$(printf '%s' "{\"action\":\"product_cycle\",\"force\":${FORCE_JSON},\"forceScout\":${SCOUT_JSON},\"source\":\"github-product-cycle\",\"baseUrl\":\"https://mobile-order-system.pages.dev\"}")
+          echo "POST /api/cardinal product_cycle"
+          RESP=$(curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
+            -H 'content-type: application/json' \
+            -H "x-ops-secret: $OPS_API_SECRET" \
+            -d "$BODY")
+          echo "$RESP" | tee /tmp/cardinal-product-cycle.json
+          echo "$RESP" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || {
+            echo "product_cycle failed"
+            exit 1
+          }
