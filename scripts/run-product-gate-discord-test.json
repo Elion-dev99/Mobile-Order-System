@@ -1,0 +1,5 @@
+{
+  "mode": "propose_and_dual_review",
+  "runId": 1,
+  "note": "Discord notification smoke test — bump runId to re-run"
+}
