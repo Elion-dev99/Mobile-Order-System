@@ -114,3 +114,5 @@ Cardinal タブの **自律 90%** パネル。API `action: status` の `autonomy
 - `.github/workflows/cardinal-cron.yml`
 - `.github/workflows/cardinal-ci-dispatch.yml`
 - `.github/workflows/cardinal-pr-guardian.yml`
+- `.github/workflows/cardinal-outage-drill.yml` — 鯖落ち模擬（エージェント起動なし）
+- `scripts/outage-drill.sh`
