@@ -159,7 +159,9 @@ export async function runAutoHealCycle({ escalateAfterFails = 2, escalateCooldow
       }).catch((e) => ({ ok: false, error: String(e?.message || e) }));
     }
     const cooled = Date.now() - getEscalatedAt() > escalateCooldownMs;
-    if (streak >= escalateAfterFails && cooled) {
+    // Cardinal cycle owns Executor dispatch when Ops is open; still gate by capability
+    if (streak >= escalateAfterFails && cooled
+        && isCapabilityOn('dispatchOnOutage', loadCardinalPrefs())) {
       escalated = await escalateToCursor({
         status: health.status,
         severity: health.status === 'down' ? 'critical' : 'warning',

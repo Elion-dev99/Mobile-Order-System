@@ -24,10 +24,17 @@ export function captureGrowthAttribution(search = location.search) {
   if (!hit.ref && !hit.utmSource && !hit.utmMedium && !hit.utmCampaign) {
     return loadGrowthAttribution();
   }
+  const prev = loadGrowthAttribution();
+  // First-touch for ref/UTMs: never wipe a prior referral with a later UTM-only hit
   const next = {
-    ...hit,
-    landedAt: Date.now(),
+    ref: hit.ref || prev.ref || '',
+    utmSource: hit.utmSource || prev.utmSource || '',
+    utmMedium: hit.utmMedium || prev.utmMedium || '',
+    utmCampaign: hit.utmCampaign || prev.utmCampaign || '',
+    landedAt: prev.landedAt || Date.now(),
+    lastTouchAt: Date.now(),
     path: location.pathname + location.search,
+    firstPath: prev.firstPath || (location.pathname + location.search),
   };
   try { localStorage.setItem(ATTR_KEY, JSON.stringify(next)); } catch (_) {}
   return next;
@@ -153,17 +160,21 @@ export function mountStatusGrowthCta({ locale = 'ja' } = {}) {
        <button type="button" class="qo-growth-share" id="qoStatusShare">デモを共有</button>`;
   host.appendChild(box);
   document.getElementById('qoStatusShare')?.addEventListener('click', async () => {
-    recordReferralShare();
     try {
       if (navigator.share) {
         await navigator.share({ title: kit.title, text: kit.body, url: kit.demo });
+        recordReferralShare();
       } else {
         await navigator.clipboard.writeText(kit.body);
+        recordReferralShare();
         box.querySelector('p').textContent = locale === 'en' ? 'Copied share text' : '投稿文をコピーしました';
       }
-    } catch (_) {
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
       try {
         await navigator.clipboard.writeText(kit.body);
+        recordReferralShare();
+        box.querySelector('p').textContent = locale === 'en' ? 'Copied share text' : '投稿文をコピーしました';
       } catch (__) {}
     }
   });
@@ -172,7 +183,6 @@ export function mountStatusGrowthCta({ locale = 'ja' } = {}) {
 export function leadAttributionFields() {
   const a = loadGrowthAttribution();
   return {
-    source: a.utmSource ? `lp_${a.utmSource}` : (a.ref ? 'lp_referral' : 'lp_organic'),
     referralShopId: a.ref || '',
     utmSource: a.utmSource || '',
     utmMedium: a.utmMedium || '',

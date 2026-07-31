@@ -81,19 +81,20 @@ function persistLocal(state) {
   return cache;
 }
 
-/** Prefer ON if either source is ON; else newer updatedAt wins. */
+/** Prefer newer updatedAt. If equal age, ON wins (safer during outages). */
 export function mergeMaintenanceStates(a, b) {
   const x = a ? normalize(a) : null;
   const y = b ? normalize(b) : null;
   if (!x && !y) return defaultState();
   if (!x) return y;
   if (!y) return x;
+  const xa = Number(x.updatedAt) || 0;
+  const ya = Number(y.updatedAt) || 0;
+  if (xa !== ya) return xa > ya ? x : y;
   if (x.maintenance !== y.maintenance) {
-    // ON wins (safer during outages); prefer cardinal auto message if that side is on
-    const on = x.maintenance ? x : y;
-    return on;
+    return x.maintenance ? x : y;
   }
-  return (x.updatedAt || 0) >= (y.updatedAt || 0) ? x : y;
+  return x;
 }
 
 export function getMaintenance() {

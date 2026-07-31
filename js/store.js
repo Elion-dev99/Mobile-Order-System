@@ -66,22 +66,27 @@ const StorePage = {
     this._growthKitBound = true;
     document.getElementById('storeCopyShareKit')?.addEventListener('click', async () => {
       const kit = shareKitText({ shopName: getShop().name, locale: 'ja' });
-      recordReferralShare(getShopId());
-      this.mountGrowthKit();
       const st = document.getElementById('storeGrowthStatus');
       try {
         if (navigator.share) {
           await navigator.share({ title: kit.title, text: kit.body, url: kit.demo });
+          recordReferralShare(getShopId());
+          this.mountGrowthKit();
           if (st) { st.hidden = false; st.textContent = '共有シートを開きました'; }
         } else {
           await navigator.clipboard.writeText(kit.body);
+          recordReferralShare(getShopId());
+          this.mountGrowthKit();
           if (st) { st.hidden = false; st.textContent = '投稿文をコピーしました（X / 店舗LINEに貼れます）'; }
         }
-      } catch (_) {
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
         try {
           await navigator.clipboard.writeText(kit.body);
+          recordReferralShare(getShopId());
+          this.mountGrowthKit();
           if (st) { st.hidden = false; st.textContent = '投稿文をコピーしました'; }
-        } catch (e) {
+        } catch (err) {
           if (st) { st.hidden = false; st.textContent = kit.body; }
         }
       }

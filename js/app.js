@@ -355,7 +355,7 @@ const App = {
     const picks = curateTonightPicks({
       cart: this.cart,
       favorites: this.favorites,
-      partySize: getPartySize() || this.splitPeople || 0,
+      partySize: getPartySize() || 0,
       limit: 6,
     });
     if (title) title.textContent = curatorTitle(this.locale, hourBucket());
@@ -410,7 +410,7 @@ const App = {
     host.hidden = false;
     const copy = tablePulseCopy({
       waitMin: this.waitMinutes,
-      partySize: getPartySize() || this.splitPeople || 0,
+      partySize: getPartySize() || 0,
       channel: this.channel,
       locale: this.locale,
     });
@@ -1690,7 +1690,7 @@ const App = {
       btn.disabled = true;
       btn.textContent = isDemoMode() ? 'テスト注文を送信中...' : '注文を送信中...';
     }
-    const party = getPartySize() || this.splitPeople || 0;
+    const party = getPartySize() || 0;
     this.pointsRedeem = Math.max(0, Number(document.getElementById('pointsRedeem')?.value) || 0);
     const result = await placeGuestOrder({
       cart: this.cart,

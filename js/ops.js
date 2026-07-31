@@ -60,6 +60,7 @@ import {
   subscribeMaintenance,
   setMaintenanceMode,
   getMaintenance,
+  syncAutoMaintenance,
   DEFAULT_MESSAGE,
   saveMaintenanceSchedule,
   runOutageMaintenanceDrill,
@@ -250,6 +251,14 @@ const OpsPage = {
       digestHourJst: Number(document.getElementById('opsCardinalDigestHour')?.value) || 9,
       anomalyZeroOrderHours: Number(document.getElementById('opsCardinalZeroHours')?.value) || 3,
     });
+    // Turning auto-maintenance off should clear an existing Cardinal lock immediately
+    if (capabilities.autoMaintenance === false) {
+      const cur = getMaintenance();
+      const source = cur?.source || '';
+      if (cur?.maintenance && (source === 'cardinal' || source === 'auto')) {
+        syncAutoMaintenance({ shouldMaintain: false, reason: 'capability_off' }).catch(() => {});
+      }
+    }
     const st = document.getElementById('opsCardinalPrefsStatus');
     if (st) { st.hidden = false; st.textContent = 'Cardinal 設定を保存しました'; }
     this.cardinal = getCardinalSnapshot();
