@@ -14,3 +14,6 @@
 | 8 | 共有キャンセルでも紹介クレジット加算 | 成功後のみ `recordReferralShare` |
 | 9 | 席パルスが常に「1名」 | `splitPeople` デフォルトを人数表示に使わない |
 | 10 | 注文の `partySize` が未設定時に `splitPeople`（既定1）へフォールバック | `getPartySize() \|\| 0` に統一 |
+| 11 | `admin.html` の `style.css` キャッシュバストが他ページと不一致（将来の更新漏れリスク） | `?v=harden1` に統一 |
+| 12 | `source === 'auto'` が到達不能なデッドコード（normalize は cardinal/schedule/manual のみ返す） | 分岐を削除（`js/cardinal.js` / `js/ops.js`） |
+| 13 | canary が共有 `css/style.css` と `store.js` を監視していない | `scripts/canary-probe.mjs` に追加 |

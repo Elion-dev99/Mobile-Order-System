@@ -2,7 +2,8 @@
  * Cloudflare Pages Function — incident intake + auto-dispatch Cursor Cloud Agent.
  *
  * Env (Cloudflare Pages secrets):
- * - DISCORD_WEBHOOK_URL (optional; also accepts body.webhook)
+ * - DISCORD_WEBHOOK_URL (optional; server secret only — client body.webhook
+ *   is intentionally ignored here to avoid forwarding arbitrary webhooks)
  * - CURSOR_API_KEY — Cloud Agents API key (Dashboard → API Keys)
  * - CURSOR_REPO — default https://github.com/Elion-dev99/Mobile-Order-System
  * - CURSOR_AUTOMATION_WEBHOOK_URL — optional Automations webhook URL
