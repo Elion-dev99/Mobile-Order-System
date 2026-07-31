@@ -26,6 +26,7 @@ captureGrowthAttribution();
   const demoLink = document.getElementById('lpHeroDemo');
   if (demoLink) demoLink.href = growthDemoUrl({ ref: growthAttr.referralShopId || 'lp' });
 }
+
 function renderScarcity() {
   const el = document.getElementById('lpScarcity');
   if (!el) return;
