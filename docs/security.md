@@ -12,7 +12,7 @@
 | Store / guest shop patch | Floor-tablet keys (profile, `isOpen`, stock, coupons, …) without Auth. Plan/billing/create/delete still signed-in |
 | Orders | Guest **create** OK; kitchen **status-only** update OK; delete = signed-in |
 | Leads / surveys read | Signed-in only (LP may still **create** leads) |
-| Discord | Prefer Cloudflare `DISCORD_WEBHOOK_URL`; client webhook needs Ops secret |
+| Discord | Prefer Cloudflare `DISCORD_WEBHOOK_URL`; client webhook needs Ops secret; **運用スラッシュ**は `docs/discord-ops-commands.md` |
 | `platform/config` | Public **read** (maintenance flag). **Write** = Firebase Auth (Ops). Guest creates (orders/leads/requests/…) denied while `maintenance == true` |
 | `GET /api/maintenance` | Public edge copy of maintenance (Cache API). Cardinal tick / Ops POST with `OPS_API_SECRET` can set it when Firestore is down |
 
@@ -45,6 +45,8 @@ Staff sessions persist in the browser (`browserLocalPersistence`). Ops「鍵」�
 ```
 OPS_API_SECRET=<long random string>
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DISCORD_PUBLIC_KEY=...                 # Discord Application Public Key（/api/discord 署名検証）
+DISCORD_OPS_USER_IDS=123456789,...      # スラッシュコマンド実行を許可する Discord ユーザー ID
 CURSOR_API_KEY=...
 ```
 
