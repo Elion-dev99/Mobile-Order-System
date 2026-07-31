@@ -20,6 +20,8 @@ permissions:
   contents: write
   pull-requests: write
   checks: read
+  actions: read
+  statuses: read
 
 concurrency:
   group: cardinal-auto-merge

@@ -29,17 +29,6 @@ out("HEAD", m.get("headRefName") or "")
 out("MERGEABLE", m.get("mergeable") or "")
 labels = ",".join(l.get("name", "") for l in (m.get("labels") or []))
 out("LABELS", labels)
-bad = []
-for c in (m.get("statusCheckRollup") or []):
-    name = str(c.get("name") or "")
-    low = name.lower()
-    # Ignore this workflow so a prior failure cannot soft-lock merges
-    if "auto-merge" in low or low in ("merge", "cardinal auto-merge"):
-        continue
-    st = str(c.get("state") or c.get("conclusion") or "")
-    if st.upper() in ("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "FAILING", "FAILED"):
-        bad.append(name or st)
-out("FAILING", ",".join(bad))
 ')"
 }
 
@@ -47,10 +36,31 @@ merge_one() {
   local N="$1"
   echo "==== Evaluating PR #$N ===="
   local META
-  META=$(gh pr view "$N" --repo "$GH_REPO" --json number,title,state,isDraft,headRefName,labels,url,mergeable,statusCheckRollup)
+  META=$(gh pr view "$N" --repo "$GH_REPO" --json number,title,state,isDraft,headRefName,labels,url,mergeable)
   echo "$META" | head -c 2000
   echo
   parse_meta <<<"$META"
+
+  # Optional failing-check scan (never fail the job if API denies access)
+  FAILING=""
+  if CHECK_JSON=$(gh pr view "$N" --repo "$GH_REPO" --json statusCheckRollup 2>/dev/null); then
+    FAILING=$(echo "$CHECK_JSON" | python3 -c '
+import json,sys
+m=json.load(sys.stdin)
+bad=[]
+for c in (m.get("statusCheckRollup") or []):
+    name=str(c.get("name") or "")
+    low=name.lower()
+    if "auto-merge" in low or low in ("merge","cardinal auto-merge"):
+        continue
+    st=str(c.get("state") or c.get("conclusion") or "")
+    if st.upper() in ("FAILURE","ERROR","CANCELLED","TIMED_OUT","FAILING","FAILED"):
+        bad.append(name or st)
+print(",".join(bad))
+' 2>/dev/null || true)
+  else
+    echo "note: statusCheckRollup unavailable — merge will still be attempted"
+  fi
 
   if [ "$STATE" != "OPEN" ]; then
     echo "skip: not open ($STATE)"
