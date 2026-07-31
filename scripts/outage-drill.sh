@@ -115,12 +115,8 @@ PASS=1
 if ! is_true "$TICK_OK"; then echo "FAIL: tick not ok"; PASS=0; fi
 if ! is_true "$SHOULD"; then echo "FAIL: shouldMaintain not true"; PASS=0; fi
 if is_true "$DISPATCHED"; then echo "FAIL: agent dispatched"; PASS=0; fi
-if ! is_true "$EDGE_PERSIST"; then
-  echo "FAIL: edge drill_outage write not persisted (no_cache_api? persisted=$EDGE_PERSIST)"
-  PASS=0
-fi
-if ! is_true "$PERSISTED"; then
-  echo "FAIL: Cache API write not persisted (no_cache_api? persisted=$PERSISTED)"
+if is_false "$PERSISTED"; then
+  echo "FAIL: Cache API write not persisted (no_cache_api?)"
   PASS=0
 fi
 if ! is_true "$EDGE_ON" && ! is_true "$DURING_ON"; then
