@@ -13,3 +13,4 @@
 | 7 | AutoHeal + Cardinal 二重ディスパッチ | heal 済みなら cycle 側スキップ／Executor 偽心拍停止 |
 | 8 | 共有キャンセルでも紹介クレジット加算 | 成功後のみ `recordReferralShare` |
 | 9 | 席パルスが常に「1名」 | `splitPeople` デフォルトを人数表示に使わない |
+| 10 | 注文の `partySize` が未設定時に `splitPeople`（既定1）へフォールバック | `getPartySize() \|\| 0` に統一 |

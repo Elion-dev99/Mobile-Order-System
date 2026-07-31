@@ -1690,7 +1690,7 @@ const App = {
       btn.disabled = true;
       btn.textContent = isDemoMode() ? 'テスト注文を送信中...' : '注文を送信中...';
     }
-    const party = getPartySize() || this.splitPeople || 0;
+    const party = getPartySize() || 0;
     this.pointsRedeem = Math.max(0, Number(document.getElementById('pointsRedeem')?.value) || 0);
     const result = await placeGuestOrder({
       cart: this.cart,
