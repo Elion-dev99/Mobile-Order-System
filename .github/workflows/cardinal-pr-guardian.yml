@@ -1,10 +1,14 @@
 name: Cardinal PR → Guardian review
 
-# When Cursor / Cardinal opens a PR, wake Guardian to review (no human ping).
+# When Cursor / Cardinal opens or updates a PR, wake Guardian to review (no human ping).
+# `synchronize` is included so a PR that gets pushed to (e.g. conflict-resolved,
+# fixup commits) after being opened is re-reviewed, not left stale forever.
+# functions/api/cardinal.js applies a 20min `pr_review` cooldown, so repeated
+# pushes to the same/other PRs in a short window won't spam Guardian dispatches.
 
 on:
   pull_request:
-    types: [opened, ready_for_review, reopened]
+    types: [opened, synchronize, ready_for_review, reopened]
   workflow_dispatch:
     inputs:
       pr_url:
