@@ -1,6 +1,9 @@
 /**
  * Durable-enough maintenance flag for Pages Functions via Cache API.
  * Survives Firestore outages so Cardinal can still flip the kill switch.
+ *
+ * NOTE: Pages Functions expose the Cache API as the global `caches`, not
+ * `context.caches` (that property is undefined → writes were silently no-ops).
  */
 
 import {
@@ -12,6 +15,17 @@ import {
 
 const CACHE_URL = 'https://mobile-order-system.pages.dev/__platform_maintenance_v1';
 const DEFAULT_MESSAGE = 'システム障害を検知したため一時停止中です。ご注文はレジにてお願いいたします。';
+
+/** Resolve Cache API storage (global first, then context.caches). */
+function resolveCache(cachesObj) {
+  try {
+    if (typeof caches !== 'undefined' && caches?.default) return caches.default;
+  } catch (_) {}
+  try {
+    if (cachesObj?.default) return cachesObj.default;
+  } catch (_) {}
+  return null;
+}
 
 export function defaultMaintenanceState() {
   return {
@@ -65,7 +79,7 @@ export function effectiveMaintenance(raw, nowMs = Date.now()) {
 
 export async function readMaintenanceState(cachesObj) {
   try {
-    const cache = cachesObj?.default;
+    const cache = resolveCache(cachesObj);
     if (!cache) return defaultMaintenanceState();
     const hit = await cache.match(CACHE_URL);
     if (!hit) return defaultMaintenanceState();
@@ -84,17 +98,19 @@ export async function writeMaintenanceState(cachesObj, partial) {
     schedule: partial.schedule != null ? partial.schedule : prev.schedule,
     updatedAt: Date.now(),
   });
-  const cache = cachesObj?.default;
-  if (cache) {
-    const res = new Response(JSON.stringify(next), {
-      headers: {
-        'content-type': 'application/json; charset=utf-8',
-        'cache-control': 'public, max-age=604800',
-      },
-    });
-    await cache.put(CACHE_URL, res);
+  const cache = resolveCache(cachesObj);
+  if (!cache) {
+    // Surface misconfiguration — callers see persisted:false
+    return { ...next, persisted: false, persistError: 'no_cache_api' };
   }
-  return next;
+  const res = new Response(JSON.stringify(next), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=604800',
+    },
+  });
+  await cache.put(CACHE_URL, res);
+  return { ...next, persisted: true };
 }
 
 /**
