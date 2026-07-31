@@ -1,6 +1,6 @@
 name: Cardinal product gate test (Discord)
 
-# Manual: post a sample product_propose (+ optional reviews) to exercise Discord audit.
+# Manual dispatch or push scripts/run-product-gate-discord-test.json on main to POST sample proposals.
 on:
   workflow_dispatch:
     inputs:
@@ -12,27 +12,36 @@ on:
         options:
           - propose_only
           - propose_and_dual_review
+  push:
+    branches: [main]
+    paths:
+      - scripts/run-product-gate-discord-test.json
 
 jobs:
   test-notify:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Product gate test POST
         env:
           OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
-          MODE: ${{ github.event.inputs.mode || 'propose_only' }}
+          INPUT_MODE: ${{ github.event.inputs.mode || '' }}
         run: |
           set -euo pipefail
           if [ -z "$OPS_API_SECRET" ]; then
             echo "Missing OPS_API_SECRET"
             exit 1
           fi
+          MODE="$INPUT_MODE"
+          if [ -z "$MODE" ] && [ -f scripts/run-product-gate-discord-test.json ]; then
+            MODE=$(python3 -c "import json; print(json.load(open('scripts/run-product-gate-discord-test.json')).get('mode','propose_and_dual_review'))")
+          fi
+          MODE="${MODE:-propose_and_dual_review}"
           API='https://mobile-order-system.pages.dev/api/cardinal'
           STAMP=$(date -u +%Y-%m-%dT%H:%MZ)
           post() {
             local BODY="$1"
-            echo "POST: $BODY" | head -c 400
-            echo
+            echo "POST: $(echo "$BODY" | head -c 320)..."
             RESP=$(curl -sS -X POST "$API" \
               -H 'content-type: application/json' \
               -H "x-ops-secret: $OPS_API_SECRET" \
@@ -40,15 +49,12 @@ jobs:
             echo "$RESP" | tee /tmp/pg-test.json
             echo "$RESP" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || exit 1
           }
-          PROPOSE=$(cat <<EOF
-          {"action":"product_propose","source":"github-product-gate-test","title":"[テスト] LP紹介ヒーロー文言の微調整","summary":"客席透かし→LPの導線はあるが、ヒーロー1行が汎用のまま。紹介(ref)経由の期待値に合わせたコピーに差し替え、転換計測をしやすくする。","marketSignal":"docs/growth-zero-cash.md の PLG ループ。広告費ゼロで PR デプロイのみ。","marketingAngle":"紹介店舗名/ref をヒーローに反映（デモ店は default）。X/Note 用の短文も product-backlog に残す。","acceptance":["?ref=demo で LP バナー/ヒーローが変わる","canary-probe 通過","有料広告・有料API 追加なし"]}
-          EOF
-          )
+          PROPOSE='{"action":"product_propose","source":"github-product-gate-test","title":"[テスト] LP紹介ヒーロー文言の微調整","summary":"客席透かし→LPの導線はあるが、ヒーロー1行が汎用のまま。紹介(ref)経由の期待値に合わせたコピーに差し替え、転換計測をしやすくする。","marketSignal":"docs/growth-zero-cash.md の PLG ループ。広告費ゼロで PR デプロイのみ。","marketingAngle":"紹介店舗名/ref をヒーローに反映（デモ店は default）。X/Note 用の短文も product-backlog に残す。","acceptance":["?ref=demo で LP バナー/ヒーローが変わる","canary-probe 通過","有料広告・有料API 追加なし"]}'
           post "$PROPOSE"
           PID=$(python3 -c "import json; print(json.load(open('/tmp/pg-test.json'))['proposal']['id'])")
           echo "proposalId=$PID"
           if [ "$MODE" = "propose_and_dual_review" ]; then
             post "{\"action\":\"product_review\",\"role\":\"guardian\",\"proposalId\":\"$PID\",\"verdict\":\"approve\",\"notes\":\"[テスト] 客席影響小・スコープ1ファイル程度。Discord通知テスト用 approve。\"}"
-            post "{\"action\":\"product_review\",\"role\":\"executor\",\"proposalId\":\"$PID\",\"verdict\":\"approve\",\"notes\":\"[テスト] 工数小・canary リスク低。通知確認のため approve（実装はしない）。\"}"
+            post "{\"action\":\"product_review\",\"role\":\"executor\",\"proposalId\":\"$PID\",\"verdict\":\"approve\",\"notes\":\"[テスト] 工数小・canary リスク低。通知確認のため approve（実装 PR は出さない）。\"}"
           fi
-          echo "Done — check Discord for product gate embeds ($STAMP)."
+          echo "Done — check Discord for product gate embeds ($STAMP mode=$MODE)."
