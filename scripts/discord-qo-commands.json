@@ -1,0 +1,63 @@
+[
+  {
+    "name": "qo",
+    "description": "QuickOrder 運用（メンテ・停止・復旧）",
+    "options": [
+      {
+        "name": "maint",
+        "description": "メンテナンス",
+        "type": 2,
+        "options": [
+          {
+            "name": "start",
+            "description": "メンテナンス開始（客席停止）",
+            "type": 1,
+            "options": [
+              {
+                "name": "message",
+                "description": "客席に表示する案内文",
+                "type": 3,
+                "required": false
+              }
+            ]
+          },
+          {
+            "name": "stop",
+            "description": "メンテナンス解除",
+            "type": 1
+          },
+          {
+            "name": "status",
+            "description": "メンテ状態とプローブ",
+            "type": 1
+          }
+        ]
+      },
+      {
+        "name": "server",
+        "description": "サーバー緊急停止 / 復旧",
+        "type": 2,
+        "options": [
+          {
+            "name": "stop",
+            "description": "緊急停止（メンテ ON）",
+            "type": 1,
+            "options": [
+              {
+                "name": "message",
+                "description": "案内文",
+                "type": 3,
+                "required": false
+              }
+            ]
+          },
+          {
+            "name": "recover",
+            "description": "復旧（メンテ OFF）",
+            "type": 1
+          }
+        ]
+      }
+    ]
+  }
+]
