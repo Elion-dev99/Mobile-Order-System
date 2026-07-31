@@ -252,7 +252,7 @@ export async function runCardinalCycle({
     try {
       const { syncAutoMaintenance, getMaintenance } = await import('./maintenance.js');
       const cur = getMaintenance();
-      if (cur?.maintenance && (cur.source === 'cardinal' || cur.source === 'auto')) {
+      if (cur?.maintenance && cur.source === 'cardinal') {
         await syncAutoMaintenance({ shouldMaintain: false, reason: 'capability_off' });
       }
     } catch (_) {}

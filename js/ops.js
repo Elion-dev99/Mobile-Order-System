@@ -255,7 +255,7 @@ const OpsPage = {
     if (capabilities.autoMaintenance === false) {
       const cur = getMaintenance();
       const source = cur?.source || '';
-      if (cur?.maintenance && (source === 'cardinal' || source === 'auto')) {
+      if (cur?.maintenance && source === 'cardinal') {
         syncAutoMaintenance({ shouldMaintain: false, reason: 'capability_off' }).catch(() => {});
       }
     }
