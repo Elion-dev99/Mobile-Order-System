@@ -42,12 +42,16 @@ function buildAgentPrompt(incident = {}) {
       ? 'あなたは QuickOrder Cardinal の Guardian（監視体）です。障害を整理し、Executor 向けタスクと再起動判断を行ってください。'
       : 'QuickOrder（Mobile-Order-System）で本番障害が発生しました。あなたは Cardinal Executor（実行体）として自動対処してください。',
     '',
+    '## 自律運営方針（約90%を Cursor が担う）',
+    '- 人間の承認待ちを最小化。調査→修正→draft PR まで一気に進める',
+    '- 人間ゲートはシークレット・mainマージ・escalate・破壊的操作のみ（docs/autonomy.md）',
+    '',
     '## 方針',
     '1. まず原因を特定（Firestore / Cloudflare Pages Function / フロント / 回線）',
     '2. コードや設定で直せるなら修正し、draft PRを作成（Guardian なら起票・レビューに専念）',
     '3. 外部障害（Firebase/Cloudflare本体ダウン）なら、ユーザー向けフォールバックと監視を強化する変更を提案',
     '4. 客席注文の保留キュー（mos_pending_orders）や health/load/Cardinal 監視を壊さない',
-    '5. docs/cardinal.md と .cursor/rules/cardinal-*.mdc に従う',
+    '5. docs/autonomy.md / docs/cardinal.md / .cursor/rules/cardinal-*.mdc に従う',
     '',
     '## インシデント詳細',
     '```json',
@@ -129,7 +133,7 @@ async function dispatchCursorAgent(env, incident) {
         body: JSON.stringify({
           prompt: { text: buildAgentPrompt(incident) },
           source: { repository: repo, ref: 'main' },
-          target: { autoCreatePr: true, branchName: 'cursor/autoheal-incident-3dc6' },
+          target: { autoCreatePr: true, branchName: `cursor/autoheal-incident-${Date.now().toString(36).slice(-6)}-a58c` },
         }),
       });
       const data = await res.json().catch(() => ({}));

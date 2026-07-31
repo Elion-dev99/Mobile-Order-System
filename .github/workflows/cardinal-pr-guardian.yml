@@ -1,0 +1,73 @@
+name: Cardinal PR → Guardian review
+
+# When Cursor / Cardinal opens a PR, wake Guardian to review (no human ping).
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_url:
+        description: "PR URL to review"
+        required: true
+        type: string
+
+jobs:
+  guardian:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.head_ref, 'cursor/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Guardian
+        env:
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
+          PR_URL: ${{ github.event.pull_request.html_url || github.event.inputs.pr_url }}
+          PR_TITLE: ${{ github.event.pull_request.title || 'manual' }}
+          PR_BRANCH: ${{ github.head_ref || 'manual' }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || 'manual' }}
+        run: |
+          if [ -z "$OPS_API_SECRET" ]; then
+            echo "Missing OPS_API_SECRET"
+            exit 1
+          fi
+          if [ -z "$PR_URL" ]; then
+            echo "Missing PR URL"
+            exit 1
+          fi
+          python3 - <<'PY' > /tmp/cardinal-pr.json
+          import json, os
+          payload = {
+            "action": "dispatch",
+            "role": "guardian",
+            "source": "github-pr",
+            "url": os.environ.get("PR_URL") or "",
+            "task": {
+              "kind": "pr_review",
+              "severity": "info",
+              "title": "Guardian review: " + (os.environ.get("PR_TITLE") or "PR"),
+              "summary": "Cursor 系 PR のレビュー。問題があれば具体修正指示を残す。",
+              "message": "\n".join([
+                "あなたは Cardinal Guardian です。次の PR をレビューしてください（docs/autonomy.md）。",
+                f"title: {os.environ.get('PR_TITLE')}",
+                f"branch: {os.environ.get('PR_BRANCH')}",
+                f"author: {os.environ.get('PR_AUTHOR')}",
+                f"url: {os.environ.get('PR_URL')}",
+                "大きな実装はせず、受け入れ条件・回帰・客席影響を確認。",
+                "問題があれば PR コメントで Executor 向けの具体指示を残す。自動マージはしない。",
+              ]),
+              "acceptance": [
+                "レビュー結果を PR に残す",
+                "重大問題があれば修正指示",
+                "自動マージしない",
+              ],
+            },
+          }
+          print(json.dumps(payload, ensure_ascii=False))
+          PY
+          RESP=$(curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
+            -H 'content-type: application/json' \
+            -H "x-ops-secret: $OPS_API_SECRET" \
+            -d @/tmp/cardinal-pr.json)
+          echo "$RESP"
+          echo "$RESP" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || exit 1

@@ -1,38 +1,44 @@
-name: Cardinal CI → Guardian signal
+name: Cardinal CI → Executor dispatch
 
-# When CI fails on main/PRs, post a lightweight Discord notice.
-# Full Cursor dispatch still goes through /api/cardinal once secrets are set;
-# this workflow is the GitHub-side watchdog half of Cardinal.
+# Deploy/CI failure → Cursor Executor via /api/cardinal (90% autonomy).
+# Discord notice is secondary; the primary path is Cloud Agent launch.
 
 on:
   workflow_run:
     workflows: ["Deploy to Cloudflare Pages"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Force Executor even without a failed run"
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
 
 jobs:
-  signal:
+  dispatch:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Notify failure (optional Discord)
+      - name: Notify Discord (optional)
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           if [ -z "$DISCORD_WEBHOOK_URL" ]; then
-            echo "No DISCORD_WEBHOOK_URL secret — skip"
+            echo "No DISCORD_WEBHOOK_URL — skip notify"
             exit 0
           fi
           CONCLUSION="${{ github.event.workflow_run.conclusion || 'manual' }}"
-          RUN_URL="${{ github.event.workflow_run.html_url || github.server_url }}/${{ github.repository }}/actions"
+          RUN_URL="${{ github.event.workflow_run.html_url }}"
+          if [ -z "$RUN_URL" ]; then
+            RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions"
+          fi
           BODY=$(printf '%s' "{
             \"username\": \"QuickOrder Cardinal\",
             \"embeds\": [{
-              \"title\": \"Guardian信号: CI/Deploy = ${CONCLUSION}\",
-              \"description\": \"Executor に調査を回す候補です。Ops Cardinal タブまたは Automations を確認してください。\",
+              \"title\": \"CI/Deploy = ${CONCLUSION} → Executor 起動\",
+              \"description\": \"自律運営: Cursor Executor に調査・修正を依頼します（docs/autonomy.md）。\",
               \"color\": 15158332,
               \"fields\": [
                 {\"name\": \"repo\", \"value\": \"${{ github.repository }}\", \"inline\": true},
@@ -42,3 +48,55 @@ jobs:
             }]
           }")
           curl -sS -X POST -H 'content-type: application/json' -d "$BODY" "$DISCORD_WEBHOOK_URL" >/dev/null || true
+
+      - name: Dispatch Cardinal Executor
+        env:
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion || 'manual' }}
+          RUN_URL: ${{ github.event.workflow_run.html_url || '' }}
+          BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+        run: |
+          if [ -z "$OPS_API_SECRET" ]; then
+            echo "Missing OPS_API_SECRET — cannot dispatch Cursor"
+            exit 1
+          fi
+          python3 - <<'PY' > /tmp/cardinal-ci.json
+          import json, os
+          payload = {
+            "action": "dispatch",
+            "role": "executor",
+            "source": "github-ci",
+            "url": os.environ.get("RUN_URL") or "",
+            "task": {
+              "kind": "ci",
+              "severity": "critical",
+              "force": os.environ.get("FORCE") == "true",
+              "title": "CI/Deploy failure → Executor",
+              "summary": f"Deploy workflow conclusion={os.environ.get('CONCLUSION')}. Fix and open draft PR.",
+              "message": "\n".join([
+                "あなたは Cardinal Executor です。CI/Deploy 失敗を自律修正してください（docs/autonomy.md）。",
+                f"conclusion: {os.environ.get('CONCLUSION')}",
+                f"branch: {os.environ.get('BRANCH')}",
+                f"run: {os.environ.get('RUN_URL')}",
+                "ログを確認し、直せるなら draft PR。外部障害なら説明のみ。人間のマージ待ち以外で止めない。",
+              ]),
+              "acceptance": [
+                "失敗原因の特定",
+                "draft PR または外部要因の説明",
+                "客席・Cardinal 監視を壊さない",
+              ],
+            },
+          }
+          print(json.dumps(payload, ensure_ascii=False))
+          PY
+          echo "POST /api/cardinal dispatch ci"
+          RESP=$(curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
+            -H 'content-type: application/json' \
+            -H "x-ops-secret: $OPS_API_SECRET" \
+            -d @/tmp/cardinal-ci.json)
+          echo "$RESP" | tee /tmp/cardinal-ci-resp.json
+          echo "$RESP" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || {
+            echo "Cardinal CI dispatch failed"
+            exit 1
+          }

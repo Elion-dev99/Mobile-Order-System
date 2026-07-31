@@ -49,27 +49,39 @@ SAO のカーディナルシステムに着想した、**監視体（Guardian）
 
 ## いま動いている常駐ルート（推奨・設定済み）
 
-Cursor Automations UI なしでも運用できます。
+Cursor Automations UI なしでも運用できます（**自律 90%**: `docs/autonomy.md`）。
 
 1. **Cloudflare** に `CURSOR_API_KEY` と **`OPS_API_SECRET`** が入っている  
-2. **GitHub** に同じ `OPS_API_SECRET`（cron の `X-Ops-Secret` 用）  
+2. **GitHub** に同じ `OPS_API_SECRET`（cron / CI / PR の `X-Ops-Secret` 用）  
 3. **GitHub Actions** `Cardinal cron watchdog` が毎時 `:15` UTC に `/api/cardinal` の `tick` を叩く  
    - 正常 → エージェント起動なし（Discord があれば心拍のみ）＋**自動メンテナンス解除**（Cardinal が入れた場合のみ）  
-   - 異常（Pages / 通知API / Firestore REST）→ **自動メンテナンス ON** ＋ **Executor** 起動  
-4. 客席は `GET /api/maintenance` と Firestore `platform/config` をマージして参照（FS 障害時もエッジ側で止められる）  
-5. **定期スケジュール** — Ops HQ で曜日＋時間帯 / 単発窓を設定。tick でも評価  
-6. **障害メンテテスト** — Ops → Cardinal タブのドリル（`simulateUnhealthy` / `drill_outage`）。エージェントは起動しない  
-7. **Ops → 鍵** タブに `OPS_API_SECRET` を保存（ブラウザからの dispatch / AutoHeal 用）  
-8. 詳細: `docs/security.md`
+   - 異常 → **自動メンテナンス ON** ＋ **Executor** 起動（クールダウン後は `followup`）  
+   - 日次 `digest` / 日次 `steward`（Executor 予防保守） / 週次 Guardian steward  
+4. **Deploy 失敗** → `cardinal-ci-dispatch` が Executor を起動  
+5. **`cursor/*` PR** → `cardinal-pr-guardian` が Guardian レビューを起動  
+6. 客席は `GET /api/maintenance` と Firestore `platform/config` をマージして参照  
+7. **定期スケジュール** — Ops HQ で曜日＋時間帯 / 単発窓を設定。tick でも評価  
+8. **障害メンテテスト** — Ops → Cardinal タブのドリル（エージェントは起動しない）  
+9. **Ops → 鍵** タブに `OPS_API_SECRET` を保存（ブラウザからの dispatch / AutoHeal 用）  
+10. 詳細: `docs/security.md` / `docs/autonomy.md`
 
 手動で今すぐ tick:
 
 ```bash
 curl -X POST https://mobile-order-system.pages.dev/api/cardinal \
   -H 'content-type: application/json' \
+  -H "x-ops-secret: $OPS_API_SECRET" \
   -d '{"action":"tick","force":false}'
 ```
 
+予防保守ステュワード:
+
+```bash
+curl -X POST https://mobile-order-system.pages.dev/api/cardinal \
+  -H 'content-type: application/json' \
+  -H "x-ops-secret: $OPS_API_SECRET" \
+  -d '{"action":"steward","mode":"executor"}'
+```
 ## （任意）Cursor Automations を足す場合
 
 より細かい「PRレビュー専用 Guardian」などが欲しければ:
@@ -93,13 +105,15 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
-## 人間の残り仕事（意図的に残す）
-
-完全無人の自動マージは危険なので、当面は:
+## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
-2. **draft PR のマージ判断**（慣れたら Autofix 範囲を広げる）
-3. `cardinal:escalate` が付いたときの最終判断
+2. **`cardinal:escalate` / 高リスクパス**（ルール・ops-auth）
+3. 課金・破壊的データ操作
+4. （任意）自動マージを止めたい PR に `cardinal:hold`
+
+**マージは自動化**され、Deploy 後 canary が失敗すると **main をマージ前 SHA に即ロールバック**する。  
+詳細: **`docs/autonomy.md`**
 
 Ops を開いている間はクライアント側 Cardinal がソフトな心拍を打ちます。  
-本番の「常駐2体」は Cursor Automations の cron / webhook が本体です。
+本番の常駐は GitHub cron（tick / steward / digest / canary）と CI・PR・auto-merge ワークフローが本体です。

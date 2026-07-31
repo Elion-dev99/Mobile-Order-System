@@ -9,11 +9,30 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       deployments: write
+      actions: write
+    outputs:
+      before_sha: ${{ steps.meta.outputs.before_sha }}
+      head_sha: ${{ steps.meta.outputs.head_sha }}
+      canary_ok: ${{ steps.canary.outputs.ok }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record SHAs
+        id: meta
+        run: |
+          BEFORE="${{ github.event.before }}"
+          HEAD="${{ github.sha }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+          fi
+          echo "before_sha=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD" >> "$GITHUB_OUTPUT"
+          echo "Deploy head=$HEAD before=$BEFORE"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -46,3 +65,111 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy publish --project-name=mobile-order-system --branch=main --commit-dirty=true
+
+      - name: Wait for edge
+        run: sleep 45
+
+      - name: Canary probe (display / API)
+        id: canary
+        continue-on-error: true
+        run: |
+          set +e
+          node scripts/canary-probe.mjs | tee /tmp/canary.json
+          CODE=${PIPESTATUS[0]}
+          if [ "$CODE" -eq 0 ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "Canary failed — will rollback main to pre-merge SHA"
+          fi
+          exit 0
+
+      - name: Rollback main on canary failure
+        id: rollback
+        if: steps.canary.outputs.ok == 'false'
+        env:
+          BEFORE: ${{ steps.meta.outputs.before_sha }}
+          BAD: ${{ steps.meta.outputs.head_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BEFORE" ]; then
+            echo "No before SHA — cannot auto-rollback"
+            exit 1
+          fi
+          echo "Rolling back main: $BAD → $BEFORE"
+          git config user.name "Cardinal Canary"
+          git config user.email "cardinal-canary@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          # Prefer hard reset to exact pre-merge state (即時マージ前に戻す)
+          git reset --hard "$BEFORE"
+          if git push --force-with-lease origin main; then
+            echo "rollback=force" >> "$GITHUB_OUTPUT"
+            echo "Rolled back with force-with-lease"
+          else
+            echo "force-with-lease failed — attempting revert commit"
+            git fetch origin main
+            git checkout -B main origin/main
+            if git revert --no-edit -m 1 "$BAD" 2>/dev/null || git revert --no-edit "$BAD"; then
+              git push origin main
+              echo "rollback=revert" >> "$GITHUB_OUTPUT"
+            else
+              echo "rollback=failed" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          fi
+
+          if [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+            BODY=$(printf '%s' "{
+              \"username\": \"QuickOrder Cardinal\",
+              \"embeds\": [{
+                \"title\": \"🚨 Canary失敗 → main をマージ前にロールバック\",
+                \"description\": \"表示/API プローブ失敗のため \`$BAD\` を取り消し、\`$BEFORE\` に戻しました。\",
+                \"color\": 15158332
+              }]
+            }")
+            curl -sS -X POST -H 'content-type: application/json' -d "$BODY" "$DISCORD_WEBHOOK_URL" >/dev/null || true
+          fi
+
+          if [ -n "${OPS_API_SECRET:-}" ]; then
+            python3 - <<'PY' > /tmp/rollback-dispatch.json
+          import json, os
+          print(json.dumps({
+            "action": "dispatch",
+            "role": "executor",
+            "source": "canary-rollback",
+            "task": {
+              "kind": "incident",
+              "severity": "critical",
+              "force": True,
+              "title": "Canary failed — main rolled back",
+              "summary": "Deploy canary detected display/API regression; main restored to pre-merge SHA.",
+              "message": "\n".join([
+                "本番 canary が失敗し、main をマージ前 SHA に戻しました。",
+                f"bad: {os.environ.get('BAD')}",
+                f"restored: {os.environ.get('BEFORE')}",
+                "原因を特定し、再発しない修正の draft PR を作成してください（docs/autonomy.md）。",
+                "客席表示エラー・API 破損を最優先。",
+              ]),
+              "acceptance": [
+                "失敗原因の特定",
+                "修正 draft PR",
+                "canary が通ることを確認手順に書く",
+              ],
+            },
+          }, ensure_ascii=False))
+          PY
+            curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
+              -H 'content-type: application/json' \
+              -H "x-ops-secret: $OPS_API_SECRET" \
+              -d @/tmp/rollback-dispatch.json || true
+          fi
+
+      - name: Fail job if canary failed
+        if: steps.canary.outputs.ok == 'false'
+        run: |
+          echo "Canary failed; rollback attempted. Failing deploy job for visibility."
+          exit 1

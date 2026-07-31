@@ -187,6 +187,18 @@ const OpsPage = {
     } else {
       set('cardinalApiStatus', '確認中');
     }
+    if (apiRes?.data?.autonomy?.targetPct) {
+      set('cardinalAutonomyPct', `${apiRes.data.autonomy.targetPct}%`);
+    }
+    const ledgerEl = document.getElementById('cardinalLedger');
+    if (ledgerEl && apiRes?.data?.ledger) {
+      const L = apiRes.data.ledger;
+      ledgerEl.hidden = false;
+      ledgerEl.textContent = JSON.stringify({
+        lastByKind: L.lastByKind || {},
+        recent: L.recent || [],
+      }, null, 2);
+    }
     this.renderCardinalCaps(prefs);
     this.renderCardinalTimeline(snap.timeline || listCardinalTimeline(20));
   },
@@ -1021,6 +1033,48 @@ const OpsPage = {
       const st = document.getElementById('opsCardinalStatus');
       if (st) { st.hidden = false; st.textContent = 'タイムラインをクリアしました'; }
       this.refreshCardinal();
+    });
+    document.getElementById('opsCardinalSteward')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = '予防保守ステュワード起動中...'; }
+      try {
+        const res = await cardinalApi('steward', { mode: 'executor', force: false });
+        if (log) { log.hidden = false; log.textContent = JSON.stringify(res, null, 2); }
+        if (st) {
+          st.textContent = res?.data?.dispatched || res?.data?.dispatch?.launched
+            ? 'ステュワード: Executor 起動依頼済'
+            : (res?.data?.dispatch?.reason === 'cooldown'
+              ? 'ステュワード: クールダウン中（本日すでに起動済みの可能性）'
+              : (res?.ok ? 'ステュワード送信済' : `失敗: ${res?.error || res?.data?.error || 'unknown'}`));
+        }
+        await this.refreshCardinal();
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
+    });
+    document.getElementById('opsCardinalFollowup')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const st = document.getElementById('opsCardinalStatus');
+      const log = document.getElementById('opsCardinalLog');
+      btn.disabled = true;
+      if (st) { st.hidden = false; st.textContent = 'フォローアップ起動中...'; }
+      try {
+        const res = await cardinalApi('followup', { force: true });
+        if (log) { log.hidden = false; log.textContent = JSON.stringify(res, null, 2); }
+        if (st) {
+          st.textContent = res?.data?.dispatched || res?.data?.dispatch?.launched
+            ? 'フォローアップ: Executor 起動依頼済'
+            : (res?.data?.skipped ? `スキップ: ${res.data.reason || 'healthy'}` : (res?.ok ? '送信済' : `失敗: ${res?.error || 'unknown'}`));
+        }
+        await this.refreshCardinal();
+      } catch (err) {
+        if (st) st.textContent = '失敗: ' + (err?.message || err);
+      }
+      btn.disabled = false;
     });
     document.getElementById('opsCardinalDrill')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;

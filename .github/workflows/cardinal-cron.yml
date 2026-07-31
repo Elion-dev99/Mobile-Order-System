@@ -1,8 +1,10 @@
 name: Cardinal cron watchdog
 
-# Always-on half of Cardinal without Cursor Automations UI:
-# hourly site probe → wake Executor only when unhealthy.
-# Relies on Cloudflare Pages secret CURSOR_API_KEY (already configured).
+# Always-on Cardinal without Cursor Automations UI (docs/autonomy.md):
+# - hourly tick (probe → auto-maint → incident/followup)
+# - daily Discord digest (00:15 UTC ≈ 09:15 JST)
+# - daily steward Executor (01:15 UTC ≈ 10:15 JST) when healthy
+# - weekly Guardian steward (Sunday 02:15 UTC)
 
 on:
   schedule:
@@ -10,33 +12,79 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: "Force Guardian dispatch even when healthy"
+        description: "Force Guardian dispatch even when healthy (tick)"
         required: false
         default: 'false'
         type: choice
         options: ['false', 'true']
+      mode:
+        description: "Which action to run"
+        required: false
+        default: 'auto'
+        type: choice
+        options: ['auto', 'tick', 'digest', 'steward', 'steward_guardian', 'followup']
 
 jobs:
   tick:
     runs-on: ubuntu-latest
     steps:
-      - name: Cardinal tick
+      - name: Cardinal scheduled actions
         env:
           FORCE: ${{ github.event.inputs.force || 'false' }}
+          MODE: ${{ github.event.inputs.mode || 'auto' }}
           OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
         run: |
           if [ -z "$OPS_API_SECRET" ]; then
             echo "Missing GitHub secret OPS_API_SECRET (must match Cloudflare OPS_API_SECRET)"
             exit 1
           fi
-          BODY=$(printf '%s' "{\"action\":\"tick\",\"force\":$( [ \"$FORCE\" = \"true\" ] && echo true || echo false ),\"source\":\"github-cron\",\"baseUrl\":\"https://mobile-order-system.pages.dev\"}")
-          echo "POST /api/cardinal tick force=$FORCE"
-          RESP=$(curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
-            -H 'content-type: application/json' \
-            -H "x-ops-secret: $OPS_API_SECRET" \
-            -d "$BODY")
-          echo "$RESP" | tee /tmp/cardinal-tick.json
-          echo "$RESP" | grep -q '"ok":true' || echo "$RESP" | grep -q '"ok": true' || {
-            echo "Cardinal tick failed"
-            exit 1
+
+          HOUR_UTC=$(date -u +%H)
+          DOW_UTC=$(date -u +%u) # 1=Mon … 7=Sun
+          FORCE_JSON=$( [ "$FORCE" = "true" ] && echo true || echo false )
+
+          post() {
+            local ACTION="$1"
+            local EXTRA="$2"
+            local BODY
+            BODY=$(printf '%s' "{\"action\":\"${ACTION}\",\"force\":${FORCE_JSON},\"source\":\"github-cron\",\"baseUrl\":\"https://mobile-order-system.pages.dev\"${EXTRA}}")
+            echo "POST /api/cardinal action=${ACTION}"
+            RESP=$(curl -sS -X POST 'https://mobile-order-system.pages.dev/api/cardinal' \
+              -H 'content-type: application/json' \
+              -H "x-ops-secret: $OPS_API_SECRET" \
+              -d "$BODY")
+            echo "$RESP" | tee "/tmp/cardinal-${ACTION}.json"
+            echo "$RESP" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || {
+              echo "Cardinal ${ACTION} failed"
+              exit 1
+            }
           }
+
+          run_tick() { post tick ""; }
+          run_digest() { post digest ""; }
+          run_steward() { post steward ',\"mode\":\"executor\"'; }
+          run_steward_g() { post steward ',\"mode\":\"guardian\"'; }
+          run_followup() { post followup ""; }
+
+          case "$MODE" in
+            tick) run_tick ;;
+            digest) run_digest ;;
+            steward) run_steward ;;
+            steward_guardian) run_steward_g ;;
+            followup) run_followup ;;
+            auto|*)
+              run_tick
+              # Daily digest ~09:15 JST
+              if [ "$HOUR_UTC" = "00" ]; then
+                run_digest || true
+              fi
+              # Daily proactive Executor steward ~10:15 JST (cooldown inside API)
+              if [ "$HOUR_UTC" = "01" ]; then
+                run_steward || true
+              fi
+              # Weekly Guardian review Sunday ~11:15 JST
+              if [ "$HOUR_UTC" = "02" ] && [ "$DOW_UTC" = "7" ]; then
+                run_steward_g || true
+              fi
+              ;;
+          esac
