@@ -1,16 +1,56 @@
-# 自律運営ポリシー — Cursor が約90%を担う
+# 自律運営ポリシー — Cursor が約90%＋自動マージ／即ロールバック
 
 創業者の意図: **運営・保守・不具合修正の約9割を Cursor（Cardinal）に任せる。**  
-人間は残り約1割（危険なゲート）だけ触る。
+**マージも自動化**する。ただしデプロイ後に表示エラーや不具合が出たら **即時でマージ前の SHA に戻す**。
 
 ## 役割分担（目標）
 
 | 割合 | 担当 | 内容 |
 |------|------|------|
-| **~90%** | Cursor（Guardian / Executor） | 監視、自動メンテ、障害調査、CI失敗修正、予防保守、PRレビュー、draft PR |
-| **~10%** | 人間 | シークレット初回設定、**main へのマージ**、`cardinal:escalate`、課金・破壊的データ操作 |
+| **~90%+** | Cursor（Guardian / Executor + GitHub Actions） | 監視、自動メンテ、障害修正、CI修正、予防保守、PRレビュー、**squash 自動マージ**、canary、**即ロールバック** |
+| **~10%-** | 人間 | シークレット初回、`cardinal:escalate` / 高リスクパス、課金・破壊的データ操作 |
 
-完全無人の自動マージはしない（意図的）。draft PR までが Cursor、マージ判断が人間。
+## 自動マージ → canary → ロールバック
+
+```text
+  cursor/* PR（escalate / hold ラベルなし）
+        │
+        ▼
+  Cardinal auto-merge ──► squash merge → main
+        │
+        ▼
+  Deploy (Cloudflare Pages)
+        │
+        ▼
+  canary-probe（客席/店舗/Ops HTML・CSS・JS・API）
+        │
+        ├─ OK  → 完了
+        │
+        └─ NG  → main を マージ前 SHA に force-with-lease で復元
+                  + Discord
+                  + Executor 起動（再発修正）
+```
+
+### 自動マージの条件
+
+- ブランチが `cursor/*`
+- ラベルに `cardinal:escalate` / `do-not-merge` / `cardinal:hold` / `cardinal:no-automerge` が無い
+- 致命的チェック失敗が無い
+- 高リスクパスを触っていない（`firestore.rules` / `functions/api/_ops-auth.js`）
+- draft は ready にしてから squash merge
+
+止めたい PR には `cardinal:hold` または `cardinal:no-automerge` を付ける。
+
+### canary が見るもの
+
+`scripts/canary-probe.mjs`:
+
+- `/`（QuickOrder 表示）・`/ops.html`・`/store.html`・`/status.html`
+- 主要 CSS/JS のサイズ
+- `/api/cardinal`・`/api/maintenance`・`/api/notify`
+- エラーページ断片（502 / Worker exception / ReferenceError など）
+
+失敗時は **マージ直前の commit に main を戻す**（「マージ前に戻す」）。
 
 ## Cursor が自動で回すもの
 
@@ -18,56 +58,53 @@
   GitHub cron (毎時)
         │
         ▼
-  /api/cardinal tick ──► プローブ → 自動メンテ ON/OFF
-        │                   │
-        │                   └─ 異常 → Executor 起動（クールダウン付き）
-        │                   └─ 継続異常 → followup 再起動
-        │
-        ├─ 日次 digest（Discord）
-        ├─ 日次 steward（予防保守 Executor）
-        └─ 週次 steward（Guardian レビュー）
+  /api/cardinal tick ──► プローブ → 自動メンテ → Executor / followup
 
-  Deploy CI 失敗 ──► /api/cardinal dispatch kind=ci → Executor
-  cursor/* PR   ──► /api/cardinal dispatch kind=pr_review → Guardian
-  Ops AutoHeal  ──► /api/cardinal（優先）/ レガシー /api/incident
+  Deploy 後 canary ──► NG なら即ロールバック + Executor
+  毎時 canary（保険）──► NG ならロールバック
+
+  Deploy CI 失敗 ──► Executor
+  cursor/* PR   ──► Guardian レビュー →（条件OKなら）auto-merge
+  Ops AutoHeal  ──► Cardinal dispatch
 ```
 
-| トリガー | 役割 | API |
-|----------|------|-----|
+| トリガー | 役割 | 経路 |
+|----------|------|------|
 | 本番プローブ失敗 | Executor | `tick` / `followup` |
-| Deploy 失敗 | Executor | `dispatch` kind=`ci` |
-| `cursor/*` PR | Guardian | `dispatch` kind=`pr_review` |
-| 健全時の予防保守 | Executor | `steward` mode=`executor` |
-| 週次レビュー | Guardian | `steward` mode=`guardian` |
-| Ops ヘルス連続失敗 | Executor | AutoHeal → Cardinal |
+| Deploy 失敗 | Executor | `kind=ci` |
+| Deploy 後表示/API異常 | ロールバック + Executor | deploy canary |
+| `cursor/*` PR | Guardian → auto-merge | workflows |
+| 予防保守 | Executor steward | cron |
+| Ops ヘルス連続失敗 | Executor | AutoHeal |
 
-起動にはクールダウンがある（クレジット浪費防止）。`force: true` で突破可。
+## 人間だけがやること（縮小した ~10%）
 
-## 人間だけがやること（~10%）
+1. Cloudflare / GitHub / Cursor の **初回シークレット**
+2. **`cardinal:escalate` / 高リスクパス**（ルール・ops-auth）
+3. チェーン課金・店舗削除など破壊的操作
+4. （任意）自動マージを止めたい PR に `cardinal:hold`
 
-1. Cloudflare / GitHub / Cursor の **初回シークレット**（`CURSOR_API_KEY`, `OPS_API_SECRET`, Discord）
-2. **draft PR のマージ**（慣れたら範囲を広げるが、当面は人が最終承認）
-3. Discord / Ops に来た **`cardinal:escalate`**（外部障害・曖昧・危険操作）
-4. チェーン課金・店舗削除・セキュリティルールの破壊的変更
+マージ判断の日常作業は不要。異常時は Discord でロールバック通知が来る。
 
 ## エージェントへの指示原則
 
-- 人間の承認待ちで止めない（マージ以外）
+- 人間の承認待ちで止めない（escalate / 高リスク以外）
+- **マージ操作はエージェント自身では行わない**（`cardinal-auto-merge` ワークフローに任せる）
 - 不明でも仮説で進め、PR に前提を書く
 - 客席保留キュー・health・Cardinal を壊さない
-- 変更不要なら理由を短く残して終了（無駄打ちしない）
-
-プロンプト本体: `functions/api/cardinal.js` の `rolePrompt`  
-行動規範: `.cursor/rules/cardinal-*.mdc`
+- 変更不要なら理由を短く残して終了
 
 ## Ops での見え方
 
-Cardinal タブの **自律 90%** パネルと API `action: status` の `autonomy` フィールド。
+Cardinal タブの **自律 90%** パネル。API `action: status` の `autonomy`。
 
 ## 関連
 
-- `docs/cardinal.md` — 双AIプロトコル
-- `docs/hardening.md` — 既知バグ修正メモ（あれば）
+- `docs/cardinal.md`
+- `scripts/canary-probe.mjs`
+- `.github/workflows/cardinal-auto-merge.yml`
+- `.github/workflows/deploy-cloudflare-pages.yml`
+- `.github/workflows/cardinal-canary-rollback.yml`
 - `.github/workflows/cardinal-cron.yml`
 - `.github/workflows/cardinal-ci-dispatch.yml`
 - `.github/workflows/cardinal-pr-guardian.yml`

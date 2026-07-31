@@ -499,13 +499,14 @@ HQ / 店舗 / 注文 / リード / 手数料 / 通知 / 呼出 / アンケート
 
 ### 12.4 人間が残す判断（約10%）
 
-目標は **運営・保守・不具合修正の約90%を Cursor**（詳細: [`autonomy.md`](./autonomy.md)）。
+目標は **運営・保守・不具合修正・マージの大部分を Cursor**（詳細: [`autonomy.md`](./autonomy.md)）。  
+マージ後に表示/API 異常なら **canary が即ロールバック**する。
 
 1. Cloudflare / Cursor / Discord の初回シークレット  
-2. draft PR のマージ  
-3. `cardinal:escalate` 時の最終確認  
-4. Chain 未請求手数料の月末請求  
-5. `introSlotsRemaining` の月次更新 / 破壊的データ操作  
+2. `cardinal:escalate` / 高リスクパス（`firestore.rules` / ops-auth）  
+3. Chain 未請求手数料の月末請求  
+4. `introSlotsRemaining` の月次更新 / 破壊的データ操作  
+5. （任意）自動マージ停止ラベル `cardinal:hold`  
 
 ---
 

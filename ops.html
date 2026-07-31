@@ -451,11 +451,11 @@
         <ul class="ops-checklist" id="cardinalAutonomyList">
           <li>毎時プローブ・自動メンテ・障害時 Executor / 継続時 followup</li>
           <li>Deploy CI 失敗 → Executor</li>
-          <li>cursor/* PR → Guardian レビュー</li>
+          <li>cursor/* PR → Guardian レビュー → <strong>自動 squash マージ</strong></li>
+          <li>Deploy 後 canary（表示/API）→ 失敗なら <strong>即ロールバック</strong></li>
           <li>日次予防保守（steward）・週次 Guardian</li>
-          <li>draft PR 作成まで（マージは人間）</li>
         </ul>
-        <p class="ops-muted" id="cardinalHumanGate">人間ゲート: シークレット初回 / main マージ / escalate / 課金・破壊的操作</p>
+        <p class="ops-muted" id="cardinalHumanGate">人間ゲート: シークレット初回 / escalate・高リスクパス / 課金・破壊的操作（マージ日常は不要）</p>
         <pre id="cardinalLedger" class="ops-muted" style="white-space:pre-wrap;max-height:140px;overflow:auto;margin-top:8px;padding:10px;background:rgba(0,0,0,0.04);border-radius:10px;" hidden></pre>
       </div>
 
@@ -527,9 +527,10 @@
         <ol class="ops-steps">
           <li><strong>CURSOR_API_KEY</strong> — Cloudflare に設定済み（オンデマンド起動可）</li>
           <li><strong>GitHub cron</strong> — 毎時 tick + 日次 steward + 週次 Guardian</li>
-          <li><strong>CI / PR</strong> — Deploy 失敗→Executor、cursor/* PR→Guardian</li>
-          <li><strong>Discord</strong> — 心拍・起動通知（任意）</li>
-          <li>人間ゲートはマージと escalate のみ。詳細: <code>docs/autonomy.md</code></li>
+          <li><strong>CI / PR</strong> — Deploy 失敗→Executor、cursor/* →Guardian→<strong>auto-merge</strong></li>
+          <li><strong>Canary</strong> — Deploy 後の表示/API 検査。失敗で <strong>マージ前に即ロールバック</strong></li>
+          <li><strong>Discord</strong> — 心拍・起動・ロールバック通知（任意）</li>
+          <li>人間ゲートは escalate / 高リスクのみ。詳細: <code>docs/autonomy.md</code></li>
         </ol>
         <p class="ops-muted">追加の Cursor Automations（PRレビュー専用など）は任意です。今の構成だけで双AI起動は動きます。</p>
       </div>
@@ -574,7 +575,7 @@
   </main>
 </div>
 
-<script type="module" src="js/ops.js?v=autonomy1"></script>
+<script type="module" src="js/ops.js?v=autonomy2"></script>
 <script>
   // モジュール読み込み失敗時のフォールバック表示
   setTimeout(() => {

@@ -9,15 +9,16 @@ alwaysApply: false
 運営・保守・不具合修正の **約90%を Cursor が担う**（`docs/autonomy.md`）。
 
 ## 主務
-- Guardian / Issue / webhook / CI / steward で渡されたタスクを実装する
+- Guardian / Issue / webhook / CI / steward / canary-rollback で渡されたタスクを実装する
 - テスト可能な範囲で検証し、**draft PR** を作る
+- **マージは auto-merge ワークフローに任せる**（自分で merge / force push to main しない）
 - 客席の保留キュー（`mos_pending_orders`）、`health`、Cardinal 監視を壊さない
 - Guardian が無応答なら一時的に監視も兼ね、Discord向けの短い状況報告を残す
-- **人間の承認待ちで止めない**（マージ以外）。不明点は仮説で進め PR に前提を書く
+- **人間の承認待ちで止めない**（escalate / 高リスク以外）
 
 ## 禁止
 - スコープ外の大規模リファクタ
-- main への直接 push / 自動マージ
+- main への直接 push / 手動マージ操作
 - 負荷テスト店舗の消し忘れ、本番データの破壊
 - シークレットをコミットする
 
@@ -29,4 +30,5 @@ alwaysApply: false
 ## 参照
 - `docs/autonomy.md`（最優先）
 - `docs/cardinal.md`
+- `scripts/canary-probe.mjs`
 - `js/auto-heal.js` / `js/cardinal.js` / `js/health.js`

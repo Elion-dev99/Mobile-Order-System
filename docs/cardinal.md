@@ -107,14 +107,13 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 
 ## 人間の残り仕事（約10%・意図的）
 
-完全無人の自動マージは危険なので、残すのは:
-
 1. Cloudflare / Cursor の **初回シークレット設定**
-2. **draft PR のマージ判断**
-3. `cardinal:escalate` が付いたときの最終判断
-4. 課金・破壊的データ操作
+2. **`cardinal:escalate` / 高リスクパス**（ルール・ops-auth）
+3. 課金・破壊的データ操作
+4. （任意）自動マージを止めたい PR に `cardinal:hold`
 
-詳細な 90/10 分担とトリガー一覧: **`docs/autonomy.md`**
+**マージは自動化**され、Deploy 後 canary が失敗すると **main をマージ前 SHA に即ロールバック**する。  
+詳細: **`docs/autonomy.md`**
 
 Ops を開いている間はクライアント側 Cardinal がソフトな心拍を打ちます。  
-本番の常駐は GitHub cron（tick / steward / digest）と CI・PR ワークフローが本体です。
+本番の常駐は GitHub cron（tick / steward / digest / canary）と CI・PR・auto-merge ワークフローが本体です。
