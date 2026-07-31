@@ -29,102 +29,16 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Auto-merge eligible PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           ONLY_PR: ${{ github.event.inputs.pr || '' }}
           EVENT_PR: ${{ github.event.pull_request.number || '' }}
           HEAD_REF: ${{ github.head_ref || '' }}
         run: |
-          set -euo pipefail
-
-          HIGH_RISK='^(firestore\.rules|functions/api/_ops-auth\.js)$'
-          BLOCK_LABELS='cardinal:escalate|do-not-merge|cardinal:hold|cardinal:no-automerge'
-
-          is_blocked_label() {
-            echo "$1" | grep -Eqi "$BLOCK_LABELS"
-          }
-
-          merge_one() {
-            local N="$1"
-            echo "==== Evaluating PR #$N ===="
-            META=$(gh pr view "$N" --json number,title,state,isDraft,headRefName,labels,url,mergeable,statusCheckRollup)
-            echo "$META" | head -c 2000
-
-            STATE=$(echo "$META" | python3 -c "import sys,json; print(json.load(sys.stdin).get('state') or '')")
-            DRAFT=$(echo "$META" | python3 -c "import sys,json; print(json.load(sys.stdin).get('isDraft'))")
-            HEAD=$(echo "$META" | python3 -c "import sys,json; print(json.load(sys.stdin).get('headRefName') or '')")
-            MERGEABLE=$(echo "$META" | python3 -c "import sys,json; print(json.load(sys.stdin).get('mergeable') or '')")
-            LABELS=$(echo "$META" | python3 -c "import sys,json; print(','.join(l.get('name','') for l in (json.load(sys.stdin).get('labels') or [])))")
-            FAILING=$(echo "$META" | python3 -c "
-          import sys,json
-          m=json.load(sys.stdin)
-          bad=[]
-          for c in (m.get('statusCheckRollup') or []):
-            st=(c.get('state') or c.get('conclusion') or '')
-            if st in ('FAILURE','ERROR','CANCELLED','TIMED_OUT','failing','failed'):
-              bad.append(c.get('name') or st)
-          print(','.join(bad))
-          ")
-
-            if [ "$STATE" != "OPEN" ]; then
-              echo "skip: not open"
-              return 0
-            fi
-            case "$HEAD" in
-              cursor/*) ;;
-              *) echo "skip: head $HEAD not cursor/*"; return 0 ;;
-            esac
-            if is_blocked_label "$LABELS"; then
-              echo "skip: blocked label ($LABELS)"
-              return 0
-            fi
-            if [ -n "$FAILING" ]; then
-              echo "skip: failing checks ($FAILING)"
-              return 0
-            fi
-            if [ "$MERGEABLE" = "CONFLICTING" ]; then
-              echo "skip: conflicting"
-              return 0
-            fi
-
-            FILES=$(gh pr diff "$N" --name-only || true)
-            if echo "$FILES" | grep -Eq "$HIGH_RISK"; then
-              echo "skip: high-risk paths — human / escalate"
-              gh pr comment "$N" --body "Cardinal auto-merge: **スキップ**（高リスクパス変更）。\`firestore.rules\` / ops-auth / deploy workflow は人間または \`cardinal:escalate\` 判断が必要です。その他は canary+rollback 付きで自動マージ対象です。" || true
-              return 0
-            fi
-
-            if [ "$DRAFT" = "True" ] || [ "$DRAFT" = "true" ]; then
-              echo "Marking PR ready for review..."
-              gh pr ready "$N" || true
-            fi
-
-            echo "Squash-merging #$N ..."
-            if gh pr merge "$N" --squash --delete-branch; then
-              echo "MERGED #$N"
-              gh pr comment "$N" --body "Cardinal auto-merge: squash merge しました。Deploy 後に canary が走り、表示/API 異常なら **即ロールバック**します（\`docs/autonomy.md\`）。" || true
-            else
-              echo "merge failed for #$N (branch protection or checks pending)"
-              return 0
-            fi
-          }
-
-          if [ -n "$ONLY_PR" ]; then
-            merge_one "$ONLY_PR"
-            exit 0
-          fi
-
-          if [ -n "$EVENT_PR" ] && [ -n "$HEAD_REF" ]; then
-            case "$HEAD_REF" in
-              cursor/*) merge_one "$EVENT_PR"; exit 0 ;;
-              *) echo "PR event but not cursor/* — skip"; exit 0 ;;
-            esac
-          fi
-
-          # Scheduled sweep
-          gh pr list --base main --state open --limit 30 --json number,headRefName \
-            | python3 -c "import sys,json; [print(p['number']) for p in json.load(sys.stdin) if str(p.get('headRefName') or '').startswith('cursor/')]" \
-            | while read -r N; do
-                merge_one "$N" || true
-              done
+          chmod +x scripts/cardinal-auto-merge.sh
+          ./scripts/cardinal-auto-merge.sh
