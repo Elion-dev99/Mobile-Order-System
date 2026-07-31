@@ -59,12 +59,34 @@ jobs:
             cp -a functions publish/functions
           fi
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy publish --project-name=mobile-order-system --branch=main --commit-dirty=true
+      - name: Deploy to Cloudflare Pages (with retry)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -uo pipefail
+          # Cloudflare's API occasionally returns a transient 5xx (e.g. malformed
+          # HTML "520" body from the edge) that has nothing to do with our build.
+          # Retry the deploy a few times with backoff before failing the job —
+          # a hard failure here skips the canary probe entirely and previously
+          # required an Executor to notice and re-dispatch a manual retry.
+          npm i -g wrangler@3.90.0
+          ATTEMPTS=4
+          for i in $(seq 1 "$ATTEMPTS"); do
+            echo "== Deploy attempt $i/$ATTEMPTS =="
+            if wrangler pages deploy publish --project-name=mobile-order-system --branch=main --commit-dirty=true; then
+              echo "Deploy succeeded on attempt $i"
+              exit 0
+            fi
+            echo "Deploy attempt $i failed"
+            if [ "$i" -lt "$ATTEMPTS" ]; then
+              SLEEP=$((15 * i))
+              echo "Retrying in ${SLEEP}s (assuming transient Cloudflare API error)..."
+              sleep "$SLEEP"
+            fi
+          done
+          echo "All $ATTEMPTS deploy attempts failed"
+          exit 1
 
       - name: Wait for edge
         run: sleep 45
