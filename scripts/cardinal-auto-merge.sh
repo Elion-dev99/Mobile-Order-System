@@ -8,6 +8,12 @@ ONLY_PR="${ONLY_PR:-}"
 EVENT_PR="${EVENT_PR:-}"
 HEAD_REF="${HEAD_REF:-}"
 
+# Prefer PAT so merge push triggers on:push Deploy naturally
+if [ -n "${CARDINAL_GH_PAT:-}" ]; then
+  export GH_TOKEN="$CARDINAL_GH_PAT"
+  echo "Using CARDINAL_GH_PAT for merge (push workflows will fire)"
+fi
+
 HIGH_RISK='^(firestore\.rules|functions/api/_ops-auth\.js)$'
 BLOCK_LABELS='cardinal:escalate|do-not-merge|cardinal:hold|cardinal:no-automerge'
 
@@ -100,6 +106,19 @@ print(",".join(bad))
   if gh pr merge "$N" --repo "$GH_REPO" --squash --delete-branch; then
     echo "MERGED #$N"
     gh pr comment "$N" --repo "$GH_REPO" --body "Cardinal auto-merge: squash merge しました。Deploy 後に canary が走り、表示/API 異常なら **即ロールバック**します（\`docs/autonomy.md\`）。" || true
+
+    # Critical: merges performed with GITHUB_TOKEN do NOT trigger on:push workflows.
+    # Explicitly dispatch Deploy so canary + rollback still run.
+    if [ "${DISPATCH_DEPLOY_AFTER_MERGE:-true}" = "true" ]; then
+      echo "Dispatching Deploy to Cloudflare Pages on main..."
+      if gh workflow run "Deploy to Cloudflare Pages" --repo "$GH_REPO" --ref main; then
+        echo "Deploy workflow dispatched"
+        gh pr comment "$N" --repo "$GH_REPO" --body "Cardinal auto-merge: Deploy を \`workflow_dispatch\` で起動しました（GITHUB_TOKEN マージは push ワークフローを発火しないため）。" || true
+      else
+        echo "WARN: failed to dispatch Deploy — run it manually or set secret CARDINAL_GH_PAT"
+        gh pr comment "$N" --repo "$GH_REPO" --body "Cardinal auto-merge: **Deploy の自動起動に失敗**。Actions で Deploy を手動実行するか、\`CARDINAL_GH_PAT\` を設定してください。" || true
+      fi
+    fi
   else
     echo "merge failed for #$N (branch protection, permissions, or checks pending) — not failing the job"
     return 0

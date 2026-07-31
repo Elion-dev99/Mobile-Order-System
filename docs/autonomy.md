@@ -41,6 +41,12 @@
 
 止めたい PR には `cardinal:hold` または `cardinal:no-automerge` を付ける。
 
+### 注意: GITHUB_TOKEN マージは Deploy を自動発火しない
+
+GitHub 仕様で、`GITHUB_TOKEN` による merge の `push` は他ワークフローを起動しない。  
+そのため auto-merge 成功後に **`Deploy to Cloudflare Pages` を `workflow_dispatch`** する。  
+（任意）リポジトリ secret `CARDINAL_GH_PAT` を置けば PAT でマージし、通常の push→Deploy も使える。
+
 ### canary が見るもの
 
 `scripts/canary-probe.mjs`:

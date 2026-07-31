@@ -20,7 +20,7 @@ permissions:
   contents: write
   pull-requests: write
   checks: read
-  actions: read
+  actions: write
   statuses: read
 
 concurrency:
@@ -37,10 +37,12 @@ jobs:
       - name: Auto-merge eligible PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARDINAL_GH_PAT: ${{ secrets.CARDINAL_GH_PAT }}
           GH_REPO: ${{ github.repository }}
           ONLY_PR: ${{ github.event.inputs.pr || '' }}
           EVENT_PR: ${{ github.event.pull_request.number || '' }}
           HEAD_REF: ${{ github.head_ref || '' }}
+          DISPATCH_DEPLOY_AFTER_MERGE: 'true'
         run: |
           chmod +x scripts/cardinal-auto-merge.sh
           ./scripts/cardinal-auto-merge.sh
