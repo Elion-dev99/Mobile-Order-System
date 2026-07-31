@@ -1,0 +1,47 @@
+name: Cardinal outage drill
+
+# Safe "server down" simulation:
+# tick(simulateUnhealthy) → auto maintenance ON → hold → drill_clear → healthy tick
+# Does NOT launch Cursor agents.
+# Policy: docs/autonomy.md / Ops Cardinal ドリル
+
+on:
+  workflow_dispatch:
+    inputs:
+      hold_sec:
+        description: "Seconds to leave maintenance ON"
+        required: false
+        default: '8'
+        type: string
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'scripts/outage-drill.sh'
+      - '.github/workflows/cardinal-outage-drill.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cardinal-outage-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run outage drill
+        env:
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
+          BASE_URL: https://mobile-order-system.pages.dev
+          HOLD_SEC: ${{ github.event.inputs.hold_sec || '8' }}
+        run: |
+          if [ -z "$OPS_API_SECRET" ]; then
+            echo "Missing OPS_API_SECRET"
+            exit 1
+          fi
+          chmod +x scripts/outage-drill.sh
+          ./scripts/outage-drill.sh
