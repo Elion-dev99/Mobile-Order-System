@@ -6,10 +6,26 @@ import { submitLead } from './leads.js';
 import {
   loadMaintenance, subscribeMaintenance, mountMaintenanceBanner, isMaintenanceMode, maintenanceMessage,
 } from './maintenance.js';
+import {
+  captureGrowthAttribution,
+  leadAttributionFields,
+  growthDemoUrl,
+} from './growth.js';
 
 let billingCycle = PRODUCT.defaultBillingCycle || 'annual';
 let selectedPlanId = 'growth';
 
+captureGrowthAttribution();
+{
+  const growthAttr = leadAttributionFields();
+  const refBanner = document.getElementById('lpReferralBanner');
+  if (refBanner && growthAttr.referralShopId) {
+    refBanner.hidden = false;
+    refBanner.textContent = `紹介経由（${growthAttr.referralShopId}）· 14日トライアル付きで優先案内します`;
+  }
+  const demoLink = document.getElementById('lpHeroDemo');
+  if (demoLink) demoLink.href = growthDemoUrl({ ref: growthAttr.referralShopId || 'lp' });
+}
 function renderScarcity() {
   const el = document.getElementById('lpScarcity');
   if (!el) return;
@@ -232,7 +248,8 @@ form.addEventListener('submit', async (e) => {
     setupFee: plan.priceSetup,
     chargeNow: cycle === 'annual' ? ap.chargeNow + plan.priceSetup : plan.priceMonthly + plan.priceSetup,
     annualSavings: cycle === 'annual' ? annualSavings(plan) : 0,
-    source: 'lp_revenue_max',
+    ...leadAttributionFields(),
+    source: leadAttributionFields().source || 'lp_revenue_max',
   };
 
   try {

@@ -601,3 +601,16 @@ body {
   .lp-nav-ghost, .lp-nav-cta { padding: 8px 12px; font-size: 0.8rem; }
   .lp-footer { flex-direction: column; gap: 12px; padding: 24px 16px 48px; }
 }
+
+.lp-referral-banner {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(92, 200, 255, 0.12);
+  border: 1px solid rgba(92, 200, 255, 0.28);
+  color: #bfe9ff;
+  font-size: 0.88rem;
+  font-weight: 600;
+  animation: lpRise 0.7s ease 0.18s both;
+}

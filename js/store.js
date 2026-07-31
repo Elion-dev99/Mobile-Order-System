@@ -18,6 +18,9 @@ import {
 import { startOfflineSync } from './offline-sync.js';
 import { markOrderPaid, paymentBadge } from './payments.js';
 import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
+import {
+  shareKitText, growthLpUrl, growthDemoUrl, recordReferralShare, getReferralCredits,
+} from './growth.js';
 
 const StorePage = {
   orders: [],
@@ -45,9 +48,59 @@ const StorePage = {
     this.subscribeOrders();
     this.subscribeRequests();
     this.subscribeFoh();
+    this.mountGrowthKit();
     // Second-precision clock is pure paint thrash on floor tablets
     this._clockTimer = setInterval(() => this.tickClock(), 30000);
     this.tickClock();
+  },
+
+  mountGrowthKit() {
+    const credits = getReferralCredits(getShopId());
+    const line = document.getElementById('storeGrowthCredits');
+    if (line) {
+      line.textContent = `共有 ${credits.shares || 0}回 · クレジット ${credits.creditedDays || 0}日分`;
+    }
+    const demo = document.getElementById('storeOpenDemoShare');
+    if (demo) demo.href = growthDemoUrl({ ref: getShopId() });
+    if (this._growthKitBound) return;
+    this._growthKitBound = true;
+    document.getElementById('storeCopyShareKit')?.addEventListener('click', async () => {
+      const kit = shareKitText({ shopName: getShop().name, locale: 'ja' });
+      recordReferralShare(getShopId());
+      this.mountGrowthKit();
+      const st = document.getElementById('storeGrowthStatus');
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: kit.title, text: kit.body, url: kit.demo });
+          if (st) { st.hidden = false; st.textContent = '共有シートを開きました'; }
+        } else {
+          await navigator.clipboard.writeText(kit.body);
+          if (st) { st.hidden = false; st.textContent = '投稿文をコピーしました（X / 店舗LINEに貼れます）'; }
+        }
+      } catch (_) {
+        try {
+          await navigator.clipboard.writeText(kit.body);
+          if (st) { st.hidden = false; st.textContent = '投稿文をコピーしました'; }
+        } catch (e) {
+          if (st) { st.hidden = false; st.textContent = kit.body; }
+        }
+      }
+    });
+    document.getElementById('storeCopyRefLink')?.addEventListener('click', async () => {
+      const url = growthLpUrl({
+        ref: getShopId(),
+        source: 'store',
+        medium: 'referral',
+        campaign: 'zero_cash',
+      });
+      const st = document.getElementById('storeGrowthStatus');
+      try {
+        await navigator.clipboard.writeText(url);
+        if (st) { st.hidden = false; st.textContent = '紹介LPをコピーしました'; }
+      } catch (_) {
+        if (st) { st.hidden = false; st.textContent = url; }
+      }
+    });
   },
 
   patchNav() {

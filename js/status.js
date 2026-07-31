@@ -7,6 +7,7 @@ import { loadShop, getShopId } from './shop.js';
 import { mountSurveyCard, estimateWaitMinutes } from './guest-features.js';
 import { mountGuestOrderHistory } from './order-history.js';
 import { playReadyChime } from './guest-extras.js';
+import { captureGrowthAttribution, mountGrowthWatermark, mountStatusGrowthCta } from './growth.js';
 
 const StatusPage = {
   order: null,
@@ -30,6 +31,7 @@ const StatusPage = {
   async init() {
     activateDemoFromUrl();
     resolveShopId();
+    captureGrowthAttribution();
     ensureDemoBanner();
     await loadShop();
     const params = new URLSearchParams(location.search);
@@ -38,6 +40,8 @@ const StatusPage = {
     document.querySelectorAll('.table-number').forEach(el => el.textContent = `テーブル ${this.tableNumber}`);
     document.getElementById('orderIdBadge').textContent = this.orderId;
     document.getElementById('addMoreLink').href = withDemo(`index.html?table=${encodeURIComponent(this.tableNumber)}`);
+    mountGrowthWatermark({ locale: 'ja' });
+    mountStatusGrowthCta({ locale: 'ja' });
     document.querySelector('.status-action-bar a.primary')?.setAttribute(
       'href',
       withDemo(`index.html?table=${encodeURIComponent(this.tableNumber)}`)

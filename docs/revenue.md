@@ -1,7 +1,8 @@
 # 収益最大化（実装済み）
 
 詳細な収益・費用のシナリオ P/L は [`pl.md`](./pl.md)（Cloudflare / Firebase / Cursor。AWS は未使用）。  
-スマレジ規模（契約5万店）の必要費用・対比は [`pl-50k-smaregi.md`](./pl-50k-smaregi.md)。
+スマレジ規模（契約5万店）の必要費用・対比は [`pl-50k-smaregi.md`](./pl-50k-smaregi.md)。  
+**広告費ゼロの獲得**は [`growth-zero-cash.md`](./growth-zero-cash.md)。
 
 ## 方針
 1. **ACVを上げる** — LP既定を年払い、Growth年払いCTA、見積プレビューで初回請求額を明示

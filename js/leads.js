@@ -9,7 +9,7 @@ export async function submitLead(payload) {
   }
   const docData = {
     ...payload,
-    source: 'lp',
+    source: payload.source || 'lp',
     createdAt: Date.now(),
     status: 'new',
   };

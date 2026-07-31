@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=sched1">
-  <link rel="stylesheet" href="css/guest.css?v=sched1">
-  <link rel="stylesheet" href="css/store.css?v=sched1">
+  <link rel="stylesheet" href="css/style.css?v=growth1">
+  <link rel="stylesheet" href="css/guest.css?v=growth1">
+  <link rel="stylesheet" href="css/store.css?v=growth1">
 </head>
 <body class="guest store-page">
 
@@ -50,6 +50,20 @@
       <div><span>本日注文</span><strong id="statToday">0</strong></div>
       <div><span>本日売上</span><strong id="statGmv">¥0</strong></div>
     </div>
+  </section>
+
+  <section class="store-card" id="storeGrowthKit">
+    <div class="store-card-head">
+      <h2>紹介して広げる（広告費ゼロ）</h2>
+    </div>
+    <p class="store-help">他店オーナーにデモを送ると、紹介経由のリードが付きます。3回共有ごとにトライアル延長クレジット（Ops確認）が溜まります。</p>
+    <p class="store-muted" id="storeGrowthCredits">共有 0回 · クレジット 0日</p>
+    <div class="store-toolbar" style="flex-wrap:wrap;gap:8px;margin-top:8px;">
+      <button type="button" class="store-mini-btn" id="storeCopyShareKit">投稿文をコピー</button>
+      <button type="button" class="store-mini-btn" id="storeCopyRefLink">紹介LPをコピー</button>
+      <a class="store-mini-btn" id="storeOpenDemoShare" href="index.html?shop=default&table=1&demo=1" target="_blank" rel="noopener">デモを開く</a>
+    </div>
+    <p class="store-muted" id="storeGrowthStatus" hidden></p>
   </section>
 
   <section class="store-card">
