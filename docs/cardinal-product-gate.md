@@ -36,10 +36,12 @@ Cursor が **市場（ゼロ現金成長）を見て機能を提案**し、**Gua
 | action | 用途 |
 |--------|------|
 | `product_status` | 現在の提案・次ステップ |
-| `product_propose` | スカウト後に提案を登録 |
-| `product_review` | `{ role, proposalId, verdict, notes }` |
-| `product_cycle` | 次ステップを判定して Cursor を起動 |
-| `product_implemented` | 実装 PR 完了報告 `{ proposalId, branch }` |
+| `product_propose` | スカウト後に提案を登録 → **Discord に提案全文** |
+| `product_review` | `{ role, proposalId, verdict, notes }` → **Discord にレビュー全文**（双方 approve 時は追加通知） |
+| `product_cycle` | 次ステップを判定して Cursor を起動 → **Discord にサイクル＋指示全文** |
+| `product_implemented` | 実装 PR 完了報告（`summary`, `changes`, `filesChanged`, `prUrl`, `testsRun`, `verification`, `report`）→ **Discord に実施内容全文** |
+
+`DISCORD_WEBHOOK_URL`（Cloudflare secret）が設定されている場合、上記イベントはすべて監査用に Discord へ送られます（長文は複数メッセージに分割）。
 
 公開 GET では action 一覧のみ。`status` の `productGate` にサマリ。
 

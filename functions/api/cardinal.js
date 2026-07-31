@@ -238,32 +238,174 @@ function productTaskPrompt(role, step, proposal = null) {
         '- 受け入れ条件を満たす最小 diff',
         '- draft PR（cursor/*-a58c）',
         '- マージは auto-merge に任せる',
-        '- 完了後 action: product_implemented { proposalId, branch } を POST',
+        '- 完了後 action: product_implemented { proposalId, branch, prUrl, summary, changes, filesChanged, testsRun, verification, report } を POST',
+        '- **実施内容の全文**を report / summary / changes に書く（Discord にそのまま送られる）',
         '',
         '```json',
         propJson,
         '```',
       ].join('\n'),
-      acceptance: ['draft PR', 'canary を壊さない', 'product_implemented 報告'],
+      acceptance: ['draft PR', 'canary を壊さない', 'product_implemented に実施内容全文'],
     };
   }
   return null;
 }
 
+function withProductStep(task, step, proposal) {
+  if (!task) return task;
+  return { ...task, productStep: step, proposal: proposal || null };
+}
+
 async function postDiscord(env, body, embed) {
-  // Never trust client-supplied webhook on Cardinal (use CF secret only)
+  return postDiscordPayload(env, { embeds: embed ? [embed] : [] });
+}
+
+/** Discord webhook (content + embeds). Long content is split into follow-up messages. */
+async function postDiscordPayload(env, { content = '', embeds = [] } = {}) {
   const webhook = (env && env.DISCORD_WEBHOOK_URL) || '';
   if (!isDiscordWebhook(webhook)) return { ok: false, skipped: true, reason: 'no_discord' };
   const endpoint = webhook.includes('?') ? `${webhook}&wait=true` : `${webhook}?wait=true`;
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      username: 'QuickOrder Cardinal',
-      embeds: [embed],
-    }),
-  });
-  return { ok: res.ok, status: res.status };
+  const chunks = [];
+  const text = String(content || '').trim();
+  if (text) {
+    for (let i = 0; i < text.length; i += 1900) {
+      chunks.push(text.slice(i, i + 1900));
+    }
+  } else {
+    chunks.push('');
+  }
+  let last = { ok: false, status: 0 };
+  for (let i = 0; i < chunks.length; i += 1) {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        username: 'QuickOrder Cardinal',
+        content: chunks[i] || undefined,
+        embeds: i === 0 ? embeds.slice(0, 10) : [],
+      }),
+    });
+    last = { ok: res.ok, status: res.status };
+    if (!res.ok) break;
+  }
+  return last;
+}
+
+const PRODUCT_GATE_COLOR = {
+  propose: 0x5865f2,
+  review: 0xfaa61a,
+  dual_approved: 0x57f287,
+  reject: 0xed4245,
+  implemented: 0xeb459e,
+  cycle: 0x9b59b6,
+};
+
+function discordField(name, value, inline = false) {
+  const v = String(value ?? '—').trim() || '—';
+  return { name: String(name).slice(0, 256), value: v.slice(0, 1024), inline };
+}
+
+function formatAcceptanceList(acceptance = []) {
+  if (!Array.isArray(acceptance) || !acceptance.length) return '—';
+  return acceptance.map((a, i) => `${i + 1}. ${a}`).join('\n');
+}
+
+function proposalRecapFields(proposal) {
+  if (!proposal) return [discordField('提案', '—')];
+  return [
+    discordField('提案ID', proposal.id, true),
+    discordField('status', proposal.status, true),
+    discordField('Guardian', proposal.guardianVerdict || '未', true),
+    discordField('Executor', proposal.executorVerdict || '未', true),
+    discordField('タイトル', proposal.title, false),
+    discordField('要約', proposal.summary, false),
+    discordField('市場シグナル', proposal.marketSignal, false),
+    discordField('マーケ角度', proposal.marketingAngle, false),
+    discordField('受け入れ条件', formatAcceptanceList(proposal.acceptance), false),
+  ];
+}
+
+/** Full product-gate audit trail to Discord (proposal → reviews → implementation). */
+async function notifyProductGateDiscord(env, body, phase, { proposal = null, role = '', verdict = '', notes = '', step = '', dispatch = null, report = null } = {}) {
+  const titleByPhase = {
+    propose: '📋 製品ゲート — 機能提案（スカウト）',
+    review: `🔍 製品ゲート — Cardinal レビュー (${role || '?'})`,
+    dual_approved: '✅ 製品ゲート — Guardian+Executor 双方 approve',
+    cycle: `🔄 製品ゲート — サイクル起動 (${step || '?'})`,
+    implemented: '🚀 製品ゲート — 実装完了報告',
+  };
+  const color = phase === 'review' && String(verdict).toLowerCase().includes('reject')
+    ? PRODUCT_GATE_COLOR.reject
+    : (PRODUCT_GATE_COLOR[phase] || PRODUCT_GATE_COLOR.propose);
+
+  const fields = [...proposalRecapFields(proposal)];
+
+  if (phase === 'review') {
+    fields.push(
+      discordField('判定', String(verdict || '—'), true),
+      discordField('レビュー役', role, true),
+      discordField('レビューコメント全文', notes || '—', false),
+    );
+    if (proposal?.guardianNotes) {
+      fields.push(discordField('Guardian notes（累積）', proposal.guardianNotes, false));
+    }
+    if (proposal?.executorNotes) {
+      fields.push(discordField('Executor notes（累積）', proposal.executorNotes, false));
+    }
+  }
+
+  if (phase === 'dual_approved') {
+    fields.push(
+      discordField('Guardian コメント', proposal?.guardianNotes || '—', false),
+      discordField('Executor コメント', proposal?.executorNotes || '—', false),
+      discordField('次', 'Executor が product_implement で実装 PR', false),
+    );
+  }
+
+  if (phase === 'cycle') {
+    fields.push(
+      discordField('ステップ', step, true),
+      discordField('起動ロール', dispatch?.role || '—', true),
+      discordField('Cursor', dispatch?.launched ? '起動済' : (dispatch?.reason || '未起動'), true),
+    );
+    if (dispatch?.agent?.branch) {
+      fields.push(discordField('branch', dispatch.agent.branch, false));
+    }
+  }
+
+  if (phase === 'implemented') {
+    const r = report || proposal?.implementationReport || {};
+    fields.push(
+      discordField('branch', proposal?.branch || '—', true),
+      discordField('PR', r.prUrl || '—', false),
+      discordField('実施サマリ', r.summary || '—', false),
+      discordField('変更内容', r.changes || '—', false),
+      discordField('変更ファイル', (r.filesChanged || []).join('\n') || '—', false),
+      discordField('テスト', r.testsRun || '—', false),
+      discordField('受け入れ条件の確認', r.verification || '—', false),
+    );
+  }
+
+  const embed = {
+    title: titleByPhase[phase] || `製品ゲート — ${phase}`,
+    color,
+    fields: fields.slice(0, 25),
+    timestamp: new Date().toISOString(),
+    footer: { text: 'QuickOrder Cardinal · product gate · full audit' },
+  };
+
+  let longText = '';
+  if (phase === 'implemented') {
+    const r = report || proposal?.implementationReport || {};
+    longText = [
+      r.rawMarkdown ? `## 実装報告（全文）\n${r.rawMarkdown}` : '',
+      proposal ? `\n## 提案JSON\n\`\`\`json\n${JSON.stringify(proposal, null, 2).slice(0, 12000)}\n\`\`\`` : '',
+    ].filter(Boolean).join('\n\n');
+  } else if (proposal) {
+    longText = `\`\`\`json\n${JSON.stringify(proposal, null, 2).slice(0, 14000)}\n\`\`\``;
+  }
+
+  await postDiscordPayload(env, { content: longText, embeds: [embed] }).catch(() => {});
 }
 
 async function postAutomation(url, key, text, payload) {
@@ -393,6 +535,19 @@ async function dispatchRole(env, role, task, body, cachesObj = null) {
     timestamp: new Date().toISOString(),
     footer: { text: 'QuickOrder Cardinal · autonomy 90%' },
   }).catch(() => {});
+
+  if (kind.startsWith('product_')) {
+    await notifyProductGateDiscord(env, body, 'cycle', {
+      proposal: task.proposal || null,
+      step: task.productStep || kind,
+      dispatch: { role, kind, launched, reason: launched ? undefined : 'not_launched', agent: { branch: agent.branch } },
+    }).catch(() => {});
+    if (task.message) {
+      await postDiscordPayload(env, {
+        content: `### 製品ゲート — エージェント指示全文 (${kind})\n${String(task.message).slice(0, 15000)}`,
+      }).catch(() => {});
+    }
+  }
 
   return { automation, agent, launched, role, kind };
 }
@@ -916,17 +1071,7 @@ export async function onRequestPost(context) {
       acceptance: body.acceptance,
       scoutSource: body.source || body.scoutSource || 'api',
     });
-    await postDiscord(env, body, {
-      title: `製品提案: ${result.proposal.title}`,
-      color: 0x5865f2,
-      fields: [
-        { name: 'ID', value: result.proposal.id, inline: true },
-        { name: '次', value: 'Guardian レビュー待ち', inline: true },
-        { name: '要約', value: result.proposal.summary.slice(0, 900) || '—', inline: false },
-      ],
-      timestamp: new Date().toISOString(),
-      footer: { text: 'QuickOrder Cardinal · product gate' },
-    }).catch(() => {});
+    await notifyProductGateDiscord(env, body, 'propose', { proposal: result.proposal }).catch(() => {});
     return j({
       ok: true,
       action: 'product_propose',
@@ -944,17 +1089,15 @@ export async function onRequestPost(context) {
     });
     if (!review.ok) return j({ ok: false, action: 'product_review', ...review }, 400);
     const p = review.proposal;
-    await postDiscord(env, body, {
-      title: `製品レビュー (${body.role}): ${p.title} → ${body.role === 'guardian' ? p.guardianVerdict : p.executorVerdict}`,
-      color: (body.verdict === 'reject' || String(body.verdict).includes('reject')) ? 0xed4245 : 0x57f287,
-      fields: [
-        { name: '提案', value: p.id, inline: true },
-        { name: 'status', value: p.status, inline: true },
-        { name: 'notes', value: String(body.notes || '—').slice(0, 800), inline: false },
-      ],
-      timestamp: new Date().toISOString(),
-      footer: { text: 'QuickOrder Cardinal · product gate' },
+    await notifyProductGateDiscord(env, body, 'review', {
+      proposal: p,
+      role: body.role,
+      verdict: body.verdict,
+      notes: body.notes || body.message,
     }).catch(() => {});
+    if (p.status === 'approved') {
+      await notifyProductGateDiscord(env, body, 'dual_approved', { proposal: p }).catch(() => {});
+    }
     return j({
       ok: true,
       action: 'product_review',
@@ -964,11 +1107,25 @@ export async function onRequestPost(context) {
   }
 
   if (action === 'product_implemented') {
+    const report = {
+      summary: body.summary || body.implementationSummary,
+      changes: body.changes || body.changeLog,
+      prUrl: body.prUrl || body.pr,
+      filesChanged: body.filesChanged || body.files,
+      testsRun: body.testsRun || body.tests,
+      verification: body.verification || body.acceptanceNotes,
+      rawMarkdown: body.report || body.markdown || body.implementationReport,
+    };
     const done = await markProposalImplemented(context.caches, {
       proposalId: body.proposalId || body.id,
       branch: body.branch,
+      report,
     });
     if (!done.ok) return j({ ok: false, action: 'product_implemented', ...done }, 400);
+    await notifyProductGateDiscord(env, body, 'implemented', {
+      proposal: done.proposal,
+      report: done.proposal?.implementationReport || report,
+    }).catch(() => {});
     return j({
       ok: true,
       action: 'product_implemented',
@@ -995,10 +1152,11 @@ export async function onRequestPost(context) {
 
     let role = 'executor';
     if (plan.step === 'guardian_review') role = 'guardian';
-    const task = productTaskPrompt(role, plan.step, plan.proposal);
+    let task = productTaskPrompt(role, plan.step, plan.proposal);
     if (!task) {
       return j({ ok: false, action: 'product_cycle', error: 'no_task', step: plan.step }, 500);
     }
+    task = withProductStep(task, plan.step, plan.proposal);
     if (force) task.force = true;
     const dispatch = await dispatchRole(env, role, task, body, context.caches);
     const saved = await readProductGate(context.caches);

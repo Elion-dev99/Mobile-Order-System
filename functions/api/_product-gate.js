@@ -57,6 +57,29 @@ export function normalizeProposal(raw = {}) {
     implementedAt: Number(raw.implementedAt) || 0,
     branch: String(raw.branch || '').slice(0, 80),
     scoutSource: String(raw.scoutSource || 'cursor').slice(0, 40),
+    implementationReport: normalizeImplementationReport(raw.implementationReport || raw.report),
+  };
+}
+
+function normalizeImplementationReport(raw) {
+  if (!raw || typeof raw !== 'object') {
+    if (typeof raw === 'string' && raw.trim()) {
+      return { summary: raw.trim().slice(0, 12000), reportedAt: Date.now() };
+    }
+    return null;
+  }
+  const files = Array.isArray(raw.filesChanged || raw.files)
+    ? (raw.filesChanged || raw.files).map((f) => String(f).slice(0, 200)).slice(0, 40)
+    : [];
+  return {
+    summary: String(raw.summary || raw.implementationSummary || '').slice(0, 12000),
+    changes: String(raw.changes || raw.changeLog || '').slice(0, 12000),
+    prUrl: String(raw.prUrl || raw.pr || '').slice(0, 500),
+    filesChanged: files,
+    testsRun: String(raw.testsRun || raw.tests || '').slice(0, 4000),
+    verification: String(raw.verification || raw.acceptanceNotes || '').slice(0, 4000),
+    rawMarkdown: String(raw.rawMarkdown || raw.markdown || raw.report || '').slice(0, 16000),
+    reportedAt: Number(raw.reportedAt) || Date.now(),
   };
 }
 
@@ -189,18 +212,22 @@ export async function applyProductReview(cachesObj, { proposalId, role, verdict,
   return { ok: true, gate: saved, proposal: updated };
 }
 
-export async function markProposalImplemented(cachesObj, { proposalId, branch = '' } = {}) {
+export async function markProposalImplemented(cachesObj, { proposalId, branch = '', report = null } = {}) {
   const gate = await readProductGate(cachesObj);
   const id = String(proposalId || '');
   let found = null;
   const proposals = (gate.proposals || []).map((p) => {
     if (p.id !== id) return p;
     found = p;
+    const implReport = report != null && report !== undefined
+      ? normalizeImplementationReport(report)
+      : null;
     return normalizeProposal({
       ...p,
       status: 'implemented',
       implementedAt: Date.now(),
       branch: branch || p.branch,
+      implementationReport: implReport || p.implementationReport,
     });
   });
   if (!found) return { ok: false, error: 'proposal_not_found' };
