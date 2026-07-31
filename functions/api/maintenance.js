@@ -111,8 +111,12 @@ export async function onRequestPost(context) {
       ok: true,
       action: 'drill_outage',
       before: effectiveMaintenance(before),
-      afterOn: effectiveMaintenance(on),
-      afterClear: off ? effectiveMaintenance(off) : null,
+      afterOn: { ...effectiveMaintenance(on), persisted: on.persisted, persistError: on.persistError ?? null },
+      afterClear: off
+        ? { ...effectiveMaintenance(off), persisted: off.persisted, persistError: off.persistError ?? null }
+        : null,
+      persisted: on.persisted,
+      persistError: on.persistError ?? null,
       checks: {
         edgeWrite: !!on.maintenance,
         sourceCardinal: on.source === 'cardinal',
@@ -136,7 +140,13 @@ export async function onRequestPost(context) {
       auto: true,
       schedule: prev.schedule,
     });
-    return j({ ok: true, action: 'drill_clear', ...effectiveMaintenance(state) });
+    return j({
+      ok: true,
+      action: 'drill_clear',
+      ...effectiveMaintenance(state),
+      persisted: state.persisted,
+      persistError: state.persistError ?? null,
+    });
   }
 
   if (action === 'apply_schedule') {
