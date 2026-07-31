@@ -13,7 +13,7 @@ import {
   subscribeTableBillLock, showBillLockOverlay, hideBillLockOverlay,
   recommendUpsells,
 } from './guest-features.js';
-import { mountGuestOrderHistory } from './order-history.js';
+import { mountGuestOrderHistory, loadTableOrderHistory } from './order-history.js';
 import { placeGuestOrder, computeOrderTotals } from './place-order.js';
 import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
 import { validateCoupon, setAppliedCoupon, getAppliedCoupon, discountForCoupon } from './coupons.js';
@@ -22,6 +22,9 @@ import {
   loadFavorites, toggleFavorite, isFavorite, itemHasTag, confirmAlcoholAge,
   getPartySize, tagBadgesHtml, suggestSetCombos,
 } from './guest-extras.js';
+import {
+  curateTonightPicks, curatorTitle, tablePulseCopy, flyToCart, hourBucket,
+} from './guest-smart.js';
 import { CHANNELS, getSelectedChannel, setSelectedChannel, channelLabel } from './channels.js';
 import { listPaymentMethods } from './payments.js';
 import {
@@ -66,6 +69,9 @@ const App = {
   paymentMethod: 'pay_at_register',
   pointsRedeem: 0,
   member: null,
+  waitMinutes: 0,
+  lastTableOrder: null,
+  cartStep: 1,
 
   async init() {
     activateDemoFromUrl();
@@ -107,6 +113,9 @@ const App = {
     this.ensureMenuDelegation();
     this.mountGuestExtras();
     this.mountReserveBar();
+    this.mountTonightRail();
+    this.refreshTablePulse();
+    this.bindCartSteps();
     this.renderMenu();
     this.bindEvents();
     this.bindSpaCart();
@@ -122,10 +131,14 @@ const App = {
     this.subscribeBillLock();
     this.mountOrderGateBanner();
     this.subscribeKitchenLoad();
+    this.primeLastOrder();
     // Defer history so first paint / taps stay snappy
     const defer = window.requestIdleCallback || ((fn) => setTimeout(fn, 600));
     defer(() => this.loadGuestHistory());
     document.getElementById('guestHistoryRefresh')?.addEventListener('click', () => this.loadGuestHistory());
+    document.getElementById('tablePulseReorder')?.addEventListener('click', () => {
+      if (this.lastTableOrder) this.reorderFromHistory(this.lastTableOrder);
+    });
 
     const params = new URLSearchParams(location.search);
     const initialView = params.get('view') || (location.hash === '#cart' ? 'cart' : 'menu');
@@ -150,6 +163,8 @@ const App = {
         this.quickFilters = next;
         this.mountGuestExtras();
         this.renderMenu();
+        this.mountTonightRail();
+        this.refreshTablePulse();
       },
     });
     mountPartySizePrompt({
@@ -161,6 +176,8 @@ const App = {
           const splitNum = document.getElementById('splitNum');
           if (splitNum) splitNum.textContent = String(n);
           showToast(this.locale === 'en' ? `${n} guests` : `${n}名様`);
+          this.mountTonightRail();
+          this.refreshTablePulse();
         }
       },
     });
@@ -174,6 +191,11 @@ const App = {
       tableNumber: this.tableNumber,
       locale: this.locale,
       onReorder: (order) => this.reorderFromHistory(order),
+    }).then((orders) => {
+      if (Array.isArray(orders) && orders.length) {
+        this.lastTableOrder = orders.find((o) => (o.items || []).length) || orders[0];
+        this.refreshTablePulse();
+      }
     }).catch(() => {
       host.innerHTML = `<p class="oh-empty">${this.locale === 'en' ? 'Could not load history' : '履歴を読めませんでした'}</p>`;
     });
@@ -208,6 +230,8 @@ const App = {
     this.saveCart();
     this.updateCartBar();
     this.renderMenu();
+    this.mountTonightRail();
+    this.primeLastOrder();
     showToast(this.t('reorder'));
     this.showView('cart');
   },
@@ -281,7 +305,9 @@ const App = {
 
   subscribeKitchenLoad() {
     if (isDemoMode()) {
+      this.waitMinutes = 5;
       mountWaitBadge(5, this.locale);
+      this.refreshTablePulse();
       return;
     }
     try {
@@ -292,13 +318,155 @@ const App = {
       );
       onSnapshot(q, snap => {
         const orders = snap.docs.map(d => d.data());
-        mountWaitBadge(estimateWaitMinutes(orders), this.locale);
+        this.waitMinutes = estimateWaitMinutes(orders);
+        mountWaitBadge(this.waitMinutes, this.locale);
+        this.refreshTablePulse();
       }, () => {
+        this.waitMinutes = 8;
         mountWaitBadge(8, this.locale);
+        this.refreshTablePulse();
       });
     } catch (_) {
+      this.waitMinutes = 8;
       mountWaitBadge(8, this.locale);
+      this.refreshTablePulse();
     }
+  },
+
+  async primeLastOrder() {
+    try {
+      const orders = await loadTableOrderHistory(this.tableNumber, { max: 3 });
+      this.lastTableOrder = orders.find((o) => (o.items || []).length) || null;
+      this.refreshTablePulse();
+    } catch (_) {
+      this.lastTableOrder = null;
+    }
+  },
+
+  mountTonightRail() {
+    const rail = document.getElementById('tonightRail');
+    const track = document.getElementById('tonightRailTrack');
+    const title = document.getElementById('tonightRailTitle');
+    const sub = document.getElementById('tonightRailSub');
+    if (!rail || !track) return;
+    const picks = curateTonightPicks({
+      cart: this.cart,
+      favorites: this.favorites,
+      partySize: getPartySize() || this.splitPeople || 0,
+      limit: 6,
+    });
+    if (title) title.textContent = curatorTitle(this.locale, hourBucket());
+    if (sub) {
+      sub.textContent = this.locale === 'en'
+        ? 'Matched to time, party size, and your cart'
+        : '時間帯・人数・カート内容に合わせて選びました';
+    }
+    if (!picks.length) {
+      rail.hidden = true;
+      track.innerHTML = '';
+      return;
+    }
+    rail.hidden = false;
+    track.innerHTML = picks.map((item) => {
+      const text = this.itemText(item);
+      const unit = getItemUnitPrice(item);
+      const blocked = !this.canOrder() || isItemSoldOut(item.id);
+      return `
+        <button type="button" class="tonight-card ${item.popular ? 'is-popular' : ''}" data-tonight-id="${item.id}" ${blocked ? 'disabled' : ''} role="listitem">
+          <span class="tonight-emoji" aria-hidden="true">${item.emoji || ''}</span>
+          <span class="tonight-name">${text.name}</span>
+          <span class="tonight-price">¥${unit.toLocaleString()}</span>
+          ${item.popular ? `<span class="tonight-badge">${this.locale === 'en' ? 'Hot' : '人気'}</span>` : ''}
+        </button>`;
+    }).join('');
+    if (!this._tonightBound) {
+      this._tonightBound = true;
+      track.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-tonight-id]');
+        if (!btn || btn.disabled) return;
+        const item = getMenu().items.find((i) => i.id === btn.dataset.tonightId);
+        if (!item) return;
+        if (this.isCustomizable(item)) {
+          this.openModal(item.id);
+          return;
+        }
+        flyToCart(btn.querySelector('.tonight-emoji') || btn);
+        this.modalItem = item;
+        this.modalQty = 1;
+        this.modalCustomizations = {};
+        this.modalToggles = {};
+        this.addToCart(item);
+        this.mountTonightRail();
+      });
+    }
+  },
+
+  refreshTablePulse() {
+    const host = document.getElementById('tablePulse');
+    if (!host) return;
+    host.hidden = false;
+    const copy = tablePulseCopy({
+      waitMin: this.waitMinutes,
+      partySize: getPartySize() || this.splitPeople || 0,
+      channel: this.channel,
+      locale: this.locale,
+    });
+    const waitEl = document.getElementById('tablePulseWait');
+    const chEl = document.getElementById('tablePulseChannel');
+    const partyEl = document.getElementById('tablePulseParty');
+    const reorder = document.getElementById('tablePulseReorder');
+    if (waitEl) waitEl.textContent = copy.wait;
+    if (chEl) chEl.textContent = copy.channelLabel;
+    if (partyEl) {
+      if (copy.party) {
+        partyEl.hidden = false;
+        partyEl.textContent = copy.party;
+      } else {
+        partyEl.hidden = true;
+      }
+    }
+    if (reorder) {
+      const has = !!(this.lastTableOrder?.items?.length) && this.canOrder();
+      reorder.hidden = !has;
+      reorder.textContent = this.locale === 'en' ? 'Order again' : '前回と同じ';
+    }
+  },
+
+  bindCartSteps() {
+    if (this._cartStepsBound) return;
+    this._cartStepsBound = true;
+    document.getElementById('cartSteps')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-cart-step]');
+      if (!btn) return;
+      this.setCartStep(Number(btn.dataset.cartStep) || 1);
+    });
+    document.getElementById('cartStepNext')?.addEventListener('click', () => {
+      if (this.cartStep < 3) this.setCartStep(this.cartStep + 1);
+    });
+  },
+
+  setCartStep(step) {
+    this.cartStep = Math.max(1, Math.min(3, Number(step) || 1));
+    document.querySelectorAll('[data-cart-step]').forEach((el) => {
+      el.classList.toggle('is-active', Number(el.dataset.cartStep) === this.cartStep);
+      el.classList.toggle('is-done', Number(el.dataset.cartStep) < this.cartStep);
+    });
+    document.querySelectorAll('[data-cart-panel]').forEach((panel) => {
+      panel.hidden = Number(panel.dataset.cartPanel) !== this.cartStep;
+    });
+    const next = document.getElementById('cartStepNext');
+    const place = document.getElementById('placeOrderBtn');
+    if (next && place) {
+      const onLast = this.cartStep >= 3;
+      next.hidden = onLast;
+      place.hidden = !onLast;
+      if (!onLast) {
+        next.textContent = this.cartStep === 1
+          ? (this.locale === 'en' ? 'Continue to pickup' : '受け取りへ')
+          : (this.locale === 'en' ? 'Continue to pay' : 'お会計へ');
+      }
+    }
+    this.updateSpaPlaceBtn();
   },
 
   t(key) {
@@ -500,6 +668,14 @@ const App = {
     this.patchCardControls(item.id);
     this.updateCartBar();
     this.scheduleSaveCart();
+    if (delta > 0) {
+      const card = this.findCard(item.id);
+      flyToCart(card?.querySelector('.menu-card-emoji') || card);
+      this.mountTonightRail();
+      this.refreshTablePulse();
+    } else if (delta < 0) {
+      this.mountTonightRail();
+    }
   },
 
   scheduleSaveCart() {
@@ -750,7 +926,7 @@ const App = {
       : `<div class="menu-card-price">¥${unit.toLocaleString()}<span>${this.t('tax')}</span></div>`;
 
     return `
-      <article class="menu-card menu-card-enter ${qty > 0 ? 'in-cart' : ''} ${soldOut || blocked ? 'sold-out' : ''} ${onSale ? 'on-sale' : ''}" data-id="${item.id}">
+      <article class="menu-card menu-card-enter ${qty > 0 ? 'in-cart' : ''} ${soldOut || blocked ? 'sold-out' : ''} ${onSale ? 'on-sale' : ''} ${item.popular ? 'is-popular' : ''}" data-id="${item.id}">
         <div class="menu-card-emoji" aria-hidden="true">${item.emoji || ''}</div>
         <div class="menu-card-body">
           <div class="menu-card-header">
@@ -999,6 +1175,8 @@ const App = {
     this.saveCart();
     this.updateCartBar();
     this.patchCardControls(item.id);
+    this.mountTonightRail();
+    this.refreshTablePulse();
     showToast(`${text.name} ${this.t('added')}`);
   },
 
@@ -1102,11 +1280,14 @@ const App = {
       if (menuView) menuView.hidden = true;
       if (header) header.hidden = true;
       if (allergen) allergen.hidden = true;
+      const pulse = document.getElementById('tablePulse');
+      if (pulse) pulse.hidden = true;
       if (serviceBar) serviceBar.hidden = true;
       if (reserveBar) reserveBar.hidden = true;
       if (cartBar) cartBar.classList.remove('visible');
       if (cartView) cartView.hidden = false;
       document.body.classList.add('spa-cart-open');
+      this.setCartStep(this.cart.length ? Math.min(this.cartStep || 1, 3) : 1);
       this.renderSpaCart();
       window.scrollTo(0, 0);
     } else {
@@ -1114,10 +1295,12 @@ const App = {
       if (menuView) menuView.hidden = false;
       if (header) header.hidden = false;
       if (allergen) allergen.hidden = false;
+      this.refreshTablePulse();
       if (serviceBar) serviceBar.hidden = false;
       if (reserveBar) reserveBar.hidden = false;
       document.body.classList.remove('spa-cart-open');
       this.updateCartBar();
+      this.mountTonightRail();
     }
 
     if (!skipHistory) {
@@ -1389,6 +1572,7 @@ const App = {
       btn.addEventListener('click', () => {
         this.channel = setSelectedChannel(btn.dataset.channel);
         this.renderChannelPaymentUi();
+        this.refreshTablePulse();
       });
     });
     document.getElementById('memberSaveBtn')?.addEventListener('click', async () => {

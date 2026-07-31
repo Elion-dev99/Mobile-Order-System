@@ -12,8 +12,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=sched1">
-  <link rel="stylesheet" href="css/guest.css?v=sched1">
+  <link rel="stylesheet" href="css/style.css?v=ux1">
+  <link rel="stylesheet" href="css/guest.css?v=ux1">
 </head>
 <body class="guest">
 
@@ -62,7 +62,25 @@
   </div>
 </details>
 
+<div class="table-pulse" id="tablePulse" hidden>
+  <div class="table-pulse-main">
+    <span class="table-pulse-wait" id="tablePulseWait">—</span>
+    <span class="table-pulse-sep" aria-hidden="true">·</span>
+    <span class="table-pulse-channel" id="tablePulseChannel">店内</span>
+    <span class="table-pulse-party" id="tablePulseParty" hidden></span>
+  </div>
+  <button type="button" class="table-pulse-reorder" id="tablePulseReorder" hidden>前回と同じ</button>
+</div>
+
 <main class="menu-main" data-spa-view="menu" id="spaMenuView">
+  <section class="tonight-rail" id="tonightRail" hidden>
+    <div class="tonight-rail-head">
+      <h2 id="tonightRailTitle">今夜のおすすめ</h2>
+      <p class="tonight-rail-sub" id="tonightRailSub">人数・時間帯・カートに合わせて選びました</p>
+    </div>
+    <div class="tonight-rail-track" id="tonightRailTrack" role="list"></div>
+  </section>
+
   <div class="menu-list" id="menuList"></div>
 
   <section class="guest-history" id="guestHistorySection">
@@ -81,64 +99,79 @@
     <div style="width:80px;"></div>
   </header>
   <div class="cart-content spa-cart-body">
-    <div class="cart-section-title">注文内容</div>
-    <div id="cartItems"></div>
-    <div class="cart-section-title" id="channelTitle">注文タイプ</div>
-    <div class="channel-row" id="channelRow" role="group" aria-label="注文タイプ">
-      <button type="button" class="channel-btn active" data-channel="dine_in">店内</button>
-      <button type="button" class="channel-btn" data-channel="takeout">テイクアウト</button>
-      <button type="button" class="channel-btn" data-channel="delivery">デリバリー</button>
+    <nav class="cart-steps" id="cartSteps" aria-label="チェックアウト手順">
+      <button type="button" class="cart-step is-active" data-cart-step="1">1 内容</button>
+      <button type="button" class="cart-step" data-cart-step="2">2 受け取り</button>
+      <button type="button" class="cart-step" data-cart-step="3">3 お会計</button>
+    </nav>
+
+    <div class="cart-step-panel" data-cart-panel="1">
+      <div class="cart-section-title">注文内容</div>
+      <div id="cartItems"></div>
     </div>
-    <div class="cart-section-title" id="paymentTitle">お支払い（形のみ・本番決済は後日）</div>
-    <div class="payment-row" id="paymentRow"></div>
-    <div class="cart-section-title" id="memberTitle">ポイント会員</div>
-    <div class="member-row" id="memberRow" hidden>
-      <input id="memberPhone" type="tel" inputmode="tel" placeholder="電話番号" maxlength="15" autocomplete="tel">
-      <input id="memberName" type="text" placeholder="お名前（任意）" maxlength="40">
-      <button type="button" id="memberSaveBtn" class="menu-link-btn">登録</button>
-      <p class="coupon-msg" id="memberMsg" hidden></p>
-      <label class="member-redeem" id="memberRedeemWrap" hidden>
-        ポイント利用
-        <input id="pointsRedeem" type="number" min="0" step="1" value="0">
-      </label>
-    </div>
-    <div class="cart-section-title">クーポン</div>
-    <div class="coupon-row" id="couponRow">
-      <input id="couponInput" type="text" placeholder="クーポンコード" autocomplete="off" maxlength="24">
-      <button type="button" id="couponApplyBtn" class="menu-link-btn">適用</button>
-    </div>
-    <p class="coupon-msg" id="couponMsg" hidden></p>
-    <div class="cart-section-title">チップ（任意）</div>
-    <div class="tip-row" id="tipRow">
-      <button type="button" class="tip-btn active" data-tip="0">なし</button>
-      <button type="button" class="tip-btn" data-tip="5">5%</button>
-      <button type="button" class="tip-btn" data-tip="10">10%</button>
-    </div>
-    <div class="cart-section-title">お会計</div>
-    <div class="order-summary">
-      <div class="summary-row"><span>小計</span><span id="subtotalAmount">¥0</span></div>
-      <div class="summary-row" id="discountRow" hidden><span>クーポン割引</span><span id="discountAmount">-¥0</span></div>
-      <div class="summary-row" id="serviceRow" hidden><span id="serviceLabel">サービス料</span><span id="serviceAmount">¥0</span></div>
-      <div class="summary-row" id="tipSummaryRow" hidden><span>チップ</span><span id="tipAmount">¥0</span></div>
-      <div class="summary-row"><span>消費税（10%）</span><span id="taxAmount">¥0</span></div>
-      <div class="summary-row total"><span>合計</span><span class="amount" id="totalAmount">¥0</span></div>
-    </div>
-    <div class="cart-section-title">割り勘</div>
-    <div class="split-section">
-      <div class="split-title">人数で割り勘</div>
-      <div class="split-controls">
-        <button class="split-btn" id="splitMinus" type="button">−</button>
-        <div class="split-num" id="splitNum">1</div>
-        <button class="split-btn" id="splitPlus" type="button">＋</button>
-        <span class="split-result">人</span>
+
+    <div class="cart-step-panel" data-cart-panel="2" hidden>
+      <div class="cart-section-title" id="channelTitle">注文タイプ</div>
+      <div class="channel-row" id="channelRow" role="group" aria-label="注文タイプ">
+        <button type="button" class="channel-btn active" data-channel="dine_in">店内</button>
+        <button type="button" class="channel-btn" data-channel="takeout">テイクアウト</button>
+        <button type="button" class="channel-btn" data-channel="delivery">デリバリー</button>
       </div>
-      <div id="splitResult" class="hidden">
-        <span class="split-amount" id="splitAmount"></span>
+      <div class="cart-section-title" id="paymentTitle">お支払い（形のみ・本番決済は後日）</div>
+      <div class="payment-row" id="paymentRow"></div>
+      <div class="cart-section-title" id="memberTitle">ポイント会員</div>
+      <div class="member-row" id="memberRow" hidden>
+        <input id="memberPhone" type="tel" inputmode="tel" placeholder="電話番号" maxlength="15" autocomplete="tel">
+        <input id="memberName" type="text" placeholder="お名前（任意）" maxlength="40">
+        <button type="button" id="memberSaveBtn" class="menu-link-btn">登録</button>
+        <p class="coupon-msg" id="memberMsg" hidden></p>
+        <label class="member-redeem" id="memberRedeemWrap" hidden>
+          ポイント利用
+          <input id="pointsRedeem" type="number" min="0" step="1" value="0">
+        </label>
+      </div>
+    </div>
+
+    <div class="cart-step-panel" data-cart-panel="3" hidden>
+      <div class="cart-section-title">クーポン</div>
+      <div class="coupon-row" id="couponRow">
+        <input id="couponInput" type="text" placeholder="クーポンコード" autocomplete="off" maxlength="24">
+        <button type="button" id="couponApplyBtn" class="menu-link-btn">適用</button>
+      </div>
+      <p class="coupon-msg" id="couponMsg" hidden></p>
+      <div class="cart-section-title">チップ（任意）</div>
+      <div class="tip-row" id="tipRow">
+        <button type="button" class="tip-btn active" data-tip="0">なし</button>
+        <button type="button" class="tip-btn" data-tip="5">5%</button>
+        <button type="button" class="tip-btn" data-tip="10">10%</button>
+      </div>
+      <div class="cart-section-title">お会計</div>
+      <div class="order-summary">
+        <div class="summary-row"><span>小計</span><span id="subtotalAmount">¥0</span></div>
+        <div class="summary-row" id="discountRow" hidden><span>クーポン割引</span><span id="discountAmount">-¥0</span></div>
+        <div class="summary-row" id="serviceRow" hidden><span id="serviceLabel">サービス料</span><span id="serviceAmount">¥0</span></div>
+        <div class="summary-row" id="tipSummaryRow" hidden><span>チップ</span><span id="tipAmount">¥0</span></div>
+        <div class="summary-row"><span>消費税（10%）</span><span id="taxAmount">¥0</span></div>
+        <div class="summary-row total"><span>合計</span><span class="amount" id="totalAmount">¥0</span></div>
+      </div>
+      <div class="cart-section-title">割り勘</div>
+      <div class="split-section">
+        <div class="split-title">人数で割り勘</div>
+        <div class="split-controls">
+          <button class="split-btn" id="splitMinus" type="button">−</button>
+          <div class="split-num" id="splitNum">1</div>
+          <button class="split-btn" id="splitPlus" type="button">＋</button>
+          <span class="split-result">人</span>
+        </div>
+        <div id="splitResult" class="hidden">
+          <span class="split-amount" id="splitAmount"></span>
+        </div>
       </div>
     </div>
   </div>
   <div class="place-order-bar">
-    <button class="place-order-btn" id="placeOrderBtn" disabled type="button">注文を確定する</button>
+    <button class="cart-step-next" id="cartStepNext" type="button">受け取りへ</button>
+    <button class="place-order-btn" id="placeOrderBtn" disabled type="button" hidden>注文を確定する</button>
   </div>
 </section>
 
@@ -158,7 +191,7 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-    <script type="module" src="js/app.js?v=sched1"></script>
+    <script type="module" src="js/app.js?v=ux1"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
