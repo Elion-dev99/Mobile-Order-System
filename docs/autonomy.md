@@ -107,6 +107,7 @@ Cardinal タブの **自律 90%** パネル。API `action: status` の `autonomy
 
 ## 関連
 
+- `docs/cursor-founder-division-of-labor.md` — **Cursor と創業者の役割分担書（一覧）**
 - `docs/cardinal.md`
 - `docs/cardinal-product-gate.md`
 - `scripts/canary-probe.mjs`
