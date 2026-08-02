@@ -107,6 +107,11 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
+## 既知の問題
+
+- **watchdog 起動の重複（要修正）** — `functions/api/_agent-ledger.js` の起動台帳は Cloudflare **Cache API**（`caches.default`）に保存している。Cache API は **colo（エッジ拠点）ローカル**でグローバルな一貫性が無く、さらに `readAgentLedger` → 起動 → `recordLaunch` の間に非同期の空白があるため、短時間に複数リクエスト（複数の Ops タブ / 同時 tick）が来ると `recentlyLaunched()` のクールダウン判定（既定 90 分）を回避して **同一 kind の watchdog / incident エージェントが多重起動**しうる。2026-08-02 04:16–04:18 UTC 頃、`kind: watchdog` / title「Executor 無応答の監視」が同一クールダウン内に 3 回連続起動した事例を Guardian ウォッチドッグで確認（`cursor.com/agents` 上で同時に `RUNNING` の重複ブランチ3本）。無認証で `/api/cardinal`（`action: status`）を叩いた際も `ledger.lastByKind` が空で返り、colo 間の不整合を裏付けた。
+  - 対応方針（Executor 向け）: 冪等キー（例: 日付+kind、または起動直前に生成した一意トークンを先に書き込んでから起動する CAS 風の二段階書き込み）に変更するか、より一貫性の高いストア（Cloudflare **KV** の `put` with `expirationTtl` や D1 の一意制約）に置き換える。加えて `js/cardinal.js` 側で同一ブラウザ内の多重 `runCardinalCycle` 同時実行を防ぐクライアント側ロック（実行中フラグ）も検討。
+
 ## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
