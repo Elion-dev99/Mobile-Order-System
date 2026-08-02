@@ -107,6 +107,22 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
+## 既知の問題: watchdog 起票の重複（要修正・非緊急）
+
+Guardian watchdog（`kind: watchdog`）の再起動抑制は `functions/api/_agent-ledger.js` が
+Cloudflare `caches.default`（Cache API）に書く台帳と `COOLDOWN.watchdog = 90分` に依存している。
+Cache API は **エッジロケーション（colo）単位でしか一貫性がない**ため、ほぼ同時に別 colo へ
+着地したリクエストは互いの直近起動を見えず、90分クールダウン内でも複数の Guardian watchdog
+Cloud Agent が並行起動しうる（実際に2026-08-02、数分間隔で3体の重複起動を観測。コード変更・
+PRは無し＝クレジット浪費のみ）。クライアント側 `js/cardinal.js` の `dispatchRole()` も
+ブラウザ `localStorage` のみでクールダウンを見ており、複数タブ/セッション間では共有されない。
+
+再発防止（Executor タスク候補、非緊急）:
+- `_agent-ledger.js` の台帳を KV など colo 横断で一貫性のあるストアに置き換える、または
+  同一 `kind` の起動リクエストに対して起動前に一定秒数のデバウンス/ロックを追加する
+- もしくは `dispatchRole`（サーバー側）に同時実行防止（例: 起動直前に再度台帳を読んで
+  ごく短い猶予内の重複をスキップ）を足す
+
 ## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
