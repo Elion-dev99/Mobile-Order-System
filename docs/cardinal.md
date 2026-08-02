@@ -107,6 +107,41 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
+## 既知の課題（Guardian 起票 — 2026-08-02）
+
+**watchdog ディスパッチの重複起動**（`cardinal:executor` 向け、severity: warning、緊急性低）
+
+- 現象: 同一内容の「Executor 無応答の監視」Guardian タスクが約60秒間隔で複数（観測時点で4件）
+  同時に `RUNNING` で起動していた（`cursor/cardinal-guardian-watchdog-*-a58c` ブランチが並行生成）。
+- 実際の本番状態は正常: `Cardinal cron watchdog` / `canary / rollback` / `auto-merge` は直近まで
+  すべて成功、オープン PR なし、直近 PR (#59) は約50分前にマージ済み。ロールバックも発生していない。
+  → **Executor は無応答ではない**。これは watchdog 判定側の誤検知（重複起動）。
+- 推定原因（コード上の根拠）:
+  1. `js/cardinal.js` の `startCardinal()` は既定 `intervalMs = 60_000`（60秒）で `runCardinalCycle()`
+     を回す。Executor の心拍はブラウザ側で意図的にソフト心拍しない設計
+     （`// Ops session soft-beats Guardian only.` コメント参照）ため、一度でも
+     dispatch 実績がある state では `executor.lastHeartbeatAt` が実質恒常的に stale 判定になりうる。
+  2. クライアント側 `dispatchRole()` の cooldown（既定20分）は `localStorage` 依存のため、
+     別ブラウザ/別デバイス/シークレットウィンドウなど localStorage を共有しないセッションが
+     複数あると個別に「未起動」と誤認しうる。
+  3. サーバ側 `functions/api/cardinal.js` の `dispatchRole()` は `kind: watchdog` の cooldown
+     （90分）を `functions/api/_agent-ledger.js` 経由で `caches.default`（Cloudflare Cache API）に
+     保存しているが、**Cache API はエッジ（コロケーション）ローカルであり global に一貫しない**。
+     別コロで処理されたリクエストは ledger が空に見えるため cooldown が効かず、
+     `!task.force && cachesObj` が truthy でも実質的に重複起動を防げない。
+     さらに `cachesObj` が falsy な呼び出し経路では cooldown チェック自体が丸ごとスキップされる
+     （fail-open）。
+- 推奨修正（Executor タスク案）:
+  - `_agent-ledger.js` の保存先を Cache API から globally-consistent なストア
+    （Cloudflare KV など）に変更し、watchdog / incident 等の cooldown をエッジ非依存にする。
+  - `dispatchRole()`（サーバ側）は `cachesObj` が取得できない場合に **fail-closed**
+    （cooldown 不明なら起動しない）に倒すか、最低限ログ・Discord 通知で可視化する。
+  - 併せて `js/cardinal.js` 側でも、直近の同一 `kind` dispatch をサーバーへ問い合わせてから
+    起動する（クライアント localStorage だけに頼らない）と二重防御になる。
+- Guardian の判断: **Executor の再起動・再ディスパッチは不要**（本番は健全）。上記は
+  ディスパッチ機構自体のバグとして Executor 側で修正対象にする（緊急ではない、通常の
+  steward/バグ修正フローで可）。
+
 ## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
