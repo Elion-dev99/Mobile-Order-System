@@ -107,6 +107,24 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
+## 既知の制限 — 無応答ウォッチドッグの誤検知
+
+`functions/api/_agent-ledger.js` の起動クールダウン（`recentlyLaunched` / 90分）は Cloudflare の
+**`caches.default`（Cache API）** に保存しています。Cache API はエッジ（PoP）ごとに独立していて
+グローバルに一貫しないため、次のような誤検知が起こり得ます。
+
+- 短時間に複数リクエストが**別々のエッジ**に着弾すると、各リクエストがそれぞれ「最近起動していない」
+  と判定し、同じ `kind`（例: `watchdog`）の Guardian/Executor を**重複起動**してしまう
+  （2026-08-02 04:19–04:20 UTC に `Executor 無応答監視` タスクが 34 秒間で 4 回起動した実例を確認）
+- 逆に、健全な期間が続いて Cursor 側の dispatch が発生していない（`docs/autonomy.md` の意図どおり
+  「正常 → 起動なし」）だけでも、`ledger.lastByKind` が古い/空に見えるため、
+  **「ハートビートが古い」＝「Executor が止まっている」と即断してはいけない**
+
+ウォッチドッグ判定の際は、まず GitHub の *open PR* と *Cloud Agents の RUNNING 状態* を実際に確認し、
+どちらも動きがなければ「無応答」ではなく「対応不要（健全な待機）」の可能性を優先して検討すること。
+恒久対応（KV/D1 などグローバルに一貫したストアへの移行、または起動前のロック）は Executor の
+予防保守（steward）バックログ項目とする。
+
 ## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
