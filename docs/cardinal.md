@@ -107,6 +107,34 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
+## 既知の課題（Guardian 起票・Executor 対応待ち）
+
+- **watchdog 誤検知 / 重複起動**（2026-08-02 観測, `severity: warning`）:
+  - `js/cardinal.js` の `runCardinalCycle()` は `executor.lastHeartbeatAt` を
+    手動ドリル（`js/outage-drill.js` 相当）以外で更新しない。実運用では
+    `isStale(executor.lastHeartbeatAt, 90min)` がほぼ常に true になり、
+    実質的な判定は `lastDispatchAt`（**ブラウザ localStorage のローカル状態**）
+    頼みになっている。Ops を開いた別セッション／コールドスタートのたびに
+    「Executor 無応答」watchdog が再発火しうる。
+  - 加えて `functions/api/_agent-ledger.js` の 90分クールダウンは
+    `caches.default`（Cloudflare の **コロ単位ローカルキャッシュ**、グローバル
+    一貫性なし）に依存しており、数十秒〜数分差で別コロに着地した dispatch
+    リクエスト同士を重複排除できない。実測: 2026-08-02 04:16–04:19 UTC に
+    watchdog エージェントが4件、14:27–14:28 UTC に2件、いずれも近接タイミング
+    で重複起動（Cloud Agents 一覧で確認）。同時刻の GitHub 側は PR #59 が
+    13:41 UTC に auto-merge 済みでオープンPRなし、cron watchdog / canary /
+    auto-merge も全て成功しており、Executor 自体は無応答ではなかった
+    （= watchdog のフォールスポジティブ＋重複起動）。
+  - 推奨対応（`cardinal:executor`, 最小差分で）:
+    1. watchdog 判定を「ローカル heartbeat」ではなく実際の GitHub/Cursor
+       シグナル（直近マージ時刻・オープンPRの有無・Cloud Agent 状態）に
+       寄せる、または `executor.lastHeartbeatAt` を dispatch 成功時／
+       PR マージ検知時に更新する。
+    2. `_agent-ledger.js` の dedup ストアを colo ローカルでない領域
+       （例: Workers KV）に変更するか、少なくとも watchdog kind の
+       クールダウン判定を dispatch 前にサーバー側で直列化する。
+    3. 既存のクールダウン定数・全体構造は維持してよい（大規模リファクタ不要）。
+
 ## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
