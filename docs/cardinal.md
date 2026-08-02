@@ -107,6 +107,10 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
+## 既知の問題
+
+- `docs/incidents/2026-08-02-guardian-watchdog-duplicate-dispatch.md` — Guardian watchdog（`kind:"watchdog"`）が短時間に重複起動する事象の調査。原因は Ops 側60秒ティックとエッジローカルな cooldown 台帳（`functions/api/_agent-ledger.js` が Cache API 依存）の組み合わせ。本番影響なし。Executor 向け修正 Issue 文面あり。
+
 ## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
