@@ -107,6 +107,35 @@ CURSOR_EXECUTOR_WEBHOOK_URL=...    # 任意
 - `cardinal:stuck` — どちらかが止まった
 - `cardinal:escalate` — 人間確認が必要
 
+## 既知の問題（ウォッチドッグ関連）
+
+- **「ハートビートが古い」≠「Executor が止まっている」** — `docs/autonomy.md` の設計どおり、正常時は
+  tick が Executor を起動しない（`鯖健全 → dispatch なし`）。ウォッチドッグが古い心拍を検知したら、
+  まず GitHub の *open PR* と *Cloud Agents の RUNNING 状態* を確認し、両方とも動きが無ければ
+  「無応答」ではなく「対応不要（健全な待機）」を優先して判断する。
+- **watchdog 起動の重複（Cache API colo レース）** — `functions/api/_agent-ledger.js` の起動台帳は
+  `caches.default`（Cloudflare Cache API）に保存しており、colo（エッジ拠点）ごとに独立していて
+  グローバルな一貫性が無い。さらに `readAgentLedger` → 起動 → `recordLaunch` の間に非同期の空白が
+  あるため、短時間に複数リクエスト（複数 Ops タブ／同時 tick）が別々の colo に着弾すると
+  `recentlyLaunched()`（既定 90 分クールダウン）を回避して同一 `kind` の Guardian/Executor が
+  多重起動しうる（2026-08-02 04:16–04:24 UTC に `kind: watchdog`「Executor 無応答の監視」が
+  同一クールダウン内に少なくとも 4〜5 回連続起動した実例あり）。
+  - 対応方針（Executor 向け）: 起動前に一意トークンを先に書き込む CAS 風の二段階書き込みにするか、
+    より一貫性の高いストア（Cloudflare **KV** の `put`+`expirationTtl`、または D1 の一意制約）に
+    ledger を置き換える。`js/cardinal.js` 側の同一ブラウザ内多重実行防止ロックも合わせて検討。
+- **日次/週次 steward が特定の UTC 時間帯に一度も発火していない（要修正）** — `cardinal-cron.yml` は
+  `case "$HOUR_UTC" in 01) run_steward ;; esac` のように **実行時刻がちょうど 01 時（Executor 日次
+  steward）／日曜 02 時（Guardian 週次 steward）と完全一致した時だけ**起動する設計になっている。
+  しかし本ワークフローの全 31 実行（2026-07-30〜08-02 の全履歴）を調べたところ、
+  **`HOUR_UTC == 01` および `HOUR_UTC == 02` の実行が一度も発生していない**
+  （GitHub Actions のスケジュール実行はこのリポジトリの負荷下で数十分〜数時間単位でずれ／間引かれる
+  ことがあり、たまたま連日この2時間帯だけを飛ばし続けている）。結果として、日次 Executor
+  steward・週次 Guardian steward は自動では実質一度も発火せず、Executor の心拍はインシデント発生時
+  以外は更新されない。`steward` の起動は既に `COOLDOWN.steward`（約20時間, `functions/api/cardinal.js`）
+  でサーバー側冪等になっているため、**厳密な時刻一致ではなく毎時 tick のたびに `run_steward` /
+  （日曜のみ）`run_steward_g` を無条件に呼び、サーバー側クールダウンで一日一回に間引く**方式へ
+  変更するのが低リスクな直し方（対応方針・Executor 向け）。
+
 ## 人間の残り仕事（約10%・意図的）
 
 1. Cloudflare / Cursor の **初回シークレット設定**
