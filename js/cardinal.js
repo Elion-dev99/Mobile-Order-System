@@ -157,6 +157,9 @@ export async function recordHeartbeat(role, { status = 'ok', detail = '' } = {})
 export async function dispatchRole(role, task = {}) {
   const id = ROLES[role] ? role : 'executor';
   const prefs = loadCardinalPrefs();
+  if (!isCapabilityOn('masterCursorDispatch', prefs)) {
+    return { ok: false, skipped: true, reason: 'master_cursor_dispatch_off', role: id };
+  }
   if (!task.force && task.kind === 'incident' && !isCapabilityOn('dispatchOnOutage', prefs)) {
     return { ok: false, skipped: true, reason: 'capability_off', role: id };
   }
@@ -247,6 +250,15 @@ export async function runCardinalCycle({
 } = {}) {
   await loadNotifySettings().catch(() => {});
   const prefs = loadCardinalPrefs();
+  if (!isCapabilityOn('opsClientCardinal', prefs)) {
+    return {
+      skipped: true,
+      reason: 'ops_client_cardinal_off',
+      health: getLastHealthState() || { status: 'unknown' },
+      state: loadCardinalState(),
+      actions: [],
+    };
+  }
   const heal = await runAutoHealCycle({ escalateAfterFails });
   // Capability off → clear Cardinal-owned auto maintenance even if already ON
   if (!isCapabilityOn('autoMaintenance', prefs)) {

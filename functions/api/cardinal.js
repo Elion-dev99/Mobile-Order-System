@@ -42,6 +42,14 @@ import {
   planProductCycle,
   summarizeProductGate,
 } from './_product-gate.js';
+import {
+  readCardinalPrefs,
+  writeCardinalPrefs,
+  allowCursorDispatch,
+  allowGithubCron,
+  isServerCapabilityOn,
+  CARDINAL_CAPABILITY_DEFS,
+} from './_cardinal-prefs-store.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
 const FIRESTORE_PROBE =
@@ -476,6 +484,21 @@ function pickAutomation(env, role) {
 
 async function dispatchRole(env, role, task, body, cachesObj = null) {
   const kind = String(task.kind || 'ops');
+  if (cachesObj) {
+    const prefs = await readCardinalPrefs(cachesObj);
+    const capGate = allowCursorDispatch(prefs, kind, { force: !!task.force });
+    if (!capGate.ok) {
+      return {
+        automation: { ok: false, skipped: true, reason: capGate.reason },
+        agent: { ok: false, skipped: true, reason: capGate.reason },
+        launched: false,
+        skipped: true,
+        reason: capGate.reason,
+        role,
+        kind,
+      };
+    }
+  }
   const cooldownMs = COOLDOWN[kind] || COOLDOWN.watchdog;
   if (!task.force && cachesObj) {
     const ledger = await readAgentLedger(cachesObj);
@@ -735,6 +758,24 @@ export async function onRequestPost(context) {
 
   // Lightweight digest from server probes (no order DB aggregation)
   if (action === 'digest') {
+    const prefs = await readCardinalPrefs(context.caches);
+    const cronGate = allowGithubCron(prefs, body.source);
+    if (!cronGate.ok && !body.force) {
+      return j({
+        ok: true,
+        action: 'digest',
+        skipped: true,
+        reason: cronGate.reason,
+      });
+    }
+    if (!isServerCapabilityOn(prefs, 'dailyDigest') && !body.force) {
+      return j({
+        ok: true,
+        action: 'digest',
+        skipped: true,
+        reason: 'capability_off:dailyDigest',
+      });
+    }
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
     const started = Date.now();
     let home = { ok: false };
@@ -762,6 +803,17 @@ export async function onRequestPost(context) {
 
   // Hourly/ cron tick: probe site + Firestore, auto maintenance, wake agents
   if (action === 'tick') {
+    const prefs = await readCardinalPrefs(context.caches);
+    const cronGate = allowGithubCron(prefs, body.source);
+    if (!cronGate.ok && !body.force) {
+      return j({
+        ok: true,
+        action: 'tick',
+        skipped: true,
+        reason: cronGate.reason,
+        prefs: { capabilities: { masterServerCron: prefs.capabilities?.masterServerCron } },
+      });
+    }
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
     const force = !!body.force;
     const simulateUnhealthy = !!body.simulateUnhealthy || !!body.drillOutage;
@@ -779,7 +831,8 @@ export async function onRequestPost(context) {
     let scheduleApply = null;
     try {
       const prev = await readMaintenanceState(context.caches);
-      if (shouldMaintain) {
+      const autoMaintOn = isServerCapabilityOn(prefs, 'autoMaintenance');
+      if (shouldMaintain && autoMaintOn) {
         maintenance = await writeMaintenanceState(context.caches, {
           maintenance: true,
           message: MAINT_DEFAULT_MESSAGE,
@@ -852,7 +905,9 @@ export async function onRequestPost(context) {
     let dispatch = null;
     let followup = null;
     const allowDispatch = !simulateUnhealthy || !!body.dispatchOnDrill;
-    if (allowDispatch && (unhealthy || force)) {
+    const dispatchOnOutageOn = isServerCapabilityOn(prefs, 'dispatchOnOutage');
+    const watchdogOn = isServerCapabilityOn(prefs, 'watchdog');
+    if (allowDispatch && (unhealthy || force) && (unhealthy ? dispatchOnOutageOn : watchdogOn || force)) {
       const role = unhealthy ? 'executor' : 'guardian';
       dispatch = await dispatchRole(env, role, {
         kind: unhealthy ? 'incident' : 'watchdog',
@@ -894,7 +949,7 @@ export async function onRequestPost(context) {
           acceptance: ['継続原因の特定', 'draft PR または外部障害報告', '二重修正を避ける'],
         }, body, context.caches);
       }
-    } else if (!simulateUnhealthy) {
+    } else if (!simulateUnhealthy && isServerCapabilityOn(prefs, 'tickHealthyDiscord')) {
       await postDiscord(env, body, {
         title: 'Cardinal tick: 正常',
         color: 0x57f287,
@@ -927,6 +982,24 @@ export async function onRequestPost(context) {
 
   // Proactive steward: daily Cursor maintenance / bug sweep when healthy
   if (action === 'steward') {
+    const prefs = await readCardinalPrefs(context.caches);
+    const cronGate = allowGithubCron(prefs, body.source);
+    if (!cronGate.ok && !body.force) {
+      return j({
+        ok: true,
+        action: 'steward',
+        skipped: true,
+        reason: cronGate.reason,
+      });
+    }
+    if (!isServerCapabilityOn(prefs, 'proactiveSteward') && !body.force) {
+      return j({
+        ok: true,
+        action: 'steward',
+        skipped: true,
+        reason: 'capability_off:proactiveSteward',
+      });
+    }
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
     const probes = await runProbes(base);
     const verdict = probeVerdict(probes);
@@ -1013,6 +1086,16 @@ export async function onRequestPost(context) {
   }
 
   if (action === 'followup') {
+    const prefs = await readCardinalPrefs(context.caches);
+    const cronGate = allowGithubCron(prefs, body.source);
+    if (!cronGate.ok && !body.force) {
+      return j({
+        ok: true,
+        action: 'followup',
+        skipped: true,
+        reason: cronGate.reason,
+      });
+    }
     const base = String(body.baseUrl || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
     const probes = await runProbes(base);
     const verdict = probeVerdict(probes);
@@ -1135,6 +1218,17 @@ export async function onRequestPost(context) {
   }
 
   if (action === 'product_cycle') {
+    const prefs = await readCardinalPrefs(context.caches);
+    if (!isServerCapabilityOn(prefs, 'productGate') && !body.force) {
+      return j({
+        ok: true,
+        action: 'product_cycle',
+        step: 'idle',
+        skipped: true,
+        reason: 'capability_off:productGate',
+        dispatched: false,
+      });
+    }
     const force = !!body.force;
     const forceScout = !!body.forceScout;
     const gate = await readProductGate(context.caches);
@@ -1171,9 +1265,32 @@ export async function onRequestPost(context) {
     });
   }
 
+  if (action === 'prefs_get') {
+    const prefs = await readCardinalPrefs(context.caches);
+    return j({
+      ok: true,
+      action: 'prefs_get',
+      prefs,
+      capabilityIds: CARDINAL_CAPABILITY_DEFS.map((c) => c.id),
+    });
+  }
+
+  if (action === 'prefs_set') {
+    const incoming = body.prefs && typeof body.prefs === 'object' ? body.prefs : body;
+    const saved = await writeCardinalPrefs(context.caches, incoming, body.updatedBy || 'ops-ui');
+    return j({
+      ok: true,
+      action: 'prefs_set',
+      prefs: saved,
+      persisted: saved.persisted !== false,
+      persistError: saved.persistError || null,
+    });
+  }
+
   {
     const ledger = await readAgentLedger(context.caches).catch(() => defaultLedgerSafe());
     const productGate = await readProductGate(context.caches).catch(() => null);
+    const prefs = await readCardinalPrefs(context.caches);
     return j({
       ok: true,
       action: 'status',
@@ -1211,6 +1328,8 @@ export async function onRequestPost(context) {
       },
       ledger: ledger ? { lastByKind: ledger.lastByKind, recent: (ledger.launches || []).slice(0, 8) } : null,
       productGate: productGate ? summarizeProductGate(productGate) : null,
+      prefs,
+      capabilityIds: CARDINAL_CAPABILITY_DEFS.map((c) => c.id),
     });
   }
 }
@@ -1224,7 +1343,7 @@ export async function onRequestGet(context) {
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    actions: ['status', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
+    actions: ['status', 'prefs_get', 'prefs_set', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
     autonomy: { targetPct: 90, policy: 'docs/autonomy.md' },
     hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }. See docs/autonomy.md.',
   }, 200, context.request);
