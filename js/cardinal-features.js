@@ -9,6 +9,7 @@ import { notifyDiscord, loadNotifySettings, probeNotifyApi } from './notify.js';
 import { getOpsApiSecret } from './ops-secret.js';
 
 const PREFS_KEY = 'mos_cardinal_prefs';
+const PREFS_SHUTDOWN_VER = '2026-08-all-off';
 const TIMELINE_KEY = 'mos_cardinal_timeline';
 const DIGEST_AT_KEY = 'mos_cardinal_last_digest_at';
 const ANOMALY_AT_KEY = 'mos_cardinal_last_anomaly_at';
@@ -19,103 +20,103 @@ export const CARDINAL_CAPABILITIES = [
     id: 'masterCursorDispatch',
     label: 'Cursor 起動（全体）',
     description: 'Cloud Agent / Automation の起動をすべて停止（Ops 手動ボタン含む）',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'masterServerCron',
     label: 'GitHub 定期 cron',
     description: 'cardinal-cron.yml の tick / digest / steward / followup',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'opsClientCardinal',
     label: 'Ops ブラウザ Cardinal',
     description: 'Ops を開いている間の 60 秒サイクル（心拍・ウォッチドッグ等）',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'autoMaintenance',
     label: '障害時自動メンテ',
     description: 'Firestore/サイト障害でメンテナンスを自動 ON',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'dispatchOnOutage',
     label: '障害時 Executor 起動',
     description: '連続障害で Cursor Executor を起動',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'watchdog',
     label: '相互ウォッチドッグ',
     description: 'Guardian/Executor 無応答時に相手を起こす',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'anomalyScan',
     label: '店舗異常スキャン',
     description: '営業中なのに注文ゼロ・保留キュー過多を検知',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'dailyDigest',
     label: '日次ダイジェスト',
     description: '1日1回 Discord に健全性サマリを送信',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'quietHours',
     label: '静穏時間',
     description: '深夜は warning 以下の Discord/起動を抑制（down は除く）',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'timeline',
     label: 'アクション履歴',
     description: 'Cardinal の判断を Ops に残す',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'proactiveSteward',
     label: '予防保守ステュワード',
     description: '健全時も日次で Cursor が小さな修正・レビューを回す（自律90%）',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'ciDispatch',
     label: 'CI失敗→Executor',
     description: 'Deploy 失敗時に GitHub から Executor を起動（サーバ側ワークフロー）',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'prGuardian',
     label: 'PR→Guardianレビュー',
     description: 'cursor/* の PR で Guardian を起動（サーバ側ワークフロー）',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'productGate',
     label: '製品ゲート（双方向）',
     description: '市場提案 → Guardian+Executor approve → 実装',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'marketScout',
     label: '市場スカウト',
     description: '週次でゼロ現金成長に沿った機能案を調査',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'dualFeatureReview',
     label: '機能デュアルレビュー',
     description: '新機能は Guardian と Executor の両方が approve するまで実装しない',
-    defaultOn: true,
+    defaultOn: false,
   },
   {
     id: 'tickHealthyDiscord',
     label: 'tick 正常時 Discord',
     description: '毎時 cron が健全でも Discord に報告（ノイズ削減用 OFF）',
-    defaultOn: true,
+    defaultOn: false,
   },
 ];
 
@@ -132,8 +133,23 @@ export function defaultCardinalPrefs() {
   };
 }
 
+export function allCapabilitiesOff() {
+  return Object.fromEntries(CARDINAL_CAPABILITIES.map((c) => [c.id, false]));
+}
+
 export function loadCardinalPrefs() {
   try {
+    const ver = localStorage.getItem('mos_cardinal_prefs_shutdown_ver');
+    if (ver !== PREFS_SHUTDOWN_VER) {
+      const off = defaultCardinalPrefs();
+      off.capabilities = allCapabilitiesOff();
+      off.updatedAt = Date.now();
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(off));
+        localStorage.setItem('mos_cardinal_prefs_shutdown_ver', PREFS_SHUTDOWN_VER);
+      } catch (_) {}
+      return off;
+    }
     const raw = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null') || {};
     const base = defaultCardinalPrefs();
     return {

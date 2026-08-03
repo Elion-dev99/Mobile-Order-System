@@ -7,8 +7,6 @@ name: Cardinal cron watchdog
 # - weekly Guardian steward (Sunday 02:15 UTC)
 
 on:
-  schedule:
-    - cron: '15 * * * *' # hourly at :15 UTC
   workflow_dispatch:
     inputs:
       force:
@@ -23,6 +21,9 @@ on:
         default: 'auto'
         type: choice
         options: ['auto', 'tick', 'digest', 'steward', 'steward_guardian', 'followup']
+  # schedule disabled — token conservation (manual workflow_dispatch only)
+  # schedule:
+  #   - cron: '15 * * * *'
 
 jobs:
   tick:

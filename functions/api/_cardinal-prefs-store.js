@@ -2,7 +2,8 @@
  * Cardinal capability prefs (Cache API) — shared by GitHub cron, Ops, and dispatch gates.
  */
 
-const CACHE_URL = 'https://mobile-order-system.pages.dev/__cardinal_prefs_v1';
+const CACHE_URL = 'https://mobile-order-system.pages.dev/__cardinal_prefs_v2';
+const CACHE_URL_LEGACY = 'https://mobile-order-system.pages.dev/__cardinal_prefs_v1';
 
 function resolveCache(cachesObj) {
   try {
@@ -16,23 +17,23 @@ function resolveCache(cachesObj) {
 
 /** Keep in sync with js/cardinal-features.js CARDINAL_CAPABILITIES ids. */
 export const CARDINAL_CAPABILITY_DEFS = [
-  { id: 'masterCursorDispatch', defaultOn: true },
-  { id: 'masterServerCron', defaultOn: true },
-  { id: 'opsClientCardinal', defaultOn: true },
-  { id: 'autoMaintenance', defaultOn: true },
-  { id: 'dispatchOnOutage', defaultOn: true },
-  { id: 'watchdog', defaultOn: true },
-  { id: 'anomalyScan', defaultOn: true },
-  { id: 'dailyDigest', defaultOn: true },
-  { id: 'quietHours', defaultOn: true },
-  { id: 'timeline', defaultOn: true },
-  { id: 'proactiveSteward', defaultOn: true },
-  { id: 'ciDispatch', defaultOn: true },
-  { id: 'prGuardian', defaultOn: true },
-  { id: 'productGate', defaultOn: true },
-  { id: 'marketScout', defaultOn: true },
-  { id: 'dualFeatureReview', defaultOn: true },
-  { id: 'tickHealthyDiscord', defaultOn: true },
+  { id: 'masterCursorDispatch', defaultOn: false },
+  { id: 'masterServerCron', defaultOn: false },
+  { id: 'opsClientCardinal', defaultOn: false },
+  { id: 'autoMaintenance', defaultOn: false },
+  { id: 'dispatchOnOutage', defaultOn: false },
+  { id: 'watchdog', defaultOn: false },
+  { id: 'anomalyScan', defaultOn: false },
+  { id: 'dailyDigest', defaultOn: false },
+  { id: 'quietHours', defaultOn: false },
+  { id: 'timeline', defaultOn: false },
+  { id: 'proactiveSteward', defaultOn: false },
+  { id: 'ciDispatch', defaultOn: false },
+  { id: 'prGuardian', defaultOn: false },
+  { id: 'productGate', defaultOn: false },
+  { id: 'marketScout', defaultOn: false },
+  { id: 'dualFeatureReview', defaultOn: false },
+  { id: 'tickHealthyDiscord', defaultOn: false },
 ];
 
 export function defaultCardinalPrefs() {
@@ -98,16 +99,22 @@ export function capabilityForKind(kind) {
 
 /** Gate Cursor Automations / Cloud Agents launches. */
 export function allowCursorDispatch(prefs, kind, { force = false } = {}) {
-  if (force) return { ok: true };
   const p = normalizeCardinalPrefs(prefs);
   if (!isServerCapabilityOn(p, 'masterCursorDispatch')) {
     return { ok: false, reason: 'master_cursor_dispatch_off' };
+  }
+  if (force) {
+    return { ok: true };
   }
   const cap = capabilityForKind(kind);
   if (cap && !isServerCapabilityOn(p, cap)) {
     return { ok: false, reason: `capability_off:${cap}` };
   }
   return { ok: true };
+}
+
+export function allCapabilitiesOff() {
+  return Object.fromEntries(CARDINAL_CAPABILITY_DEFS.map((c) => [c.id, false]));
 }
 
 /** GitHub scheduled cron (cardinal-cron.yml) — not manual Ops buttons. */
@@ -126,9 +133,43 @@ export async function readCardinalPrefs(cachesObj) {
     const cache = resolveCache(cachesObj);
     if (!cache) return defaultCardinalPrefs();
     const hit = await cache.match(CACHE_URL);
-    if (!hit) return defaultCardinalPrefs();
-    const data = await hit.json();
-    return normalizeCardinalPrefs(data);
+    if (hit) {
+      const data = await hit.json();
+      if (!data.shutdownEpoch) {
+        const shutdown = {
+          ...normalizeCardinalPrefs(data),
+          capabilities: allCapabilitiesOff(),
+          shutdownEpoch: 1,
+          updatedAt: Date.now(),
+          updatedBy: 'forced-shutdown-2026-08',
+        };
+        const res = new Response(JSON.stringify(shutdown), {
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'public, max-age=604800',
+          },
+        });
+        await cache.put(CACHE_URL, res);
+        return normalizeCardinalPrefs(shutdown);
+      }
+      return normalizeCardinalPrefs(data);
+    }
+    // v2 未作成: 全機能 OFF で初期化（v1 の ON 状態は引き継がない）
+    const shutdown = {
+      ...defaultCardinalPrefs(),
+      capabilities: allCapabilitiesOff(),
+      updatedAt: Date.now(),
+      updatedBy: 'init-v2-shutdown',
+    };
+    const res = new Response(JSON.stringify(shutdown), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'public, max-age=604800',
+      },
+    });
+    await cache.put(CACHE_URL, res);
+    try { await cache.delete(CACHE_URL_LEGACY); } catch (_) {}
+    return normalizeCardinalPrefs(shutdown);
   } catch {
     return defaultCardinalPrefs();
   }

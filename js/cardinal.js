@@ -46,6 +46,7 @@ export {
   loadCardinalPrefs,
   saveCardinalPrefs,
   CARDINAL_CAPABILITIES,
+  allCapabilitiesOff,
   listCardinalTimeline,
   clearCardinalTimeline,
   pushCardinalTimeline,

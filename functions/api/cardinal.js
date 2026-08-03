@@ -49,6 +49,7 @@ import {
   allowGithubCron,
   isServerCapabilityOn,
   CARDINAL_CAPABILITY_DEFS,
+  allCapabilitiesOff,
 } from './_cardinal-prefs-store.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
@@ -1287,6 +1288,21 @@ export async function onRequestPost(context) {
     });
   }
 
+  if (action === 'prefs_shutdown_all') {
+    const saved = await writeCardinalPrefs(
+      context.caches,
+      { capabilities: allCapabilitiesOff() },
+      body.updatedBy || 'prefs_shutdown_all',
+    );
+    return j({
+      ok: true,
+      action: 'prefs_shutdown_all',
+      prefs: saved,
+      persisted: saved.persisted !== false,
+      persistError: saved.persistError || null,
+    });
+  }
+
   {
     const ledger = await readAgentLedger(context.caches).catch(() => defaultLedgerSafe());
     const productGate = await readProductGate(context.caches).catch(() => null);
@@ -1343,7 +1359,7 @@ export async function onRequestGet(context) {
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    actions: ['status', 'prefs_get', 'prefs_set', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
+    actions: ['status', 'prefs_get', 'prefs_set', 'prefs_shutdown_all', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
     autonomy: { targetPct: 90, policy: 'docs/autonomy.md' },
     hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }. See docs/autonomy.md.',
   }, 200, context.request);

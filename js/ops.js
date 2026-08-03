@@ -38,6 +38,7 @@ import {
 import { runFullLoadTest, ensureWebhookReady, cleanupLoadTestShops } from './load-test.js';
 import {
   startCardinal,
+  stopCardinal,
   runCardinalCycle,
   runCardinalDrill,
   getCardinalSnapshot,
@@ -53,6 +54,7 @@ import {
   maybeNotifyAnomalies,
   maybeSendDailyDigest,
   isCapabilityOn,
+  allCapabilitiesOff,
 } from './cardinal.js';
 import { escalateToCursor, runAutoHealCycle, getAutoHealState } from './auto-heal.js';
 import { ordersToCsv, downloadCsv } from './guest-extras.js';
@@ -129,10 +131,13 @@ const OpsPage = {
     await this.refreshMaintenance();
     subscribeMaintenance(() => this.renderMaintenancePanel());
     this.startHealthPolling();
-    startCardinal({
-      intervalMs: 60_000,
-      getContext: () => ({ shops: this.shops || [], orders: this.orders || [] }),
-    });
+    const prefs = loadCardinalPrefs();
+    if (isCapabilityOn('opsClientCardinal', prefs)) {
+      startCardinal({
+        intervalMs: 60_000,
+        getContext: () => ({ shops: this.shops || [], orders: this.orders || [] }),
+      });
+    }
     await this.refreshCardinal();
     this.startCardinalPolling();
     const params = new URLSearchParams(location.search);
@@ -172,6 +177,27 @@ const OpsPage = {
       api = await cardinalApi('status');
     } catch (_) {}
     this.renderCardinal(api);
+  },
+
+  async shutdownAllCardinalAutomation() {
+    const caps = allCapabilitiesOff();
+    saveCardinalPrefs({ capabilities: caps });
+    stopCardinal();
+    let serverOk = false;
+    try {
+      const res = await cardinalApi('prefs_shutdown_all', { updatedBy: 'ops-ui-shutdown-all' });
+      serverOk = !!(res.ok && res.data?.persisted !== false);
+    } catch (_) {}
+    document.querySelectorAll('[data-cardinal-cap]').forEach((el) => { el.checked = false; });
+    const st = document.getElementById('opsCardinalPrefsStatus');
+    if (st) {
+      st.hidden = false;
+      st.textContent = serverOk
+        ? 'すべて OFF にしました（サーバー・GitHub cron ゲート反映済み）'
+        : 'ブラウザは OFF（サーバーは鍵を確認して「すべてOFF」を再実行）';
+    }
+    this.renderCardinalCaps(loadCardinalPrefs(), { force: true });
+    await this.refreshCardinal();
   },
 
   renderCardinal(apiRes = null) {
@@ -1109,6 +1135,9 @@ const OpsPage = {
     });
     document.getElementById('opsCardinalPrefsSave')?.addEventListener('click', () => {
       this.saveCardinalPrefsFromForm();
+    });
+    document.getElementById('opsCardinalShutdownAll')?.addEventListener('click', () => {
+      this.shutdownAllCardinalAutomation();
     });
     document.getElementById('opsCardinalTimelineClear')?.addEventListener('click', () => {
       clearCardinalTimeline();
