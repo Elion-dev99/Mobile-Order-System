@@ -16,6 +16,24 @@ const ANOMALY_AT_KEY = 'mos_cardinal_last_anomaly_at';
 /** Toggleable Cardinal capabilities (Ops UI). */
 export const CARDINAL_CAPABILITIES = [
   {
+    id: 'masterCursorDispatch',
+    label: 'Cursor 起動（全体）',
+    description: 'Cloud Agent / Automation の起動をすべて停止（Ops 手動ボタン含む）',
+    defaultOn: true,
+  },
+  {
+    id: 'masterServerCron',
+    label: 'GitHub 定期 cron',
+    description: 'cardinal-cron.yml の tick / digest / steward / followup',
+    defaultOn: true,
+  },
+  {
+    id: 'opsClientCardinal',
+    label: 'Ops ブラウザ Cardinal',
+    description: 'Ops を開いている間の 60 秒サイクル（心拍・ウォッチドッグ等）',
+    defaultOn: true,
+  },
+  {
     id: 'autoMaintenance',
     label: '障害時自動メンテ',
     description: 'Firestore/サイト障害でメンテナンスを自動 ON',
@@ -93,6 +111,12 @@ export const CARDINAL_CAPABILITIES = [
     description: '新機能は Guardian と Executor の両方が approve するまで実装しない',
     defaultOn: true,
   },
+  {
+    id: 'tickHealthyDiscord',
+    label: 'tick 正常時 Discord',
+    description: '毎時 cron が健全でも Discord に報告（ノイズ削減用 OFF）',
+    defaultOn: true,
+  },
 ];
 
 export function defaultCardinalPrefs() {
@@ -134,7 +158,21 @@ export function saveCardinalPrefs(partial = {}) {
   return next;
 }
 
+const DISPATCH_RELATED_CAPS = new Set([
+  'dispatchOnOutage',
+  'watchdog',
+  'proactiveSteward',
+  'ciDispatch',
+  'prGuardian',
+  'productGate',
+  'marketScout',
+  'dualFeatureReview',
+]);
+
 export function isCapabilityOn(id, prefs = loadCardinalPrefs()) {
+  if (DISPATCH_RELATED_CAPS.has(id) && prefs.capabilities?.masterCursorDispatch === false) {
+    return false;
+  }
   return prefs.capabilities?.[id] !== false;
 }
 

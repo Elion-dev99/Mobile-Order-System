@@ -40,7 +40,7 @@ SAO のカーディナルシステムに着想した、**監視体（Guardian）
 
 | 機能 | 内容 |
 |------|------|
-| **機能スイッチ** | 自動メンテ / Executor起動 / ウォッチドッグ / 異常スキャン / 日次ダイジェスト / 静穏時間 / 履歴（ブラウザ `localStorage`） |
+| **機能スイッチ** | Ops → Cardinal →「設定を保存」で Cloudflare Cache に永続化。**GitHub cron** と **Cursor 起動** に即反映。マスター: `Cursor 起動（全体）` / `GitHub 定期 cron` / `Ops ブラウザ Cardinal` |
 | **静穏時間** | 既定 JST 23:00–08:00。warning 以下の Discord・ウォッチドッグ起動を抑制（`down` / `critical` は通す） |
 | **自己診断** | Firestore・通知API・Ops鍵・メンテ・保留注文などを一括チェック。サーバー側 `action: diagnose` も併用可 |
 | **異常スキャン** | 営業中店舗の注文ゼロ（履歴あり）・保留キュー過多・メンテ中を検知し Discord 通知 |

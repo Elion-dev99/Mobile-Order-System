@@ -157,6 +157,18 @@ const OpsPage = {
     this.cardinal = getCardinalSnapshot();
     let api = null;
     try {
+      const prefsRes = await cardinalApi('prefs_get');
+      if (prefsRes.ok && prefsRes.data?.prefs) {
+        const p = prefsRes.data.prefs;
+        saveCardinalPrefs({
+          capabilities: p.capabilities,
+          quietStart: p.quietStart,
+          quietEnd: p.quietEnd,
+          digestHourJst: p.digestHourJst,
+          anomalyZeroOrderHours: p.anomalyZeroOrderHours,
+          timezone: p.timezone,
+        });
+      }
       api = await cardinalApi('status');
     } catch (_) {}
     this.renderCardinal(api);
@@ -164,7 +176,15 @@ const OpsPage = {
 
   renderCardinal(apiRes = null) {
     const snap = this.cardinal || getCardinalSnapshot();
-    const prefs = snap.prefs || loadCardinalPrefs();
+    const local = loadCardinalPrefs();
+    const serverPrefs = apiRes?.data?.prefs;
+    const prefs = serverPrefs
+      ? {
+          ...local,
+          ...serverPrefs,
+          capabilities: { ...local.capabilities, ...(serverPrefs.capabilities || {}) },
+        }
+      : (snap.prefs || local);
     const fmt = (role) => {
       const r = snap[role] || {};
       if (!r.lastHeartbeatAt) return '未受信';
@@ -244,18 +264,28 @@ const OpsPage = {
     }).join('')}</ul>`;
   },
 
-  saveCardinalPrefsFromForm() {
+  async saveCardinalPrefsFromForm() {
     const capabilities = {};
     document.querySelectorAll('[data-cardinal-cap]').forEach((el) => {
       capabilities[el.dataset.cardinalCap] = !!el.checked;
     });
-    saveCardinalPrefs({
+    const prefs = {
       capabilities,
       quietStart: document.getElementById('opsCardinalQuietStart')?.value || '23:00',
       quietEnd: document.getElementById('opsCardinalQuietEnd')?.value || '08:00',
       digestHourJst: Number(document.getElementById('opsCardinalDigestHour')?.value) || 9,
       anomalyZeroOrderHours: Number(document.getElementById('opsCardinalZeroHours')?.value) || 3,
-    });
+    };
+    saveCardinalPrefs(prefs);
+    let serverOk = false;
+    let persistErr = '';
+    try {
+      const res = await cardinalApi('prefs_set', { prefs, updatedBy: 'ops-ui' });
+      serverOk = !!(res.ok && res.data?.persisted !== false);
+      if (res.data?.persistError) persistErr = String(res.data.persistError);
+    } catch (e) {
+      persistErr = String(e?.message || e);
+    }
     // Turning auto-maintenance off should clear an existing Cardinal lock immediately
     if (capabilities.autoMaintenance === false) {
       const cur = getMaintenance();
@@ -265,7 +295,12 @@ const OpsPage = {
       }
     }
     const st = document.getElementById('opsCardinalPrefsStatus');
-    if (st) { st.hidden = false; st.textContent = 'Cardinal 設定を保存しました'; }
+    if (st) {
+      st.hidden = false;
+      st.textContent = serverOk
+        ? 'Cardinal 設定を保存しました（GitHub cron / サーバー起動に反映）'
+        : `ブラウザのみ保存（サーバー未反映${persistErr ? `: ${persistErr}` : ''}）`;
+    }
     this.cardinal = getCardinalSnapshot();
     this.renderCardinalCaps(loadCardinalPrefs(), { force: true });
     this.renderCardinal();
