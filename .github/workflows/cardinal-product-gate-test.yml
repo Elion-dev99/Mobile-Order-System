@@ -12,10 +12,11 @@ on:
         options:
           - propose_only
           - propose_and_dual_review
-  push:
-    branches: [main]
-    paths:
-      - scripts/run-product-gate-discord-test.json
+  # push disabled — token conservation
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - scripts/run-product-gate-discord-test.json
 
 jobs:
   test-notify:

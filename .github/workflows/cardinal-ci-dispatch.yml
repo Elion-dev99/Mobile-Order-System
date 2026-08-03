@@ -4,9 +4,6 @@ name: Cardinal CI → Executor dispatch
 # Discord notice is secondary; the primary path is Cloud Agent launch.
 
 on:
-  workflow_run:
-    workflows: ["Deploy to Cloudflare Pages"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       force:
@@ -15,6 +12,10 @@ on:
         default: 'false'
         type: choice
         options: ['false', 'true']
+  # workflow_run disabled — token conservation
+  # workflow_run:
+  #   workflows: ["Deploy to Cloudflare Pages"]
+  #   types: [completed]
 
 jobs:
   dispatch:

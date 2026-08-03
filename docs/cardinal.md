@@ -54,7 +54,7 @@ Cursor Automations UI なしでも運用できます（**自律 90%**: `docs/aut
 
 1. **Cloudflare** に `CURSOR_API_KEY` と **`OPS_API_SECRET`** が入っている  
 2. **GitHub** に同じ `OPS_API_SECRET`（cron / CI / PR の `X-Ops-Secret` 用）  
-3. **GitHub Actions** `Cardinal cron watchdog` が毎時 `:15` UTC に `/api/cardinal` の `tick` を叩く  
+3. **GitHub Actions** `Cardinal cron watchdog` — **既定は schedule 無効**（手動 `workflow_dispatch` のみ）。Ops で `GitHub 定期 cron` を ON にしても、サーバー側 `masterServerCron` が OFF なら tick はスキップ  
    - 正常 → エージェント起動なし（Discord があれば心拍のみ）＋**自動メンテナンス解除**（Cardinal が入れた場合のみ）  
    - 異常 → **自動メンテナンス ON** ＋ **Executor** 起動（クールダウン後は `followup`）  
    - 日次 `digest` / 日次 `steward`（Executor 予防保守） / 週次 Guardian steward  
