@@ -4,8 +4,9 @@ name: Cardinal canary / rollback
 # Also usable after auto-merge without waiting only on deploy job.
 
 on:
-  schedule:
-    - cron: '35 * * * *' # ~20 min after hourly Cardinal tick
+  # schedule disabled while GitHub Actions unstable — see docs/cardinal-automation-pause.md
+  # schedule:
+  #   - cron: '35 * * * *'
   workflow_dispatch:
     inputs:
       before_sha:
