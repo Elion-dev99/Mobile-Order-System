@@ -8,6 +8,14 @@ ONLY_PR="${ONLY_PR:-}"
 EVENT_PR="${EVENT_PR:-}"
 HEAD_REF="${HEAD_REF:-}"
 
+if [ "${CARDINAL_AUTOMATION_PAUSED:-false}" = "true" ]; then
+  if [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ]; then
+    echo "Cardinal auto-merge is PAUSED (CARDINAL_AUTOMATION_PAUSED=true). Skipping."
+    exit 0
+  fi
+  echo "PAUSED mode: workflow_dispatch only — deploy dispatch controlled by DISPATCH_DEPLOY_AFTER_MERGE"
+fi
+
 # Prefer PAT so merge push triggers on:push Deploy naturally
 if [ -n "${CARDINAL_GH_PAT:-}" ]; then
   export GH_TOKEN="$CARDINAL_GH_PAT"

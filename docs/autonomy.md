@@ -107,6 +107,7 @@ Cardinal タブの **自律 90%** パネル。API `action: status` の `autonomy
 
 ## 関連
 
+- `docs/cardinal-automation-pause.md` — **自動マージ・Deploy 起動の一時停止**（通信障害時）
 - `docs/cursor-founder-division-of-labor.md` — **Cursor と創業者の役割分担書（一覧）**
 - `docs/cardinal.md`
 - `docs/cardinal-product-gate.md`

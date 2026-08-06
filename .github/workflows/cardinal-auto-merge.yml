@@ -3,18 +3,28 @@ name: Cardinal auto-merge
 # Squash-merge eligible cursor/* PRs. Post-deploy canary will roll back main
 # if probes/display checks fail (see deploy-cloudflare-pages.yml).
 # Policy: docs/autonomy.md
+#
+# PAUSED (2026-08): GitHub Actions 通信障害対応 — 自動マージ・マージ後 Deploy 起動を停止。
+# 再開: docs/autonomy.md「Cardinal 自動デプロイの一時停止」を参照。
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
-  schedule:
-    - cron: '*/25 * * * *'
   workflow_dispatch:
     inputs:
       pr:
-        description: "PR number to merge (optional)"
+        description: "PR number to merge (optional; deploy dispatch remains OFF while paused)"
         required: false
         type: string
+      allow_deploy_dispatch:
+        description: "If true, dispatch Deploy after merge (emergency only)"
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+  # pull_request / schedule disabled while paused — see cardinal-automation-pause.md
+  # pull_request:
+  #   types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  # schedule:
+  #   - cron: '*/25 * * * *'
 
 permissions:
   contents: write
@@ -42,7 +52,8 @@ jobs:
           ONLY_PR: ${{ github.event.inputs.pr || '' }}
           EVENT_PR: ${{ github.event.pull_request.number || '' }}
           HEAD_REF: ${{ github.head_ref || '' }}
-          DISPATCH_DEPLOY_AFTER_MERGE: 'true'
+          CARDINAL_AUTOMATION_PAUSED: 'true'
+          DISPATCH_DEPLOY_AFTER_MERGE: ${{ github.event.inputs.allow_deploy_dispatch || 'false' }}
         run: |
           chmod +x scripts/cardinal-auto-merge.sh
           ./scripts/cardinal-auto-merge.sh
