@@ -151,7 +151,6 @@ async function createPaymentLink({ planId, cycle, setupPriceId, subPriceId, coup
   p.set('after_completion[type]', 'redirect');
   p.set('after_completion[redirect][url]', successUrl);
   p.set('billing_address_collection', 'required');
-  p.set('customer_creation', 'always');
   p.set('invoice_creation[enabled]', 'true');
   p.set('metadata[planId]', planId);
   p.set('metadata[cycle]', cycle);
