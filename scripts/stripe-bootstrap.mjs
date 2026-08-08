@@ -159,11 +159,7 @@ async function createPaymentLink({ planId, cycle, setupPriceId, subPriceId, coup
   p.set('subscription_data[metadata][cycle]', cycle);
   // Payment Links API does not accept discounts on the link — intro coupons are created for Dashboard / Checkout Session phase.
   if (couponId && cycle === 'monthly') {
-<<<<<<< HEAD
     p.set('allow_promotion_codes', 'true');
-=======
-    p.set('subscription_data[discounts][0][coupon]', couponId);
->>>>>>> origin/main
   }
   return stripe('payment_links', p);
 }
