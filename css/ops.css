@@ -122,7 +122,47 @@ body.ops-body {
   margin: 0 auto;
 }
 .ops-top h1 { margin: 0; font-size: 28px; }
-.ops-top-actions { display: flex; gap: 10px; align-items: center; }
+.ops-top-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ops-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+}
+.ops-readiness span {
+  border: 1px solid var(--ops-line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--ops-muted);
+  cursor: default;
+}
+.ops-readiness span.ok { border-color: rgba(87, 242, 135, 0.45); color: #86efac; }
+.ops-readiness span.warn { border-color: rgba(245, 158, 11, 0.45); color: #fcd34d; }
+.ops-read-banner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+.ops-read-banner p { margin: 0 0 10px; font-size: 14px; line-height: 1.45; }
+.ops-read-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ops-cards.is-loading .ops-card strong {
+  color: var(--ops-muted);
+  font-size: 15px;
+}
+.ops-card strong.hq-pending {
+  color: var(--ops-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
 .ops-role {
   font-family: var(--ops-mono);
   font-size: 12px;

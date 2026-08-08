@@ -4,6 +4,7 @@ import {
 import { getOpsApiSecret, setOpsApiSecret, clearOpsApiSecret, opsAuthHeaders } from './ops-secret.js';
 import {
   ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn, signOutStaff, getStaffUser,
+  waitForAuthReady,
 } from './staff-firebase-auth.js';
 import {
   listShops, upsertShop, deleteShop, ensureSeedShops, trialWindowForNewShop,
@@ -87,6 +88,9 @@ const OpsPage = {
   _cardinalTimer: null,
   health: null,
   cardinal: null,
+  _hqShopsReady: false,
+  _hqOrdersSnapSeen: false,
+  _firebaseBannerDismissed: false,
 
   async init() {
     if (!isOpsAuthed()) {
@@ -104,13 +108,12 @@ const OpsPage = {
     this.bind();
     ensureStaffAuthStyles();
     try {
-      const user = await ensureStaffFirebase({
-        title: 'Firebase スタッフログイン',
-        hint: '店舗作成・注文削除・リード閲覧など特権操作に必要です。Firebase Authentication のユーザーで入室してください。',
-      });
-      this.renderFirebaseBadge(user);
+      await waitForAuthReady();
+      this.renderFirebaseBadge(getStaffUser());
+      this.updateReadBanner();
+      this.renderReadinessChips();
     } catch (e) {
-      console.warn('staff firebase', e);
+      console.warn('staff firebase ready', e);
     }
     try {
       await ensureSeedShops();
@@ -164,22 +167,25 @@ const OpsPage = {
   async refreshCardinal() {
     this.cardinal = getCardinalSnapshot();
     let api = null;
+    const hasSecret = getOpsApiSecret().length >= 8;
     try {
-      const prefsRes = await cardinalApi('prefs_get');
-      if (prefsRes.ok && prefsRes.data?.prefs) {
-        const p = prefsRes.data.prefs;
-        saveCardinalPrefs({
-          capabilities: p.capabilities,
-          quietStart: p.quietStart,
-          quietEnd: p.quietEnd,
-          digestHourJst: p.digestHourJst,
-          anomalyZeroOrderHours: p.anomalyZeroOrderHours,
-          timezone: p.timezone,
-        });
+      if (hasSecret) {
+        const prefsRes = await cardinalApi('prefs_get');
+        if (prefsRes.ok && prefsRes.data?.prefs) {
+          const p = prefsRes.data.prefs;
+          saveCardinalPrefs({
+            capabilities: p.capabilities,
+            quietStart: p.quietStart,
+            quietEnd: p.quietEnd,
+            digestHourJst: p.digestHourJst,
+            anomalyZeroOrderHours: p.anomalyZeroOrderHours,
+            timezone: p.timezone,
+          });
+        }
+        api = await cardinalApi('status');
       }
-      api = await cardinalApi('status');
     } catch (_) {}
-    this.renderCardinal(api);
+    this.renderCardinal(api, { apiSkipped: !hasSecret });
   },
 
   async shutdownAllCardinalAutomation() {
@@ -228,7 +234,7 @@ const OpsPage = {
     }
   },
 
-  renderCardinal(apiRes = null) {
+  renderCardinal(apiRes = null, { apiSkipped = false } = {}) {
     const snap = this.cardinal || getCardinalSnapshot();
     const local = loadCardinalPrefs();
     const serverPrefs = apiRes?.data?.prefs;
@@ -254,7 +260,9 @@ const OpsPage = {
     set('cardinalQuietStatus', snap.quiet ? '静穏中' : '通常');
     const capsOn = CARDINAL_CAPABILITIES.filter((c) => prefs.capabilities?.[c.id] !== false).length;
     set('cardinalCapsOn', `${capsOn}/${CARDINAL_CAPABILITIES.length}`);
-    if (apiRes?.data?.configured) {
+    if (apiSkipped) {
+      set('cardinalApiStatus', 'OPS_SECRET 未設定');
+    } else if (apiRes?.data?.configured) {
       const c = apiRes.data.configured;
       const ok = c.guardianWebhook || c.executorWebhook || c.apiKey;
       set('cardinalApiStatus', ok ? '設定あり' : '未設定');
@@ -522,6 +530,58 @@ const OpsPage = {
     const fb = isStaffSignedIn() ? ' · FB' : '';
     document.getElementById('opsRoleBadge').textContent =
       (role === 'cursor' ? 'Cursor' : role === 'owner' ? 'Owner' : '—') + fb;
+    this.renderReadinessChips();
+  },
+
+  updateReadBanner() {
+    const banner = document.getElementById('opsReadBanner');
+    if (!banner) return;
+    const show = !isStaffSignedIn() && !this._firebaseBannerDismissed;
+    banner.hidden = !show;
+  },
+
+  async promptFirebaseLogin(hint = '店舗作成・削除など特権操作に必要です。') {
+    ensureStaffAuthStyles();
+    const user = await ensureStaffFirebase({
+      title: 'Firebase スタッフログイン',
+      hint,
+    });
+    this.renderFirebaseBadge(user);
+    this.updateReadBanner();
+    this.renderReadinessChips();
+    return user;
+  },
+
+  renderReadinessChips() {
+    const el = document.getElementById('opsReadiness');
+    if (!el) return;
+    const fbOk = isStaffSignedIn();
+    const secretOk = getOpsApiSecret().length >= 8;
+    let whOk = false;
+    try {
+      whOk = isLikelyDiscordWebhook(getDiscordWebhook());
+    } catch (_) {}
+    const chip = (label, ok, tab) =>
+      `<span class="${ok ? 'ok' : 'warn'}" data-ops-goto="${tab}" title="${tab} タブを開く">${label} ${ok ? 'OK' : '未設定'}</span>`;
+    el.innerHTML = [
+      chip('Firebase', fbOk, 'security'),
+      chip('OPS_SECRET', secretOk, 'security'),
+      chip('Discord', whOk, 'notify'),
+    ].join('');
+    el.querySelectorAll('[data-ops-goto]').forEach((btn) => {
+      if (btn.dataset.readinessBound) return;
+      btn.dataset.readinessBound = '1';
+      btn.style.cursor = 'pointer';
+      btn.addEventListener('click', () => this.switchTab(btn.dataset.opsGoto));
+    });
+  },
+
+  isHqMetricsLoading() {
+    return !this._hqShopsReady || !this._hqOrdersSnapSeen;
+  },
+
+  hqLoadingLabel() {
+    return '集計中…';
   },
 
   renderFirebaseBadge(user = getStaffUser()) {
@@ -748,8 +808,18 @@ const OpsPage = {
     document.getElementById('opsMaintDrillOn')?.addEventListener('click', () => this.runMaintDrill('on'));
     document.getElementById('opsMaintDrillTick')?.addEventListener('click', () => this.runMaintDrill('tick'));
     document.getElementById('opsMaintDrillClear')?.addEventListener('click', () => this.runMaintDrill('clear'));
-    document.querySelectorAll('[data-ops-tab]').forEach(btn => {
+    document.querySelectorAll('nav.ops-tabs [data-ops-tab]').forEach(btn => {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.opsTab));
+    });
+    document.querySelectorAll('[data-ops-goto]').forEach(btn => {
+      btn.addEventListener('click', () => this.switchTab(btn.dataset.opsGoto));
+    });
+    document.getElementById('opsReadBannerLogin')?.addEventListener('click', () => {
+      this.promptFirebaseLogin().catch((e) => console.warn(e));
+    });
+    document.getElementById('opsReadBannerDismiss')?.addEventListener('click', () => {
+      this._firebaseBannerDismissed = true;
+      this.updateReadBanner();
     });
     document.getElementById('createShopForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -836,12 +906,11 @@ const OpsPage = {
     }
 
     document.getElementById('opsFirebaseLogin')?.addEventListener('click', async () => {
-      ensureStaffAuthStyles();
-      const user = await ensureStaffFirebase({
-        title: 'Firebase スタッフログイン',
-        hint: 'Firestore 特権書き込み用。Authentication で作成したユーザーを入力。',
-      });
-      this.renderFirebaseBadge(user);
+      try {
+        await this.promptFirebaseLogin('Firestore 特権書き込み用。Authentication で作成したユーザーを入力。');
+      } catch (e) {
+        console.error(e);
+      }
     });
     document.getElementById('opsFirebaseLogout')?.addEventListener('click', async () => {
       await signOutStaff();
@@ -1589,7 +1658,7 @@ const OpsPage = {
   },
 
   switchTab(id) {
-    document.querySelectorAll('[data-ops-tab]').forEach(b => {
+    document.querySelectorAll('nav.ops-tabs [data-ops-tab]').forEach(b => {
       b.classList.toggle('active', b.dataset.opsTab === id);
     });
     document.querySelectorAll('[data-ops-panel]').forEach(p => {
@@ -1688,6 +1757,7 @@ const OpsPage = {
 
   async refreshShops() {
     this.shops = await listShops();
+    this._hqShopsReady = true;
     this.renderShops();
     this.renderHq();
     this.fillLabSelect();
@@ -1777,6 +1847,7 @@ const OpsPage = {
   subscribeGlobal() {
     onSnapshot(query(collection(db, 'orders'), orderBy('timestamp', 'desc')), snap => {
       this.orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      this._hqOrdersSnapSeen = true;
       this.renderHq();
       this.renderLabs();
       this.renderOrders();
@@ -1806,6 +1877,10 @@ const OpsPage = {
   },
 
   renderHq() {
+    const loading = this.isHqMetricsLoading();
+    const cards = document.querySelector('.ops-cards');
+    if (cards) cards.classList.toggle('is-loading', loading);
+
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     const today = this.orders.filter(o => (o.timestamp || 0) >= start.getTime() && !o.demo);
@@ -1815,12 +1890,23 @@ const OpsPage = {
     const nps = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
 
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    set('hqShops', String(this.shops.length));
-    set('hqOrders', String(today.length));
-    set('hqGmv', `¥${yen(gmv)}`);
-    set('hqLeads', String(this.leads.filter(l => l.status === 'new').length));
-    set('hqRequests', String(openReq));
-    set('hqNps', String(nps));
+    const setMetric = (id, v) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (loading) {
+        el.textContent = this.hqLoadingLabel();
+        el.classList.add('hq-pending');
+      } else {
+        el.textContent = v;
+        el.classList.remove('hq-pending');
+      }
+    };
+    setMetric('hqShops', String(this.shops.length));
+    setMetric('hqOrders', String(today.length));
+    setMetric('hqGmv', `¥${yen(gmv)}`);
+    setMetric('hqLeads', String(this.leads.filter(l => l.status === 'new').length));
+    setMetric('hqRequests', String(openReq));
+    setMetric('hqNps', String(nps));
 
     const realShops = (this.shops || []).filter((s) => !s.loadTest && !String(s.id || '').startsWith('load-'));
     let subscribed = 0;
@@ -1833,9 +1919,9 @@ const OpsPage = {
       else if (access.trialExpired) trialExpired += 1;
       else if (access.trialActive && access.daysLeft != null && access.daysLeft <= 7) trialEnding += 1;
     });
-    set('hqSubscribed', String(subscribed));
-    set('hqTrialEnding', String(trialEnding));
-    set('hqTrialExpired', String(trialExpired));
+    setMetric('hqSubscribed', String(subscribed));
+    setMetric('hqTrialEnding', String(trialEnding));
+    setMetric('hqTrialExpired', String(trialExpired));
 
     const feeOrdersEarly = this.orders.filter(o => !o.demo && (o.platformFee || 0) > 0 && (o.platformFeeStatus || 'unbilled') === 'unbilled');
     const unbilledFeeEarly = feeOrdersEarly.reduce((s, o) => s + (o.platformFee || 0), 0);
@@ -1896,12 +1982,12 @@ const OpsPage = {
         stores: shop.stores || 1,
       });
     }, 0);
-    set('hqMrr', `¥${yen(mrr)}`);
+    setMetric('hqMrr', `¥${yen(mrr)}`);
 
     // Chain 0.8% platform fee ledger (unbilled)
     const feeOrders = this.orders.filter(o => !o.demo && (o.platformFee || 0) > 0 && (o.platformFeeStatus || 'unbilled') === 'unbilled');
     const unbilledFee = feeOrders.reduce((s, o) => s + (o.platformFee || 0), 0);
-    set('hqPlatformFee', `¥${yen(unbilledFee)}`);
+    setMetric('hqPlatformFee', `¥${yen(unbilledFee)}`);
 
     // Make KPI cards jump to relevant Ops tabs
     const jumps = [
