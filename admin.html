@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1c1c1e">
+  <meta name="theme-color" content="#eef1f6">
   <title>管理画面 | QuickOrder</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/tokens.css?v=ui26">
@@ -11,10 +11,32 @@
   <link rel="stylesheet" href="css/store.css?v=ui26">
   <link rel="stylesheet" href="css/responsive.css?v=adminscroll1">
   <link rel="stylesheet" href="css/ui-overhaul.css?v=ui26">
+  <link rel="stylesheet" href="css/smaregi-console.css?v=sm1">
 </head>
-<body class="admin-page">
+<body class="admin-page qo-smaregi">
 
-<div class="admin-header">
+<div class="qo-console">
+  <aside class="qo-side" aria-label="メインメニュー">
+    <div class="qo-side-brand">QuickOrder<small>店舗管理</small></div>
+    <nav class="admin-tabs qo-side-nav" id="adminViewTabs">
+      <button class="admin-tab active" type="button" data-view="orders">注文</button>
+      <button class="admin-tab" type="button" data-view="analytics">分析</button>
+      <button class="admin-tab" type="button" data-view="foh">予約/待ち</button>
+      <button class="admin-tab" type="button" data-view="members">会員</button>
+      <button class="admin-tab" type="button" data-view="menu">メニュー</button>
+      <button class="admin-tab" type="button" data-view="leads">リード</button>
+      <button class="admin-tab" type="button" data-view="billing">収益</button>
+      <button class="admin-tab" type="button" data-view="settings">設定</button>
+    </nav>
+    <div class="qo-side-foot">
+      <a href="store.html">店舗ダッシュ</a>
+      <a href="lp.html">販売LP</a>
+      <a href="ops.html">Ops（内部）</a>
+    </div>
+  </aside>
+
+  <div class="qo-main">
+<div class="admin-header qo-main-top">
   <div class="admin-header-title">
     <h1 id="adminShopName">厨房モニター</h1>
     <div class="admin-clock" id="adminClock"></div>
@@ -29,17 +51,7 @@
 
 <div id="adminRevenueBanner" class="admin-revenue-banner" hidden></div>
 
-<div class="admin-tabs" id="adminViewTabs">
-  <button class="admin-tab active" data-view="orders">注文</button>
-  <button class="admin-tab" data-view="analytics">分析</button>
-  <button class="admin-tab" data-view="foh">予約/待ち</button>
-  <button class="admin-tab" data-view="members">会員</button>
-  <button class="admin-tab" data-view="menu">メニュー</button>
-  <button class="admin-tab" data-view="leads">リード</button>
-  <button class="admin-tab" data-view="billing">収益</button>
-  <button class="admin-tab" data-view="settings">設定</button>
-</div>
-
+  <div class="qo-main-body">
 <div id="ordersPanel">
   <div class="admin-tabs" id="orderFilterTabs">
     <button class="admin-tab active" data-filter="received">受付済み</button>
@@ -48,7 +60,7 @@
     <button class="admin-tab" data-filter="done">完了</button>
     <button class="admin-tab" data-filter="all">すべて</button>
   </div>
-  <div style="padding:10px 16px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <div class="qo-subtoolbar">
     <div id="kdsModeBar" class="kds-mode-bar" hidden>
       <button type="button" class="kds-mode active" data-kds="timeline">時系列</button>
       <button type="button" class="kds-mode" data-kds="byTable">卓別</button>
@@ -254,6 +266,10 @@
     </div>
 
     <button class="admin-save-btn" id="saveSettingsBtn">設定を保存</button>
+  </div>
+</div>
+
+  </div>
   </div>
 </div>
 
