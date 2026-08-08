@@ -47,6 +47,9 @@ OPS_API_SECRET=<long random string>
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 DISCORD_PUBLIC_KEY=...                 # Discord Application Public Key（/api/discord 署名検証）
 DISCORD_OPS_USER_IDS=123456789,...      # スラッシュコマンド実行を許可する Discord ユーザー ID
+STRIPE_WEBHOOK_SECRET=whsec_...          # Stripe Webhook（準備段階・docs/stripe-setup.md）
+STRIPE_SECRET_KEY=sk_test_...            # 任意 — Session 照会
+STRIPE_MODE=test                         # 任意 — test | live
 CURSOR_API_KEY=...
 ```
 

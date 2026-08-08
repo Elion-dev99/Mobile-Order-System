@@ -1,0 +1,56 @@
+name: Configure Stripe secrets
+
+# Upload Stripe webhook signing secret (and optional API key) to Cloudflare Pages.
+# Payment Links stay in js/config.js — not in secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      webhook_secret:
+        description: "STRIPE_WEBHOOK_SECRET (whsec_...)"
+        required: true
+        type: string
+      stripe_secret_key:
+        description: "STRIPE_SECRET_KEY (sk_test_... or sk_live_...) — optional"
+        required: false
+        type: string
+      stripe_mode:
+        description: "STRIPE_MODE label (test or live)"
+        required: false
+        default: test
+        type: choice
+        options: ['test', 'live']
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Put Cloudflare Pages secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WEBHOOK_SECRET: ${{ inputs.webhook_secret }}
+          STRIPE_KEY: ${{ inputs.stripe_secret_key }}
+          STRIPE_MODE: ${{ inputs.stripe_mode }}
+        run: |
+          echo "::add-mask::$WEBHOOK_SECRET"
+          case "$WEBHOOK_SECRET" in whsec_*) ;; *) echo "Invalid webhook secret (expect whsec_...)"; exit 1 ;; esac
+          printf '%s' "$WEBHOOK_SECRET" | npx --yes wrangler@4 pages secret put STRIPE_WEBHOOK_SECRET --project-name=mobile-order-system
+          echo "Uploaded STRIPE_WEBHOOK_SECRET"
+          if [ -n "$STRIPE_KEY" ]; then
+            echo "::add-mask::$STRIPE_KEY"
+            case "$STRIPE_KEY" in sk_test_*|sk_live_*) ;; *) echo "Invalid API key"; exit 1 ;; esac
+            printf '%s' "$STRIPE_KEY" | npx --yes wrangler@4 pages secret put STRIPE_SECRET_KEY --project-name=mobile-order-system
+            echo "Uploaded STRIPE_SECRET_KEY"
+          fi
+          printf '%s' "$STRIPE_MODE" | npx --yes wrangler@4 pages secret put STRIPE_MODE --project-name=mobile-order-system
+          echo "Uploaded STRIPE_MODE=$STRIPE_MODE"
+          echo "Next: set Payment Links in js/config.js and Stripe Dashboard webhook → /api/stripe (docs/stripe-setup.md)"

@@ -582,6 +582,20 @@
         <button type="submit">更新</button>
       </form>
       <p id="opsPwStatus" class="ops-status" hidden></p>
+
+      <h2>Stripe（準備段階）</h2>
+      <p class="ops-muted">本番課金の前にテストモードで Payment Link + Webhook を接続します。詳細は <code>docs/stripe-setup.md</code>。</p>
+      <div class="ops-cards" id="opsStripeCards">
+        <div class="ops-card"><span>Webhook</span><strong id="opsStripeWebhook">—</strong></div>
+        <div class="ops-card"><span>API Key</span><strong id="opsStripeApiKey">—</strong></div>
+        <div class="ops-card"><span>待機キュー</span><strong id="opsStripePending">—</strong></div>
+      </div>
+      <div class="ops-toolbar">
+        <button type="button" id="opsStripeRefresh" class="ops-btn-secondary">Stripe 状態を更新</button>
+      </div>
+      <div id="opsStripePendingList" class="ops-lead-list" style="margin-top:10px;"></div>
+      <p id="opsStripeStatus" class="ops-status" hidden></p>
+
       <p class="ops-muted" style="margin-top:20px">Discord 通知の設定は <button type="button" class="ops-linkish" data-ops-tab="notify">通知タブ</button> で行います。詳細は <code>docs/security.md</code>。</p>
     </section>
   </main>

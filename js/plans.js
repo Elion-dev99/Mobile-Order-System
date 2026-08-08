@@ -1,4 +1,5 @@
 import { PLANS, PRODUCT, ADDONS } from './config.js';
+import { buildStripePaymentUrl, isStripeConfigured } from './stripe-billing.js';
 
 export function getPlan(planId) {
   return PLANS.find(p => p.id === planId) || PLANS.find(p => p.id === 'growth');
@@ -121,10 +122,11 @@ export function canUseFeature(shop, featureKey, { subscribed = false } = {}) {
   return access.premiumUnlocked;
 }
 
-export function paymentCta() {
-  const link = (PRODUCT.stripePaymentLink || '').trim();
-  if (link) {
-    return { mode: 'stripe', href: link, label: 'カードで契約する' };
+export function paymentCta({ shopId, planId, email } = {}) {
+  const pid = planId || 'growth';
+  const href = buildStripePaymentUrl(shopId, pid, { email });
+  if (href) {
+    return { mode: 'stripe', href, label: 'カードで契約する' };
   }
   return { mode: 'lead', href: 'lp.html#contact', label: '見積もり・導入相談' };
 }

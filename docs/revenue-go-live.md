@@ -10,7 +10,7 @@
 | 1 | [Configure Firebase Auth](https://github.com/Elion-dev99/Mobile-Order-System/actions/workflows/configure-firebase-auth.yml) を実行 | Ops/Admin で Firebase ログインできる |
 | 2 | Cloudflare Pages シークレット（`OPS_API_SECRET`, `DISCORD_WEBHOOK_URL` 等） | `docs/security.md` |
 | 3 | Ops「鍵」に `OPS_API_SECRET` | Cardinal / 通知テストが動く |
-| 4 | （任意）`js/config.js` の `stripePaymentLink` | LP/Admin が「カードで契約」に切替 |
+| 4 | （任意）`js/config.js` の Payment Link + `STRIPE_WEBHOOK_SECRET` | [`stripe-setup.md`](./stripe-setup.md) |
 | 5 | `firestore.rules` デプロイ | 本 PR 以降は店舗タブレットからトライアル延長不可 |
 
 ## 2. 導入フロー（毎店舗）

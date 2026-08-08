@@ -19,7 +19,8 @@
 | Chain | ¥49,800 | ¥41,500 | ¥198,000 + 注文0.8% |
 
 ## Stripe
-`js/config.js` の `PRODUCT.stripePaymentLink` に Payment Link を入れると、LP/Admin のCTAが「カードで契約」に切替わります。空の間は見積もりフォームへ誘導します。
+`js/config.js` の `stripePaymentLinks` / `stripePaymentLink` に Payment Link を入れると、LP/Admin のCTAが「カードで契約」に切替わります（Admin は店舗ID付き URL）。  
+Webhook・シークレット・テスト: [`stripe-setup.md`](./stripe-setup.md)
 
 ## 運用
 - `PRODUCT.introSlotsRemaining` を月次で更新

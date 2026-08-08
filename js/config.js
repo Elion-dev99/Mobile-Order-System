@@ -14,8 +14,20 @@ export const PRODUCT = {
   defaultBillingCycle: 'annual',
   /** 追加店舗（Growth以上） */
   extraStoreMonthly: 9800,
-  /** Stripe Payment Link（空なら見積もりCTAのみ） */
+  /** Stripe Payment Link（空なら見積もりCTAのみ） — 後方互換: growth にも使われる */
   stripePaymentLink: '',
+  /**
+   * プラン別 Payment Link（Stripe Dashboard で作成・テストモード推奨）
+   * 例: growth: 'https://buy.stripe.com/test_xxxx'
+   */
+  stripePaymentLinks: {
+    lite: '',
+    growth: '',
+    business: '',
+    chain: '',
+  },
+  /** test | live | off — 表示用（本番切替前は test） */
+  stripeMode: 'test',
   successPath: 'admin.html?billing=success',
   /** LP希少性（運用で更新可） */
   introSlotsRemaining: 7,
