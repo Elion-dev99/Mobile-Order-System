@@ -5,6 +5,7 @@
 import { dispatchCursorAgent } from './_incident-dispatch.js';
 import { readAgentLedger, recordLaunch, recentlyLaunched } from './_agent-ledger.js';
 import { readCardinalPrefs, allowCursorDispatch } from './_cardinal-prefs-store.js';
+import { mirrorSystemIncidentToAws } from './_aws-bridge.js';
 
 const CACHE_URL = 'https://mobile-order-system.pages.dev/__system_incidents_v1';
 const DEDUPE_MS = 10 * 60 * 1000;
@@ -214,17 +215,33 @@ export async function recordSystemIncident(cachesObj, env, input = {}) {
   const saved = await writeIncidentQueue(cachesObj, q);
   const firstSighting = existingIdx < 0;
   let autoDispatch = null;
+<<<<<<< HEAD
+  let awsMirror = null;
+=======
+>>>>>>> origin/main
   if (firstSighting && notify) {
     try {
       autoDispatch = await maybeAutoDispatchExecutor(cachesObj, env, existingIdx >= 0 ? q.events[existingIdx] : q.events[0], { firstSighting });
     } catch (e) {
       autoDispatch = { ok: false, error: String(e?.message || e) };
     }
+<<<<<<< HEAD
+    try {
+      awsMirror = await mirrorSystemIncidentToAws(env, existingIdx >= 0 ? q.events[existingIdx] : q.events[0]);
+    } catch (e) {
+      awsMirror = { ok: false, error: String(e?.message || e) };
+    }
+=======
+>>>>>>> origin/main
   }
   return {
     row: existingIdx >= 0 ? q.events[existingIdx] : q.events[0],
     discord,
     autoDispatch,
+<<<<<<< HEAD
+    awsMirror,
+=======
+>>>>>>> origin/main
     persisted: saved.persisted !== false,
   };
 }

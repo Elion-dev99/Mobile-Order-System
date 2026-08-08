@@ -52,6 +52,11 @@ import {
   allCapabilitiesOff,
   autonomy90Capabilities,
 } from './_cardinal-prefs-store.js';
+import {
+  isAwsConfigured,
+  awsStsPing,
+  awsTargets,
+} from './_aws-bridge.js';
 import { recordProbeFailures } from './_system-incidents.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
@@ -724,15 +729,22 @@ export async function onRequestPost(context) {
       maintenance = { error: String(e?.message || e) };
     }
     const failed = Object.entries(probes).filter(([, p]) => !p.ok).map(([k]) => k);
+    let aws = { configured: isAwsConfigured(env) };
+    if (isAwsConfigured(env)) {
+      aws.sts = await awsStsPing(env);
+      aws.targets = awsTargets(env);
+    }
     const report = {
       ok: failed.length === 0,
       failed,
       probes,
       maintenance,
+      aws,
       configured: {
         discord: !!(env?.DISCORD_WEBHOOK_URL),
         apiKey: !!(env?.CURSOR_API_KEY),
         opsSecret: !!getOpsSecret(env),
+        aws: isAwsConfigured(env),
       },
       at: Date.now(),
     };
