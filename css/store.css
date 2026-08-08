@@ -284,7 +284,7 @@ body.guest.store-page > * {
   gap: 2px;
 }
 .store-req-seat {
-  font-family: Fraunces, "Zen Kaku Gothic New", serif;
+  font-family: var(--g-sans);
   font-size: 1.55rem;
   font-weight: 700;
   color: #0a3d34;
