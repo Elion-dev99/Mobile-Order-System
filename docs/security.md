@@ -51,6 +51,9 @@ STRIPE_WEBHOOK_SECRET=whsec_...          # Stripe Webhook（準備段階・docs/
 STRIPE_SECRET_KEY=sk_test_...            # 任意 — Session 照会
 STRIPE_MODE=test                         # 任意 — test | live
 CURSOR_API_KEY=...
+AWS_ACCESS_KEY_ID=...                    # 任意 — docs/aws-integration.md
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=ap-northeast-1
 ```
 
 ### GitHub Actions
