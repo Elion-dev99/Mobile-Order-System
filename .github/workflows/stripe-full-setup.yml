@@ -15,7 +15,7 @@ on:
         type: boolean
         default: true
       commit_generated_links:
-        description: Commit js/stripe-links.generated.js to cursor/stripe-prep-a58c
+        description: Commit js/stripe-links.generated.js to main
         type: boolean
         default: true
       plan:
@@ -23,6 +23,10 @@ on:
         type: choice
         default: all
         options: ['all', 'lite', 'growth', 'business', 'chain']
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/.stripe-one-click-run'
 
 permissions:
   contents: write
@@ -58,17 +62,24 @@ jobs:
         id: bootstrap
         env:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          INPUT_REGISTER_WEBHOOK: ${{ inputs.register_webhook }}
+          INPUT_PLAN: ${{ inputs.plan }}
         run: |
           ARGS="--write-generated"
-          if [ "${{ inputs.register_webhook }}" = "true" ]; then ARGS="$ARGS --register-webhook"; fi
-          if [ "${{ inputs.plan }}" != "all" ]; then ARGS="$ARGS --plan ${{ inputs.plan }}"; fi
+          if [ "$GITHUB_EVENT_NAME" = "push" ] || [ "$INPUT_REGISTER_WEBHOOK" = "true" ]; then
+            ARGS="$ARGS --register-webhook"
+          fi
+          PLAN="${INPUT_PLAN:-all}"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then PLAN="all"; fi
+          if [ "$PLAN" != "all" ]; then ARGS="$ARGS --plan $PLAN"; fi
           node scripts/stripe-bootstrap.mjs $ARGS
           if [ -f .stripe-webhook-secret ]; then
             echo "webhook_secret=$(cat .stripe-webhook-secret)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload Cloudflare Pages Stripe secrets
-        if: inputs.upload_cloudflare_secrets == true
+        if: github.event_name == 'push' || inputs.upload_cloudflare_secrets == true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -90,13 +101,13 @@ jobs:
           fi
 
       - name: Commit generated payment links
-        if: inputs.commit_generated_links == true
+        if: github.event_name == 'push' || inputs.commit_generated_links == true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH="cursor/stripe-prep-a58c"
-          git fetch origin "$BRANCH" || true
-          git checkout -B "$BRANCH" "origin/$BRANCH" 2>/dev/null || git checkout -B "$BRANCH"
+          BRANCH="main"
+          git checkout "$BRANCH"
+          git pull origin "$BRANCH"
           git add js/stripe-links.generated.js
           if git diff --staged --quiet; then
             echo "No link changes to commit"
@@ -108,6 +119,5 @@ jobs:
       - name: Summary
         run: |
           echo "## Stripe one-click finished" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Links: js/stripe-links.generated.js" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Links: js/stripe-links.generated.js on main" >> "$GITHUB_STEP_SUMMARY"
           echo "- Docs: docs/stripe-founder-one-click.md" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Merge PR #64 or deploy branch cursor/stripe-prep-a58c" >> "$GITHUB_STEP_SUMMARY"
