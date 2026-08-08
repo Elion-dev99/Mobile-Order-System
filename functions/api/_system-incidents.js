@@ -215,24 +215,33 @@ export async function recordSystemIncident(cachesObj, env, input = {}) {
   const saved = await writeIncidentQueue(cachesObj, q);
   const firstSighting = existingIdx < 0;
   let autoDispatch = null;
+<<<<<<< HEAD
   let awsMirror = null;
+=======
+>>>>>>> origin/main
   if (firstSighting && notify) {
     try {
       autoDispatch = await maybeAutoDispatchExecutor(cachesObj, env, existingIdx >= 0 ? q.events[existingIdx] : q.events[0], { firstSighting });
     } catch (e) {
       autoDispatch = { ok: false, error: String(e?.message || e) };
     }
+<<<<<<< HEAD
     try {
       awsMirror = await mirrorSystemIncidentToAws(env, existingIdx >= 0 ? q.events[existingIdx] : q.events[0]);
     } catch (e) {
       awsMirror = { ok: false, error: String(e?.message || e) };
     }
+=======
+>>>>>>> origin/main
   }
   return {
     row: existingIdx >= 0 ? q.events[existingIdx] : q.events[0],
     discord,
     autoDispatch,
+<<<<<<< HEAD
     awsMirror,
+=======
+>>>>>>> origin/main
     persisted: saved.persisted !== false,
   };
 }
