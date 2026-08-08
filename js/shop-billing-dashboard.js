@@ -2,12 +2,21 @@
  * Store-facing billing status dashboard (shared: store.html + admin billing tab).
  */
 
-import { getShop, getShopId, isSubscribed, getShopAccess } from './shop.js';
+import { getShop, getShopId, getShopAccess } from './shop.js';
 import {
   getPlan, yen, planPrice, estimateMrr, annualSavings, paymentCta,
   canUseFeature, PRODUCT, PLANS,
 } from './plans.js';
-import { stripeModeLabel } from './stripe-billing.js';
+import { stripeModeLabel, isStripeConfigured, paymentLinkForPlan } from './stripe-billing.js';
+import {
+  computeFirstCheckoutEstimate,
+  auditBillingState,
+  billingDebugEnabled,
+  stripeAmountToMajor,
+  introCouponId,
+  introFirstMonthOff,
+  normalizeBillingCycle,
+} from './billing-money.js';
 
 const FEATURE_ROWS = [
   { key: 'analytics', label: '売上分析' },
@@ -29,20 +38,22 @@ function formatDate(ms) {
   }
 }
 
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function buildBillingSnapshot(shop = getShop(), { billingCycle } = {}) {
-  const cycle = billingCycle || shop.billingCycle || PRODUCT.defaultBillingCycle || 'annual';
+  const cycle = normalizeBillingCycle(billingCycle || shop.billingCycle);
   const plan = getPlan(shop.planId);
   const access = getShopAccess();
+  const estimate = computeFirstCheckoutEstimate(plan, cycle);
   const price = planPrice(plan, cycle);
-  const introOff = Number(PRODUCT.stripeCommerce?.introFirstMonthOff?.[plan.id] || 0);
-  const couponId = PRODUCT.stripeCommerce?.couponIds?.[plan.id] || '';
-  const setup = plan.priceSetup;
-  const firstMonthSub = cycle === 'monthly' && introOff > 0
-    ? Math.max(0, plan.priceMonthly - introOff)
-    : plan.priceMonthly;
-  const chargeEstimate = cycle === 'annual'
-    ? setup + price.chargeNow
-    : setup + firstMonthSub;
+  const introOff = introFirstMonthOff(plan.id);
+  const couponId = introCouponId(plan.id);
 
   const features = FEATURE_ROWS.map((row) => {
     const inPlan = !!plan.features[row.key];
@@ -63,29 +74,37 @@ export function buildBillingSnapshot(shop = getShop(), { billingCycle } = {}) {
     subscribedAt: shop.subscribedAt,
     trialStartedAt: shop.trialStartedAt,
     trialEndsAt: shop.trialEndsAt,
+    firestoreSubscribed: !!shop.subscribed,
     selfMrr: access.subscribed
       ? estimateMrr({ planId: shop.planId, stores: shop.stores || 1, cycle })
       : 0,
     price,
-    setup,
-    chargeEstimate,
+    setup: estimate.setup,
+    chargeEstimate: estimate.total,
+    estimateBreakdown: estimate,
     introOff,
     couponId,
     annualSave: annualSavings(plan),
     stripeMode: stripeModeLabel(),
+    paymentLinkConfigured: isStripeConfigured(plan.id, cycle),
     features,
   };
 }
 
 export async function fetchStripeShopBillingHint(shopId) {
   const sid = String(shopId || getShopId() || '').trim();
-  if (!sid) return null;
+  if (!sid) return { ok: false, error: 'missing_shop_id' };
   try {
-    const res = await fetch(`/api/stripe?shop=${encodeURIComponent(sid)}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
+    const debug = billingDebugEnabled();
+    const q = debug ? '&debug=1' : '';
+    const res = await fetch(`/api/stripe?shop=${encodeURIComponent(sid)}${q}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: data?.error || `http_${res.status}`, status: res.status };
+    }
+    return { ok: true, ...data };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
   }
 }
 
@@ -104,45 +123,86 @@ function trialProgress(access) {
   return Math.min(100, Math.round((used / total) * 100));
 }
 
+function renderDebugPanel(snap, hint, checks) {
+  if (!billingDebugEnabled()) return '';
+  const lines = checks.map((c) =>
+    `<li class="shop-bill-debug-item shop-bill-debug--${c.level}"><code>${escapeHtml(c.code)}</code> ${escapeHtml(c.message)}</li>`,
+  );
+  return `
+    <details class="shop-bill-debug" open>
+      <summary>課金デバッグ（billing_debug=1）</summary>
+      <ul>${lines.join('')}</ul>
+      <pre class="shop-bill-debug-pre">${escapeHtml(JSON.stringify({
+        snapshot: {
+          shopId: snap.shopId,
+          cycle: snap.cycle,
+          chargeEstimate: snap.chargeEstimate,
+          breakdown: snap.estimateBreakdown,
+          firestoreSubscribed: snap.firestoreSubscribed,
+          accessSubscribed: snap.access.subscribed,
+          paymentLink: paymentLinkForPlan(snap.plan.id, snap.cycle) ? '(set)' : '(missing)',
+        },
+        stripeApi: hint?.ok ? { shop: hint.shop, configured: hint.configured } : hint,
+      }, null, 2))}</pre>
+    </details>`;
+}
+
 /**
  * @param {HTMLElement} root
  * @param {{ billingCycle?: string, onCycleChange?: (c: string) => void, showPlanPicker?: boolean }} opts
  */
 export function mountShopBillingDashboard(root, opts = {}) {
   if (!root) return;
-  let cycle = opts.billingCycle || getShop().billingCycle || PRODUCT.defaultBillingCycle || 'annual';
+  let cycle = normalizeBillingCycle(opts.billingCycle || getShop().billingCycle);
 
   const render = async () => {
-    const shop = getShop();
-    const snap = buildBillingSnapshot(shop, { billingCycle: cycle });
-    const badge = statusBadge(snap.access);
-    const progress = trialProgress(snap.access);
-    const pay = paymentCta({
-      shopId: snap.shopId,
-      planId: shop.planId,
-      email: shop.ownerEmail,
-      billingCycle: cycle,
-    });
-    const hint = await fetchStripeShopBillingHint(snap.shopId);
-    const pending = hint?.shop?.pendingPayment;
-    const lastPaid = hint?.shop?.lastPayment;
+    try {
+      const shop = getShop();
+      const snap = buildBillingSnapshot(shop, { billingCycle: cycle });
+      const badge = statusBadge(snap.access);
+      const progress = trialProgress(snap.access);
+      const pay = paymentCta({
+        shopId: snap.shopId,
+        planId: shop.planId,
+        email: shop.ownerEmail,
+        billingCycle: cycle,
+      });
+      const hint = await fetchStripeShopBillingHint(snap.shopId);
+      const pending = hint?.shop?.pendingPayment;
+      const lastPaid = hint?.shop?.lastPayment;
+      const lastAmountMajor = lastPaid?.amount != null
+        ? (lastPaid.amountMajor ?? stripeAmountToMajor(lastPaid.amount, lastPaid.currency))
+        : null;
 
-    root.innerHTML = `
+      const checks = auditBillingState({
+        shopId: snap.shopId,
+        shopSubscribed: snap.firestoreSubscribed,
+        accessSubscribed: snap.access.subscribed,
+        cycle: snap.cycle,
+        plan: snap.plan,
+        chargeEstimate: snap.chargeEstimate,
+        paymentLinkConfigured: snap.paymentLinkConfigured,
+        stripeHintOk: hint?.ok,
+        stripeHintError: hint?.ok ? null : (hint?.error || 'stripe_api_error'),
+      });
+
+      root.innerHTML = `
       <div class="shop-bill-head">
         <div>
           <p class="shop-bill-kicker">契約・課金状況</p>
-          <h2 class="shop-bill-title">${snap.plan.name} <span class="shop-bill-badge shop-bill-badge--${badge.level}">${badge.label}</span></h2>
-          <p class="shop-bill-sub">店舗ID <code>${snap.shopId}</code> · Stripe ${snap.stripeMode}モード</p>
+          <h2 class="shop-bill-title">${escapeHtml(snap.plan.name)} <span class="shop-bill-badge shop-bill-badge--${badge.level}">${escapeHtml(badge.label)}</span></h2>
+          <p class="shop-bill-sub">店舗ID <code>${escapeHtml(snap.shopId)}</code> · Stripe ${escapeHtml(snap.stripeMode)}モード</p>
         </div>
         <div class="shop-bill-cycle" role="group" aria-label="支払いサイクル（見積）">
           <button type="button" class="shop-bill-cycle-btn ${cycle === 'monthly' ? 'is-active' : ''}" data-bill-cycle="monthly">月払い</button>
           <button type="button" class="shop-bill-cycle-btn ${cycle === 'annual' ? 'is-active' : ''}" data-bill-cycle="annual">年払い</button>
         </div>
       </div>
+      ${checks.some((c) => c.level === 'error') ? `<p class="shop-bill-alert">課金設定に問題があります。下のデバッグ情報を Ops に共有してください。</p>` : ''}
       ${progress != null ? `
         <div class="shop-bill-trial">
           <div class="shop-bill-trial-bar"><span style="width:${progress}%"></span></div>
-          <p>無料トライアル — 残り <strong>${snap.access.daysLeft}</strong> 日（プレミアム機能はトライアル中・課金後もプランに応じて利用可）</p>
+          <p>無料トライアル — 残り <strong>${snap.access.daysLeft}</strong> 日</p>
         </div>` : ''}
       <div class="shop-bill-kpis">
         <div class="shop-bill-kpi">
@@ -166,14 +226,15 @@ export function mountShopBillingDashboard(root, opts = {}) {
           <em>月払い×12 との差</em>
         </div>
       </div>
-      ${pending ? `<p class="shop-bill-alert">Stripeで支払いを検知しました（反映待ち）。数分後に再読み込みするか、完了画面から戻ってください。</p>` : ''}
-      ${lastPaid?.amount ? `<p class="shop-bill-note">直近のカード決済: ¥${yen(lastPaid.amount)}（${lastPaid.currency || 'JPY'}）${lastPaid.at ? ` · ${formatDate(lastPaid.at)}` : ''}</p>` : ''}
+      ${pending ? `<p class="shop-bill-alert">Stripeで支払いを検知しました（反映待ち）。ページを再読み込みするか、完了画面から戻ってください。</p>` : ''}
+      ${lastAmountMajor != null ? `<p class="shop-bill-note">直近のカード決済: ¥${yen(lastAmountMajor)}（${escapeHtml(lastPaid.currency || 'JPY')}）${lastPaid.at ? ` · ${formatDate(lastPaid.at)}` : ''}</p>` : ''}
       ${cycle === 'monthly' && snap.introOff > 0 && snap.couponId ? `
-        <p class="shop-bill-promo">月払いの初回は Checkout でプロモコード <code>${snap.couponId}</code> を入力すると初月サブスクが ¥${yen(snap.plan.priceMonthly - snap.introOff)} に（¥${yen(snap.introOff)} off）</p>` : ''}
+        <p class="shop-bill-promo">月払いの初回は Checkout でプロモコード <code>${escapeHtml(snap.couponId)}</code> を入力すると初月サブスクが ¥${yen(snap.plan.priceMonthly - snap.introOff)} に（¥${yen(snap.introOff)} off）</p>` : ''}
       <div class="shop-bill-actions">
         ${pay.mode === 'stripe'
-          ? `<a class="store-save shop-bill-cta" href="${pay.href}" target="_blank" rel="noopener">${pay.label}</a>`
-          : `<a class="store-save shop-bill-cta" href="${pay.href}">${pay.label}</a>`}
+          ? `<a class="store-save shop-bill-cta" href="${escapeHtml(pay.href)}" target="_blank" rel="noopener">${escapeHtml(pay.label)}</a>`
+          : `<a class="store-save shop-bill-cta" href="${escapeHtml(pay.href)}">${escapeHtml(pay.label)}</a>`}
+        <button type="button" class="store-mini-btn" data-bill-refresh>状態を再取得</button>
         <a class="store-mini-btn" href="admin.html?shop=${encodeURIComponent(snap.shopId)}&view=billing">厨房の料金タブ</a>
       </div>
       <details class="shop-bill-features">
@@ -181,7 +242,7 @@ export function mountShopBillingDashboard(root, opts = {}) {
         <ul class="shop-bill-feature-list">
           ${snap.features.map((f) => `
             <li class="shop-bill-feature shop-bill-feature--${f.state}">
-              <span>${f.label}</span>
+              <span>${escapeHtml(f.label)}</span>
               <em>${f.state === 'ok' ? '利用可' : f.state === 'trial_lock' ? 'トライアル/契約が必要' : 'プランアップが必要'}</em>
             </li>`).join('')}
         </ul>
@@ -191,18 +252,24 @@ export function mountShopBillingDashboard(root, opts = {}) {
           <p class="shop-bill-sub">プラン変更は Firebase ログイン後に厨房の料金タブから</p>
           <div class="shop-bill-plan-row">
             ${PLANS.map((p) => `
-              <span class="shop-bill-plan-chip ${p.id === snap.plan.id ? 'is-active' : ''}">${p.name}</span>`).join('')}
+              <span class="shop-bill-plan-chip ${p.id === snap.plan.id ? 'is-active' : ''}">${escapeHtml(p.name)}</span>`).join('')}
           </div>
         </div>` : ''}
+      ${renderDebugPanel(snap, hint, checks)}
     `;
 
-    root.querySelectorAll('[data-bill-cycle]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        cycle = btn.dataset.billCycle;
-        opts.onCycleChange?.(cycle);
-        render();
+      root.querySelector('[data-bill-refresh]')?.addEventListener('click', () => render());
+      root.querySelectorAll('[data-bill-cycle]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          cycle = normalizeBillingCycle(btn.dataset.billCycle);
+          opts.onCycleChange?.(cycle);
+          render();
+        });
       });
-    });
+    } catch (e) {
+      console.error('[billing-dashboard]', e);
+      root.innerHTML = `<p class="shop-bill-alert">課金ダッシュボードの表示に失敗しました: ${escapeHtml(e?.message || e)}</p>`;
+    }
   };
 
   render();
