@@ -8,6 +8,12 @@ import {
   effectiveMaintenance,
   DEFAULT_MESSAGE,
 } from './_maintenance-store.js';
+import {
+  listSystemIncidents,
+  dismissSystemIncident,
+  recordSystemIncident,
+} from './_system-incidents.js';
+import { dispatchCursorAgent } from './_incident-dispatch.js';
 
 const PROBE_PATHS = ['/', '/api/cardinal', '/api/maintenance', '/api/notify', '/ops.html'];
 
@@ -40,10 +46,15 @@ function parseQoCommand(interaction) {
   if (!group || group.type !== 2) return null;
   const sub = group.options?.[0];
   if (!sub || sub.type !== 1) return null;
+  const options = {};
+  for (const o of sub.options || []) {
+    options[o.name] = o.value;
+  }
   return {
     group: group.name,
     sub: sub.name,
-    message: optionValue(sub, 'message'),
+    message: options.message,
+    options,
   };
 }
 
@@ -68,7 +79,7 @@ export async function executeDiscordQoCommand(interaction, caches, env) {
   }
 
   const userId = interaction.member?.user?.id || interaction.user?.id || 'unknown';
-  const { group, sub, message } = parsed;
+  const { group, sub, message, options = {} } = parsed;
 
   if (group === 'maint') {
     if (sub === 'start') {
@@ -111,6 +122,94 @@ export async function executeDiscordQoCommand(interaction, caches, env) {
         ].join('\n'),
       };
     }
+  }
+
+  if (group === 'debug') {
+    const incidentId = options.incident_id || options.id;
+    const feature = options.feature || 'manual';
+    const cause = options.cause || options.detail || 'Discord debug request';
+
+    if (sub === 'status') {
+      const data = await listSystemIncidents(caches, { limit: 15, status: 'open' });
+      const lines = data.events.length
+        ? data.events.map((e) => `• \`${e.id}\` **${e.feature}** — ${String(e.cause).slice(0, 80)} (×${e.count || 1})`)
+        : ['オープンなインシデントはありません。'];
+      return {
+        content: ['**システムインシデント（open）**', ...lines, `合計 ledger: ${data.total}`].join('\n'),
+      };
+    }
+
+    if (sub === 'dismiss') {
+      if (!incidentId) return { content: 'incident_id を指定してください。' };
+      await dismissSystemIncident(caches, incidentId);
+      return { content: `インシデント \`${incidentId}\` を dismissed にしました。` };
+    }
+
+    if (sub === 'fix') {
+      if (!incidentId) return { content: 'incident_id を指定してください。`/qo debug status` で ID を確認。' };
+      const data = await listSystemIncidents(caches, { limit: 80, status: '' });
+      const row = data.events.find((e) => e.id === incidentId);
+      if (!row) return { content: `ID \`${incidentId}\` が見つかりません。` };
+      const incident = {
+        feature: row.feature,
+        cause: row.cause,
+        summary: `${row.feature}: ${row.cause}`,
+        message: row.cause,
+        incidentId: row.id,
+        kind: row.kind,
+        source: 'discord_debug_fix',
+        severity: row.severity,
+        cardinalRole: 'executor',
+        url: row.url,
+        shopId: row.shopId,
+        requestedBy: userId,
+      };
+      const cursor = await dispatchCursorAgent(env, incident);
+      const launched = !!(cursor.agent?.ok || cursor.automation?.ok);
+      return {
+        content: [
+          '**デバッグ修正依頼 → Cursor Agent**',
+          `対象: \`${incidentId}\` — ${row.feature}`,
+          launched ? '✅ Agent 起動依頼済み（draft PR 予定）' : '⚠️ CURSOR_API_KEY / Automations 未設定または起動失敗',
+          `操作者: <@${userId}>`,
+        ].join('\n'),
+      };
+    }
+
+    if (sub === 'request') {
+      const recorded = await recordSystemIncident(caches, env, {
+        feature,
+        cause,
+        kind: 'debug_request',
+        source: 'discord',
+        severity: 'warning',
+      });
+      const incident = {
+        feature,
+        cause,
+        summary: `${feature}: ${cause}`,
+        message: cause,
+        source: 'discord_debug_request',
+        severity: 'warning',
+        cardinalRole: 'executor',
+        requestedBy: userId,
+        incidentId: recorded.row?.id,
+      };
+      const cursor = await dispatchCursorAgent(env, incident);
+      const launched = !!(cursor.agent?.ok || cursor.automation?.ok);
+      return {
+        content: [
+          '**デバッグ依頼**',
+          `機能: ${feature}`,
+          `原因/依頼: ${cause.slice(0, 300)}`,
+          recorded.discord?.ok ? '✅ Discord 通知済' : '（Discord 通知スキップ/失敗）',
+          launched ? '✅ Cursor Agent 起動依頼済' : '⚠️ Agent 未起動 — Cloudflare に CURSOR_API_KEY を設定',
+          `操作者: <@${userId}>`,
+        ].join('\n'),
+      };
+    }
+
+    return { content: `未対応 debug サブコマンド: ${sub}` };
   }
 
   if (group === 'server') {
@@ -202,6 +301,43 @@ export const DISCORD_COMMAND_DEFINITIONS = [
             name: 'recover',
             description: '復旧（メンテ OFF）',
             type: 1,
+          },
+        ],
+      },
+      {
+        name: 'debug',
+        description: 'システムエラー監視・デバッグ依頼',
+        type: 2,
+        options: [
+          {
+            name: 'status',
+            description: 'オープンインシデント一覧',
+            type: 1,
+          },
+          {
+            name: 'request',
+            description: 'デバッグ依頼（Discord通知 + Cursor Agent）',
+            type: 1,
+            options: [
+              { name: 'feature', description: '機能名（例: billing, guest-order）', type: 3, required: true },
+              { name: 'cause', description: '原因または依頼内容', type: 3, required: true },
+            ],
+          },
+          {
+            name: 'fix',
+            description: '既存インシデントを Agent に修正依頼',
+            type: 1,
+            options: [
+              { name: 'incident_id', description: 'インシデント ID（debug status）', type: 3, required: true },
+            ],
+          },
+          {
+            name: 'dismiss',
+            description: 'インシデントを解消済みにする',
+            type: 1,
+            options: [
+              { name: 'incident_id', description: 'インシデント ID', type: 3, required: true },
+            ],
           },
         ],
       },

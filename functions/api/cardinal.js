@@ -51,6 +51,7 @@ import {
   CARDINAL_CAPABILITY_DEFS,
   allCapabilitiesOff,
 } from './_cardinal-prefs-store.js';
+import { recordProbeFailures } from './_system-incidents.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
 const FIRESTORE_PROBE =
@@ -828,6 +829,15 @@ export async function onRequestPost(context) {
     }
     const { siteDown, apiDown, firestoreDown, shouldMaintain, unhealthy } = probeVerdict(probes, simulateUnhealthy);
 
+    let systemIncidents = null;
+    if (unhealthy) {
+      try {
+        systemIncidents = await recordProbeFailures(context.caches, env, probes, 'cardinal_tick');
+      } catch (e) {
+        systemIncidents = { ok: false, error: String(e?.message || e) };
+      }
+    }
+
     let maintenance = null;
     let scheduleApply = null;
     try {
@@ -974,6 +984,7 @@ export async function onRequestPost(context) {
       simulateUnhealthy,
       probes,
       maintenance,
+      systemIncidents,
       dispatched: !!(dispatch?.launched || followup?.launched),
       dispatch,
       followup,

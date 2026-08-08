@@ -25,6 +25,7 @@ const PATHS = [
   { path: '/api/maintenance', type: 'json' },
   { path: '/api/notify', type: 'json' },
   { path: '/api/stripe', type: 'json', mustJsonOk: true },
+  { path: '/api/system-report', type: 'json', mustJsonOk: true, minStatus: 200 },
 ];
 
 const ERROR_SNIPPETS = [

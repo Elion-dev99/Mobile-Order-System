@@ -38,6 +38,7 @@ import {
 import { maybeNotifySystemLoad } from './load-monitor.js';
 import { ordersToCsv, downloadCsv, applyBrandTheme, filterOrdersByDateRange } from './guest-extras.js';
 import { notifyOrderStatus } from './notify-orders.js';
+import { startSystemWatchdog } from './system-watchdog.js';
 import { listCoupons, normalizeCoupon, saveCoupons, createCouponDraft } from './coupons.js';
 import {
   getStaffRole, setStaffRole, verifyStaffPin, staffCan, staffRoleLabel,
@@ -71,6 +72,7 @@ const AdminPage = {
   couponDraft: [],
 
   async init() {
+    startSystemWatchdog({ feature: 'admin' });
     resolveShopId();
     this.updateClock();
     setInterval(() => this.updateClock(), 1000);
@@ -85,6 +87,7 @@ const AdminPage = {
     }
 
     await loadShop();
+    startSystemWatchdog({ feature: 'admin', shopId: getShopId() });
     await loadMaintenance().catch(() => {});
     subscribeMaintenance();
     mountMaintenanceBanner({ compact: true });
