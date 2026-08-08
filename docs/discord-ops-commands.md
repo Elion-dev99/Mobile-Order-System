@@ -34,9 +34,14 @@ Webhook（通知専用）ではなく **Discord Application + Interactions** を
 
 ## 3. スラッシュコマンド登録（1回）
 
+保存済みの Bot 情報を使う場合:
+
+- **GitHub Actions** → **Discord Qo commands smoke** → Run（`DISCORD_BOT_TOKEN` / `DISCORD_APPLICATION_ID` が repo secrets にあるとき登録も実行）
+- または手元で同じ値を export して `node scripts/register-discord-commands.mjs`
+
 ```bash
-export DISCORD_APPLICATION_ID=...
-export DISCORD_BOT_TOKEN=...
+export DISCORD_APPLICATION_ID=...   # Developer Portal（保存済みならそのまま）
+export DISCORD_BOT_TOKEN=...        # Bot Token（保存済みならそのまま）
 # すぐ試すならギルド指定（即反映）
 export DISCORD_GUILD_ID=あなたのサーバーID
 
@@ -54,6 +59,12 @@ node scripts/register-discord-commands.mjs
 | `/qo maint status` | メンテ状態 + 簡易プローブ |
 | `/qo server stop` [message] | 緊急停止（メンテ ON） |
 | `/qo server recover` | 復旧（メンテ OFF） |
+| `/qo debug status` | オープンインシデント一覧 |
+| `/qo debug request` | デバッグ依頼（Discord + Cursor Agent） |
+| `/qo debug fix` | 既存 ID を Agent に修正依頼 |
+| `/qo debug dismiss` | インシデント解消 |
+
+**CI テスト（保存済み `OPS_API_SECRET`）:** Actions → **Discord Qo commands smoke**
 
 内部では `GET/POST /api/maintenance` と同じ **Cache API キルスイッチ** を更新します（Firestore が落ちていても edge で効く）。
 

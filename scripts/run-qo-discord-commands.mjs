@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
  * Run /qo Discord command handlers + post results to Discord (notify API).
- * Optional: register slash commands when DISCORD_BOT_TOKEN is set.
+ * 保存済み GitHub Secrets をそのまま使う:
+ *   OPS_API_SECRET（Cardinal cron と同じ）
+ *   任意 DISCORD_APPLICATION_ID + DISCORD_BOT_TOKEN（登録用）
  *
  * Usage:
  *   node scripts/run-qo-discord-commands.mjs
  *   OPS_API_SECRET=... node scripts/run-qo-discord-commands.mjs
- *   DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... node scripts/run-qo-discord-commands.mjs
  */
 
 import { executeDiscordQoCommand } from '../functions/api/_discord-ops.js';
 
 const BASE = String(process.env.BASE_URL || 'https://mobile-order-system.pages.dev').replace(/\/$/, '');
-const OPS = String(process.env.OPS_API_SECRET || '').trim();
+const OPS = String(
+  process.env.OPS_API_SECRET || process.env.CARDINAL_API_SECRET || '',
+).trim();
 
 function mkInteraction(group, sub, options = []) {
   return {
@@ -126,22 +129,27 @@ async function main() {
 
   if (OPS) {
     const list = await opsFetch('/api/system-report');
+    const openPreview = list.json?.events?.slice(0, 5).map((e) =>
+      `• ${e.id} ${e.feature}: ${String(e.cause).slice(0, 60)}`,
+    ).join('\n') || '（なし）';
     report.steps.push({ step: 'GET /api/system-report (ops)', status: list.status, open: list.json?.events?.length });
     await notifyDiscord([
-      { name: 'コマンド', value: 'GET /api/system-report (ops)', inline: true },
-      { name: '結果', value: `open: ${list.json?.events?.length ?? '?'} / total ${list.json?.total ?? '?'}`, inline: false },
+      { name: 'コマンド', value: '/qo debug status（本番 ledger）', inline: true },
+      { name: '結果', value: `open ${list.json?.events?.length ?? '?'} / total ${list.json?.total ?? '?'}\n${openPreview}`.slice(0, 1000), inline: false },
     ]);
 
-    const dismissId = process.env.DISMISS_INCIDENT_ID || 'sys_msk1gahk_0hr41';
-    const dismiss = await opsFetch('/api/system-report', {
-      method: 'POST',
-      body: { action: 'dismiss', id: dismissId },
-    });
-    report.steps.push({ step: 'POST dismiss', id: dismissId, status: dismiss.status, json: dismiss.json });
-    await notifyDiscord([
-      { name: 'コマンド', value: `/qo debug dismiss (${dismissId})`, inline: true },
-      { name: '結果', value: JSON.stringify(dismiss.json).slice(0, 900), inline: false },
-    ]);
+    if (process.env.DISMISS_INCIDENT_ID) {
+      const dismissId = process.env.DISMISS_INCIDENT_ID;
+      const dismiss = await opsFetch('/api/system-report', {
+        method: 'POST',
+        body: { action: 'dismiss', id: dismissId },
+      });
+      report.steps.push({ step: 'POST dismiss', id: dismissId, status: dismiss.status, json: dismiss.json });
+      await notifyDiscord([
+        { name: 'コマンド', value: `/qo debug dismiss (${dismissId})`, inline: true },
+        { name: '結果', value: JSON.stringify(dismiss.json).slice(0, 900), inline: false },
+      ]);
+    }
   } else {
     report.steps.push({
       step: 'ops_api',

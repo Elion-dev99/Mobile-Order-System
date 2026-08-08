@@ -1,0 +1,39 @@
+# Discord /qo コマンド登録 + 本番スモーク（保存済み GitHub Secrets をそのまま使用）
+# Secrets: OPS_API_SECRET（必須・Cardinal cron と同じ）
+# 任意: DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, DISCORD_GUILD_ID
+# 通知は本番 DISCORD_WEBHOOK_URL（Cloudflare）経由 — /api/notify
+
+name: Discord Qo commands smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Register slash commands (if bot secrets saved)
+        env:
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_APP_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+        run: |
+          if [ -n "${DISCORD_BOT_TOKEN:-}" ] && [ -n "${DISCORD_APPLICATION_ID:-}" ]; then
+            node scripts/register-discord-commands.mjs
+          else
+            echo "skip register — DISCORD_BOT_TOKEN / DISCORD_APPLICATION_ID not in GitHub Secrets"
+          fi
+
+      - name: Run /qo command handlers + Discord notify
+        env:
+          OPS_API_SECRET: ${{ secrets.OPS_API_SECRET }}
+          BASE_URL: https://mobile-order-system.pages.dev
+        run: |
+          if [ -z "${OPS_API_SECRET:-}" ]; then
+            echo "Missing OPS_API_SECRET (same as cardinal-cron)"
+            exit 1
+          fi
+          node scripts/run-qo-discord-commands.mjs
