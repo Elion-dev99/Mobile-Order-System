@@ -3,21 +3,21 @@
  * Regenerate: STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-bootstrap.mjs --write-generated
  */
 export const STRIPE_PAYMENT_LINKS_BY_CYCLE = {
-  lite: { monthly: 'https://buy.stripe.com/test_5kQ5kCgYdcDP7c271JdfG01', annual: 'https://buy.stripe.com/test_8x28wOcHXcDPbsi0DldfG02' },
-  growth: { monthly: 'https://buy.stripe.com/test_fZu00icHXgU5dAq0DldfG03', annual: 'https://buy.stripe.com/test_8x2dR86jzcDP8g6dq7dfG04' },
-  business: { monthly: 'https://buy.stripe.com/test_4gM14mcHX9rDdAq5XFdfG05', annual: 'https://buy.stripe.com/test_eVq9ASeQ5eLX7c2fyfdfG06' },
-  chain: { monthly: 'https://buy.stripe.com/test_6oUbJ05fveLXdAqcm3dfG07', annual: 'https://buy.stripe.com/test_9B65kCgYdavHcwmcm3dfG08' },
+  lite: { monthly: 'https://buy.stripe.com/test_7sYbJ04br47jcwm85NdfG09', annual: 'https://buy.stripe.com/test_3cI4gy0Zf33f0NEadVdfG0a' },
+  growth: { monthly: 'https://buy.stripe.com/test_bJeeVccHX0V7fIygCjdfG0b', annual: 'https://buy.stripe.com/test_7sYaEW23j9rD3ZQdq7dfG0c' },
+  business: { monthly: 'https://buy.stripe.com/test_cNi7sK6jzeLX0NEadVdfG0d', annual: 'https://buy.stripe.com/test_bJe28q6jzbzL8g6eubdfG0e' },
+  chain: { monthly: 'https://buy.stripe.com/test_28E14mcHX9rD1RIdq7dfG0f', annual: 'https://buy.stripe.com/test_9B614mbDT5bn7c2fyfdfG0g' },
 };
 
 /** Flat aliases (monthly link) for legacy stripePaymentLinks */
 export const STRIPE_PAYMENT_LINKS_FLAT = {
-  lite: 'https://buy.stripe.com/test_5kQ5kCgYdcDP7c271JdfG01',
-  growth: 'https://buy.stripe.com/test_fZu00icHXgU5dAq0DldfG03',
-  business: 'https://buy.stripe.com/test_4gM14mcHX9rDdAq5XFdfG05',
-  chain: 'https://buy.stripe.com/test_6oUbJ05fveLXdAqcm3dfG07',
+  lite: 'https://buy.stripe.com/test_7sYbJ04br47jcwm85NdfG09',
+  growth: 'https://buy.stripe.com/test_bJeeVccHX0V7fIygCjdfG0b',
+  business: 'https://buy.stripe.com/test_cNi7sK6jzeLX0NEadVdfG0d',
+  chain: 'https://buy.stripe.com/test_28E14mcHX9rD1RIdq7dfG0f',
 };
 
 export const STRIPE_BOOTSTRAP_META = {
-  generatedAt: '2026-08-08T06:23:58.811Z',
+  generatedAt: '2026-08-08T17:00:56.468Z',
   webhookEndpointId: 'we_1U23fmCKrA7xWRBt0RZ63HmB',
 };
