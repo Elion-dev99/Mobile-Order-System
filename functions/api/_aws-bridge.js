@@ -1,9 +1,9 @@
 /**
- * AWS bridge for Cloudflare Pages Functions (no npm — aws4fetch via esm.sh).
+ * AWS bridge for Cloudflare Pages Functions (aws4fetch via functions/package.json).
  * Optional: STS ping, EventBridge, SQS, SNS. Credentials from Pages secrets only.
  */
 
-import { AwsClient } from 'https://esm.sh/aws4fetch@1.0.20';
+import { AwsClient } from 'aws4fetch';
 
 export function awsRegion(env) {
   return String(env?.AWS_REGION || 'ap-northeast-1').trim();
