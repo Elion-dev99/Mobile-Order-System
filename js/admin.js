@@ -44,6 +44,16 @@ import {
 } from './staff-auth.js';
 import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
 
+function adminPaymentCta() {
+  const shop = getShop();
+  return paymentCta({
+    shopId: getShopId(),
+    planId: shop?.planId,
+    email: shop?.ownerEmail,
+    billingCycle: shop?.billingCycle || PRODUCT.defaultBillingCycle || 'annual',
+  });
+}
+
 const AdminPage = {
   filter: 'received',
   view: 'orders',
@@ -118,7 +128,7 @@ const AdminPage = {
     const access = getShopAccess();
     const plan = getPlan(shop.planId);
     const next = nextPlanId(shop.planId);
-    const pay = paymentCta();
+    const pay = adminPaymentCta();
 
     if (access.subscribed) {
       el.hidden = true;
@@ -658,7 +668,7 @@ const AdminPage = {
 
   exportRangeCsv() {
     if (!shopCanUse('exportCsv')) {
-      const pay = paymentCta();
+      const pay = adminPaymentCta();
       const access = getShopAccess();
       const reason = !featureEnabled(getShop(), 'exportCsv')
         ? 'CSV出力は Growth 以上のプラン機能です。'
@@ -680,7 +690,7 @@ const AdminPage = {
 
   printKitchenTickets() {
     if (!shopCanUse('kitchenTickets')) {
-      const pay = paymentCta();
+      const pay = adminPaymentCta();
       if (confirm(`厨房伝票印刷は Growth 以上です。\n\n${pay.label}へ進みますか？`)) {
         location.href = pay.href;
       }
@@ -1126,7 +1136,7 @@ const AdminPage = {
       }
     }
     if (!unlocked) {
-      const pay = paymentCta();
+      const pay = adminPaymentCta();
       document.getElementById('anTodayGmv').textContent = '—';
       document.getElementById('anTodayOrders').textContent = '—';
       document.getElementById('anAov').textContent = '—';
@@ -1303,7 +1313,7 @@ const AdminPage = {
       .reduce((s, l) => s + (l.estimatedMrr || getPlan(l.planId || 'growth').priceMonthly), 0);
     const pipelineMrr = selfMrr + wonMrr;
     const access = getShopAccess();
-    const pay = paymentCta();
+    const pay = adminPaymentCta();
 
     const planName = document.getElementById('billingPlanName');
     const priceEl = document.getElementById('billingPrice');
@@ -1397,7 +1407,7 @@ const AdminPage = {
     this.renderSettingsForm();
     const growth = getPlan('growth');
     const ap = planPrice(growth, 'annual');
-    alert(`Growth・年払いに切り替えました（実質 ¥${yen(ap.perMonthEffective)}/月）。契約手続きは「${paymentCta().label}」へ。`);
+    alert(`Growth・年払いに切り替えました（実質 ¥${yen(ap.perMonthEffective)}/月）。契約手続きは「${adminPaymentCta().label}」へ。`);
   },
 
   async activateSubscription() {

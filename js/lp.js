@@ -62,7 +62,10 @@ function updateHeroCta() {
 function renderPayCta() {
   const a = document.getElementById('lpPayCta');
   if (!a) return;
-  const pay = paymentCta();
+  const pay = paymentCta({
+    planId: selectedPlanId,
+    billingCycle: billingCycle,
+  });
   if (pay.mode === 'stripe') {
     a.hidden = false;
     a.href = pay.href;
@@ -201,6 +204,7 @@ document.querySelectorAll('.lp-cycle').forEach(btn => {
     renderPlans();
     updateRoi();
     updateQuotePreview();
+    renderPayCta();
   });
 });
 
@@ -211,8 +215,13 @@ document.querySelectorAll('.lp-cycle').forEach(btn => {
 document.getElementById('leadPlan')?.addEventListener('change', (e) => {
   selectedPlanId = e.target.value;
   updateQuotePreview();
+  renderPayCta();
 });
-document.getElementById('leadCycle')?.addEventListener('change', updateQuotePreview);
+document.getElementById('leadCycle')?.addEventListener('change', (e) => {
+  billingCycle = e.target.value;
+  updateQuotePreview();
+  renderPayCta();
+});
 document.querySelector('#leadForm [name=stores]')?.addEventListener('input', updateQuotePreview);
 
 const form = document.getElementById('leadForm');

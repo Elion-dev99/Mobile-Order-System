@@ -431,13 +431,16 @@ export function getOrderingBlockReason(tableNumber, shop = shopCache) {
 }
 
 export function isSubscribed() {
-  if (shopCache.subscribed) return true;
-  try {
-    return localStorage.getItem(scopedKey('mos_subscribed')) === '1'
-      || localStorage.getItem('mos_subscribed') === '1';
-  } catch {
-    return false;
-  }
+  return !!shopCache.subscribed;
+}
+
+/** Start 14-day trial once per shop (local + best-effort Firestore). */
+export function trialWindowForNewShop(days = PRODUCT.trialDays) {
+  const started = Date.now();
+  return {
+    trialStartedAt: started,
+    trialEndsAt: started + Number(days || PRODUCT.trialDays) * 86400000,
+  };
 }
 
 /** Start 14-day trial once per shop (local + best-effort Firestore). */
@@ -449,7 +452,7 @@ export async function ensureTrialStarted() {
   const started = Date.now();
   const ends = started + PRODUCT.trialDays * 86400000;
   try {
-    return await patchShopFields({ trialStartedAt: started, trialEndsAt: ends });
+    return await saveShop({ trialStartedAt: started, trialEndsAt: ends });
   } catch (_) {
     shopCache = mergeShop({ ...shopCache, trialStartedAt: started, trialEndsAt: ends }, getShopId());
     return shopCache;
@@ -466,7 +469,6 @@ export function shopCanUse(featureKey) {
 
 export async function markSubscribed() {
   const was = isSubscribed();
-  try { localStorage.setItem(scopedKey('mos_subscribed'), '1'); } catch (_) {}
   const shop = await saveShop({
     subscribed: true,
     subscribedAt: Date.now(),

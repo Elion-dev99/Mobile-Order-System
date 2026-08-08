@@ -1,16 +1,16 @@
 import {
   isOpsAuthed, verifyOpsPassword, setOpsRole, clearOpsAuth, getOpsRole, setCustomOpsPassword
 } from './ops-auth.js';
-import { getOpsApiSecret, setOpsApiSecret, clearOpsApiSecret } from './ops-secret.js';
+import { getOpsApiSecret, setOpsApiSecret, clearOpsApiSecret, opsAuthHeaders } from './ops-secret.js';
 import {
   ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn, signOutStaff, getStaffUser,
 } from './staff-firebase-auth.js';
 import {
-  listShops, upsertShop, deleteShop, ensureSeedShops
+  listShops, upsertShop, deleteShop, ensureSeedShops, trialWindowForNewShop,
 } from './shop.js';
 import { guestEntryUrl, DEFAULT_SHOP_ID, listSeedShops } from './tenant.js';
 import { db, firebaseConfig } from './firebase.js';
-import { yen, getPlan, estimateMrr, planComparisonRows, PLANS, PRODUCT } from './plans.js';
+import { yen, getPlan, estimateMrr, planComparisonRows, PLANS, PRODUCT, getAccessState } from './plans.js';
 import {
   collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc, setDoc,
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
@@ -148,6 +148,7 @@ const OpsPage = {
       const status = await getSetupStatus().catch(() => null);
       if (status?.needsSetup) this.switchTab('notify');
     }
+    this.refreshStripePrep().catch(() => {});
     window.scrollTo(0, 0);
   },
 
@@ -198,6 +199,31 @@ const OpsPage = {
     }
     this.renderCardinalCaps(loadCardinalPrefs(), { force: true });
     await this.refreshCardinal();
+  },
+
+  prefillShopFromLead(lead = {}) {
+    const base = String(lead.desiredShopId || lead.shopName || lead.company || lead.name || lead.email || lead.id || 'shop')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48);
+    const idEl = document.getElementById('newShopId');
+    const nameEl = document.getElementById('newShopName');
+    const subEl = document.getElementById('newShopSubtitle');
+    const tablesEl = document.getElementById('newShopTables');
+    const planEl = document.getElementById('newShopPlan');
+    const emailEl = document.getElementById('newShopOwnerEmail');
+    if (idEl) idEl.value = base.length >= 2 ? base : `shop-${base}`.slice(0, 48);
+    if (nameEl) nameEl.value = lead.shopName || lead.company || lead.name || base;
+    if (subEl) subEl.value = (lead.city || lead.source || '').toString().slice(0, 80);
+    if (tablesEl && lead.tables) tablesEl.value = String(Math.min(200, Number(lead.tables) || 12));
+    if (planEl && lead.planId) planEl.value = lead.planId;
+    if (emailEl && lead.email) emailEl.value = lead.email;
+    const st = document.getElementById('createShopStatus');
+    if (st) {
+      st.hidden = false;
+      st.textContent = '成約リードからフォームを埋めました。店舗IDを確認して「店舗を作成」を押してください。';
+    }
   },
 
   renderCardinal(apiRes = null) {
@@ -740,12 +766,16 @@ const OpsPage = {
         return;
       }
       try {
+        const trial = trialWindowForNewShop();
         await upsertShop(id, {
           name: name || id,
           subtitle: document.getElementById('newShopSubtitle').value.trim(),
           tableCount: Number(document.getElementById('newShopTables').value) || 10,
           planId: document.getElementById('newShopPlan').value || 'growth',
           isOpen: true,
+          subscribed: false,
+          ownerEmail: document.getElementById('newShopOwnerEmail')?.value?.trim() || '',
+          ...trial,
         });
         status.textContent = `店舗「${name || id}」(${id}) を作成しました`;
         e.target.reset();
@@ -756,6 +786,7 @@ const OpsPage = {
         status.textContent = '作成に失敗: ' + (err.message || err);
       }
     });
+    document.getElementById('opsStripeRefresh')?.addEventListener('click', () => this.refreshStripePrep());
     document.getElementById('opsPwForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const role = document.getElementById('opsPwRole').value;
@@ -1572,6 +1603,84 @@ const OpsPage = {
     if (id === 'tools') this.renderTools();
     if (id === 'notify') this.refreshNotifySetup();
     if (id === 'cardinal') this.refreshCardinal();
+    if (id === 'security') this.refreshStripePrep().catch(() => {});
+  },
+
+  async refreshStripePrep() {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    const st = document.getElementById('opsStripeStatus');
+    let pub = null;
+    try {
+      pub = await fetch('/api/stripe').then((r) => r.json());
+    } catch (e) {
+      if (st) { st.hidden = false; st.textContent = 'Stripe API に到達できません'; }
+      return;
+    }
+    if (pub?.configured) {
+      set('opsStripeWebhook', pub.configured.webhookSecret ? '設定済' : '未設定');
+      set('opsStripeApiKey', pub.configured.apiKey ? '設定済' : '未設定');
+      set('opsStripePending', String(pub.pendingCount ?? 0));
+    }
+    let pending = pub?.recentPending || [];
+    if (getOpsApiSecret()) {
+      try {
+        const res = await fetch('/api/stripe', {
+          method: 'POST',
+          headers: opsAuthHeaders(),
+          body: JSON.stringify({ action: 'list_pending' }),
+        }).then((r) => r.json());
+        if (res.ok) pending = res.pending || pending;
+      } catch (_) {}
+    } else if (st) {
+      st.hidden = false;
+      st.textContent = '待機キューの詳細には Ops 鍵が必要です';
+    }
+    const list = document.getElementById('opsStripePendingList');
+    if (!list) return;
+    if (!pending.length) {
+      list.innerHTML = '<p class="ops-muted">支払い待機キューは空です。Webhook 受信後にここに表示されます。</p>';
+      return;
+    }
+    list.innerHTML = pending.map((row) => `
+      <article class="ops-lead-card">
+        <strong>店舗: ${escapeHtml(row.shopId || '（client_reference_id 未設定）')}</strong>
+        <p class="ops-muted">プラン ${escapeHtml(row.planId || '—')} · ${escapeHtml(row.email || '')}
+          ${row.amount != null ? ` · ${row.amount} ${escapeHtml(row.currency || '')}` : ''}
+          ${row.livemode ? ' · 本番' : ' · テスト'}</p>
+        <p class="ops-muted"><code>${escapeHtml(row.sessionId || '')}</code></p>
+        <div class="ops-shop-actions">
+          <button type="button" data-stripe-goto-shop="${escapeHtml(row.shopId || '')}">店舗を編集</button>
+          <button type="button" data-stripe-dismiss="${escapeHtml(row.id)}">キューから削除</button>
+        </div>
+      </article>`).join('');
+    list.querySelectorAll('[data-stripe-goto-shop]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sid = btn.dataset.stripeGotoShop;
+        if (!sid) return;
+        this.switchTab('shops');
+        const filter = document.getElementById('shopsFilter');
+        if (filter) filter.value = sid;
+        this.renderShops();
+      });
+    });
+    list.querySelectorAll('[data-stripe-dismiss]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!getOpsApiSecret()) {
+          alert('鍵タブで OPS_API_SECRET を保存してください');
+          return;
+        }
+        try {
+          await fetch('/api/stripe', {
+            method: 'POST',
+            headers: opsAuthHeaders(),
+            body: JSON.stringify({ action: 'dismiss', id: btn.dataset.stripeDismiss }),
+          });
+          this.refreshStripePrep();
+        } catch (e) {
+          alert('削除失敗: ' + (e?.message || e));
+        }
+      });
+    });
   },
 
   async refreshShops() {
@@ -1710,6 +1819,44 @@ const OpsPage = {
     set('hqRequests', String(openReq));
     set('hqNps', String(nps));
 
+    const realShops = (this.shops || []).filter((s) => !s.loadTest && !String(s.id || '').startsWith('load-'));
+    let subscribed = 0;
+    let trialEnding = 0;
+    let trialExpired = 0;
+    const now = Date.now();
+    realShops.forEach((shop) => {
+      const access = getAccessState(shop, { subscribed: shop.subscribed });
+      if (access.subscribed) subscribed += 1;
+      else if (access.trialExpired) trialExpired += 1;
+      else if (access.trialActive && access.daysLeft != null && access.daysLeft <= 7) trialEnding += 1;
+    });
+    set('hqSubscribed', String(subscribed));
+    set('hqTrialEnding', String(trialEnding));
+    set('hqTrialExpired', String(trialExpired));
+
+    const feeOrdersEarly = this.orders.filter(o => !o.demo && (o.platformFee || 0) > 0 && (o.platformFeeStatus || 'unbilled') === 'unbilled');
+    const unbilledFeeEarly = feeOrdersEarly.reduce((s, o) => s + (o.platformFee || 0), 0);
+
+    const checklist = document.getElementById('opsRevenueChecklist');
+    if (checklist) {
+      const newLeads = this.leads.filter((l) => l.status === 'new').length;
+      const wonNoShop = this.leads.filter((l) => l.status === 'won').filter((lead) => {
+        const hintId = String(lead.desiredShopId || '').trim().toLowerCase();
+        if (hintId && realShops.some((s) => s.id === hintId)) return false;
+        const name = String(lead.shopName || lead.company || '').trim();
+        if (!name) return true;
+        return !realShops.some((s) => (s.name || '').trim() === name);
+      }).length;
+      checklist.innerHTML = [
+        `<li>${newLeads ? '⚠' : '✓'} 新規リード ${newLeads} 件 — 対応・成約</li>`,
+        `<li>${trialExpired ? '⚠' : '✓'} トライアル終了 ${trialExpired} 店 — 課金ONまたは契約</li>`,
+        `<li>${trialEnding ? '⚠' : '✓'} 7日以内に終了 ${trialEnding} 店 — フォロー</li>`,
+        `<li>${unbilledFeeEarly > 0 ? '⚠' : '✓'} Chain 未請求手数料 ¥${yen(unbilledFeeEarly)}</li>`,
+        `<li>${wonNoShop ? '⚠' : '✓'} 成約だが店舗未作成 ${wonNoShop} 件</li>`,
+        `<li>Firebase Auth 設定済み · Stripe Link は <code>js/config.js</code></li>`,
+      ].join('');
+    }
+
     const byShop = {};
     today.forEach(o => {
       const id = o.shopId || DEFAULT_SHOP_ID;
@@ -1738,11 +1885,14 @@ const OpsPage = {
       }).join('') || '<tr><td colspan="5">本日の注文なし</td></tr>';
     }
 
-    const mrr = this.shops.reduce((s, shop) => s + estimateMrr({
-      planId: shop.planId,
-      cycle: shop.billingCycle || 'annual',
-      stores: shop.stores || 1,
-    }), 0);
+    const mrr = realShops.reduce((s, shop) => {
+      if (!shop.subscribed) return s;
+      return s + estimateMrr({
+        planId: shop.planId,
+        cycle: shop.billingCycle || 'annual',
+        stores: shop.stores || 1,
+      });
+    }, 0);
     set('hqMrr', `¥${yen(mrr)}`);
 
     // Chain 0.8% platform fee ledger (unbilled)
@@ -2016,7 +2166,11 @@ const OpsPage = {
           await updateDoc(doc(db, 'leads', btn.dataset.lead), { status, updatedAt: Date.now() });
           if (status === 'won') {
             const lead = this.leads.find((l) => l.id === btn.dataset.lead);
-            if (lead) notifyLeadWon({ ...lead, status });
+            if (lead) {
+              notifyLeadWon({ ...lead, status });
+              this.prefillShopFromLead(lead);
+              this.switchTab('shops');
+            }
           }
         } catch (e) {
           console.error(e);
