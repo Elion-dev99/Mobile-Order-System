@@ -1132,7 +1132,7 @@ img { max-width: 100%; }
 }
 
 /* ===== ADMIN PAGE ===== */
-.admin-page { background: #1C1C1E; min-height: 100vh; color: #fff; }
+.admin-page { background: #1C1C1E; min-height: 100vh; color: #fff; overscroll-behavior-y: auto; }
 
 .admin-header {
   background: rgba(28,28,30,0.85);
@@ -1194,7 +1194,19 @@ img { max-width: 100%; }
   flex: 0 0 20px;
 }
 
-.admin-content { padding: 12px 16px 32px; }
+.admin-content { padding: 12px 16px 32px; overflow: visible; }
+
+.admin-orders-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-orders-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 .admin-order-card {
   background: #2C2C2E;

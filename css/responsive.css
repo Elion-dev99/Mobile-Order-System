@@ -108,6 +108,21 @@ body.store-page .store-main {
 }
 
 /* ----- Admin / kitchen ----- */
+html:has(body.admin-page) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: auto;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.admin-page {
+  overflow-x: hidden;
+  overflow-y: visible;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
 body.admin-page .admin-header {
   padding-left: max(var(--qo-space-4), var(--qo-safe-l));
   padding-right: max(var(--qo-space-4), var(--qo-safe-r));
@@ -115,16 +130,17 @@ body.admin-page .admin-header {
 
 body.admin-page .admin-tabs {
   padding-left: max(var(--qo-space-4), var(--qo-safe-l));
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
 }
 
 body.admin-page .admin-content,
 body.admin-page .admin-panel {
-  padding-left: max(var(--qo-space-4), var(--qo-safe-l));
-  padding-right: max(var(--qo-space-4), var(--qo-safe-r));
+  overflow: visible;
+  max-height: none;
 }
 
 @media (min-width: 768px) {
-  body.admin-page #ordersPanel,
   body.admin-page .admin-orders-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -135,10 +151,15 @@ body.admin-page .admin-panel {
 }
 
 @media (min-width: 1200px) {
-  body.admin-page #ordersPanel,
   body.admin-page .admin-orders-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+body.admin-page .admin-content,
+body.admin-page .admin-panel {
+  padding-left: max(var(--qo-space-4), var(--qo-safe-l));
+  padding-right: max(var(--qo-space-4), var(--qo-safe-r));
 }
 
 body.admin-page .admin-panel-inner {

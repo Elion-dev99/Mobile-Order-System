@@ -532,17 +532,19 @@ const AdminPage = {
         if (!groups[t]) groups[t] = [];
         groups[t].push(o);
       });
-      container.innerHTML = Object.keys(groups).sort((a, b) => Number(a) - Number(b)).map((t) => `
+      container.innerHTML = `<div class="admin-orders-stack">${Object.keys(groups).sort((a, b) => Number(a) - Number(b)).map((t) => `
         <section class="kds-group">
           <h3 class="kds-group-title">テーブル ${t}</h3>
-          ${groups[t].map((o) => this.renderOrderCard(o)).join('')}
+          <div class="admin-orders-grid">
+            ${groups[t].map((o) => this.renderOrderCard(o)).join('')}
+          </div>
         </section>
-      `).join('');
+      `).join('')}</div>`;
       this.bindOrderActions(container);
       return;
     }
 
-    container.innerHTML = filtered.map((order) => this.renderOrderCard(order)).join('');
+    container.innerHTML = `<div class="admin-orders-grid">${filtered.map((order) => this.renderOrderCard(order)).join('')}</div>`;
     this.bindOrderActions(container);
   },
 
