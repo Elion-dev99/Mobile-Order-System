@@ -300,3 +300,24 @@ loadMaintenance().catch(() => {}).then(() => {
   subscribeMaintenance();
   mountMaintenanceBanner({ compact: true });
 });
+
+function initLpReveal() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.lp-reveal').forEach((el) => el.classList.add('is-visible'));
+    return;
+  }
+  const obs = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add('is-visible');
+          obs.unobserve(e.target);
+        }
+      });
+    },
+    { threshold: 0.08, rootMargin: '0px 0px -5% 0px' }
+  );
+  document.querySelectorAll('.lp-reveal').forEach((el) => obs.observe(el));
+}
+
+initLpReveal();
