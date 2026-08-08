@@ -42,23 +42,16 @@ Stripe 日本のカード手数料はおおむね **3.6%** 前後。小額の月
 
 4. **フロント** — `stripePaymentLinksByCycle` + 店舗の `billingCycle` で正しいリンクへ。`client_reference_id` は Admin から店舗 ID を付与。
 
-## 一括セットアップ（推奨）
+## 一括セットアップ（推奨 — 創業者はシークレット1回）
 
-既存の Lite リンクを手作業で直すより、テストキーで API 一括作成が整合しやすいです。
+[`stripe-founder-one-click.md`](./stripe-founder-one-click.md) — GitHub Action **Stripe full setup (one-click)**  
+Repo secret `STRIPE_TEST_SECRET_KEY` を入れて Run workflow するだけ（Cursor に実行依頼も可）。
 
-```bash
-STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-bootstrap.mjs
-```
-
-出力 JSON を `js/config.js` の `stripePaymentLinksByCycle` に貼り付けてデプロイ。
-
-プラン単体:
+ローカル:
 
 ```bash
-STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-bootstrap.mjs --plan lite
+STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-bootstrap.mjs --write-generated --register-webhook
 ```
-
-`--dry-run` で API を叩かず設計ログのみ表示。
 
 ## 手作業で Dashboard だけ使う場合
 
