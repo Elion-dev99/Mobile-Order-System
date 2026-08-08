@@ -21,7 +21,7 @@ export const PRODUCT = {
    * 例: growth: 'https://buy.stripe.com/test_xxxx'
    */
   stripePaymentLinks: {
-    lite: '',
+    lite: 'https://buy.stripe.com/test_14A8wOfU9bzL0NEeubdfG00',
     growth: '',
     business: '',
     chain: '',
