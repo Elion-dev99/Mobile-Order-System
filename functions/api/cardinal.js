@@ -50,6 +50,7 @@ import {
   isServerCapabilityOn,
   CARDINAL_CAPABILITY_DEFS,
   allCapabilitiesOff,
+  autonomy90Capabilities,
 } from './_cardinal-prefs-store.js';
 import { recordProbeFailures } from './_system-incidents.js';
 
@@ -1299,6 +1300,22 @@ export async function onRequestPost(context) {
     });
   }
 
+  if (action === 'prefs_autonomy_90') {
+    const saved = await writeCardinalPrefs(
+      context.caches,
+      { capabilities: autonomy90Capabilities(), shutdownEpoch: 2 },
+      body.updatedBy || 'prefs_autonomy_90',
+    );
+    return j({
+      ok: true,
+      action: 'prefs_autonomy_90',
+      prefs: saved,
+      persisted: saved.persisted !== false,
+      persistError: saved.persistError || null,
+      hint: 'Cardinal 自律90%バンドル ON（Cursor 運用委譲）',
+    });
+  }
+
   if (action === 'prefs_shutdown_all') {
     const saved = await writeCardinalPrefs(
       context.caches,
@@ -1370,7 +1387,7 @@ export async function onRequestGet(context) {
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    actions: ['status', 'prefs_get', 'prefs_set', 'prefs_shutdown_all', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
+    actions: ['status', 'prefs_get', 'prefs_set', 'prefs_autonomy_90', 'prefs_shutdown_all', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
     autonomy: { targetPct: 90, policy: 'docs/autonomy.md' },
     hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }. See docs/autonomy.md.',
   }, 200, context.request);

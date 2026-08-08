@@ -2,10 +2,16 @@
  * System incident ledger (Cache API) + Discord alerts with dedupe.
  */
 
+import { dispatchCursorAgent } from './_incident-dispatch.js';
+import { readAgentLedger, recordLaunch, recentlyLaunched } from './_agent-ledger.js';
+import { readCardinalPrefs, allowCursorDispatch } from './_cardinal-prefs-store.js';
+
 const CACHE_URL = 'https://mobile-order-system.pages.dev/__system_incidents_v1';
 const DEDUPE_MS = 10 * 60 * 1000;
 const MAX_EVENTS = 120;
 const MAX_DISCORD_PER_HOUR = 40;
+const SYSTEM_INCIDENT_COOLDOWN_MS = 45 * 60 * 1000;
+const AUTO_DISPATCH_SKIP_KINDS = new Set(['notify_test', 'debug_request', 'test']);
 
 function resolveCache(cachesObj) {
   try {
@@ -110,6 +116,46 @@ function bumpDiscordHour(queue) {
   return queue.discordHour;
 }
 
+async function maybeAutoDispatchExecutor(cachesObj, env, row, { firstSighting }) {
+  if (!firstSighting || row.severity !== 'critical') return null;
+  if (AUTO_DISPATCH_SKIP_KINDS.has(row.kind)) return null;
+  if (!env?.CURSOR_API_KEY && !env?.CURSOR_AUTOMATION_WEBHOOK_URL) {
+    return { skipped: true, reason: 'no_cursor' };
+  }
+  const prefs = await readCardinalPrefs(cachesObj);
+  const gate = allowCursorDispatch(prefs, 'system_incident');
+  if (!gate.ok) return { skipped: true, reason: gate.reason };
+  const ledger = await readAgentLedger(cachesObj);
+  if (recentlyLaunched(ledger, 'system_incident', SYSTEM_INCIDENT_COOLDOWN_MS)) {
+    return { skipped: true, reason: 'cooldown' };
+  }
+  const incident = {
+    feature: row.feature,
+    cause: row.cause,
+    summary: `${row.feature}: ${row.cause}`,
+    message: row.cause,
+    incidentId: row.id,
+    kind: row.kind,
+    source: 'system_watchdog_auto',
+    severity: 'critical',
+    cardinalRole: 'executor',
+    url: row.url,
+    shopId: row.shopId,
+  };
+  const cursor = await dispatchCursorAgent(env, incident);
+  const launched = !!(cursor.agent?.ok || cursor.automation?.ok);
+  if (launched) {
+    await recordLaunch(cachesObj, {
+      kind: 'system_incident',
+      role: 'executor',
+      title: incident.summary,
+      launched: true,
+      agentOk: true,
+    });
+  }
+  return { launched, cursor };
+}
+
 /**
  * Record incident; notify Discord on first sighting or every 30 min repeat.
  */
@@ -166,7 +212,21 @@ export async function recordSystemIncident(cachesObj, env, input = {}) {
   }
 
   const saved = await writeIncidentQueue(cachesObj, q);
-  return { row: existingIdx >= 0 ? q.events[existingIdx] : q.events[0], discord, persisted: saved.persisted !== false };
+  const firstSighting = existingIdx < 0;
+  let autoDispatch = null;
+  if (firstSighting && notify) {
+    try {
+      autoDispatch = await maybeAutoDispatchExecutor(cachesObj, env, existingIdx >= 0 ? q.events[existingIdx] : q.events[0], { firstSighting });
+    } catch (e) {
+      autoDispatch = { ok: false, error: String(e?.message || e) };
+    }
+  }
+  return {
+    row: existingIdx >= 0 ? q.events[existingIdx] : q.events[0],
+    discord,
+    autoDispatch,
+    persisted: saved.persisted !== false,
+  };
 }
 
 export async function listSystemIncidents(cachesObj, { limit = 20, status = 'open' } = {}) {
