@@ -3,24 +3,21 @@
  * Regenerate: STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-bootstrap.mjs --write-generated
  */
 export const STRIPE_PAYMENT_LINKS_BY_CYCLE = {
-  lite: {
-    monthly: 'https://buy.stripe.com/test_14A8wOfU9bzL0NEeubdfG00',
-    annual: '',
-  },
-  growth: { monthly: '', annual: '' },
-  business: { monthly: '', annual: '' },
-  chain: { monthly: '', annual: '' },
+  lite: { monthly: 'https://buy.stripe.com/test_5kQ5kCgYdcDP7c271JdfG01', annual: 'https://buy.stripe.com/test_8x28wOcHXcDPbsi0DldfG02' },
+  growth: { monthly: 'https://buy.stripe.com/test_fZu00icHXgU5dAq0DldfG03', annual: 'https://buy.stripe.com/test_8x2dR86jzcDP8g6dq7dfG04' },
+  business: { monthly: 'https://buy.stripe.com/test_4gM14mcHX9rDdAq5XFdfG05', annual: 'https://buy.stripe.com/test_eVq9ASeQ5eLX7c2fyfdfG06' },
+  chain: { monthly: 'https://buy.stripe.com/test_6oUbJ05fveLXdAqcm3dfG07', annual: 'https://buy.stripe.com/test_9B65kCgYdavHcwmcm3dfG08' },
 };
 
 /** Flat aliases (monthly link) for legacy stripePaymentLinks */
 export const STRIPE_PAYMENT_LINKS_FLAT = {
-  lite: 'https://buy.stripe.com/test_14A8wOfU9bzL0NEeubdfG00',
-  growth: '',
-  business: '',
-  chain: '',
+  lite: 'https://buy.stripe.com/test_5kQ5kCgYdcDP7c271JdfG01',
+  growth: 'https://buy.stripe.com/test_fZu00icHXgU5dAq0DldfG03',
+  business: 'https://buy.stripe.com/test_4gM14mcHX9rDdAq5XFdfG05',
+  chain: 'https://buy.stripe.com/test_6oUbJ05fveLXdAqcm3dfG07',
 };
 
 export const STRIPE_BOOTSTRAP_META = {
-  generatedAt: null,
-  webhookEndpointId: null,
+  generatedAt: '2026-08-08T06:23:58.811Z',
+  webhookEndpointId: 'we_1U23fmCKrA7xWRBt0RZ63HmB',
 };
