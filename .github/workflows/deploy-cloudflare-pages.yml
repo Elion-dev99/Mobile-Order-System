@@ -198,3 +198,16 @@ jobs:
         run: |
           echo "Canary failed; rollback attempted. Failing deploy job for visibility."
           exit 1
+
+      - name: Register Discord slash commands (saved bot secrets)
+        if: steps.canary.outputs.ok == 'true'
+        env:
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+        run: |
+          if [ -n "${DISCORD_BOT_TOKEN:-}" ] && [ -n "${DISCORD_APPLICATION_ID:-}" ]; then
+            node scripts/register-discord-commands.mjs
+          else
+            echo "skip Discord command register (no bot secrets in GitHub)"
+          fi

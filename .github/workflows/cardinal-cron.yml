@@ -21,9 +21,9 @@ on:
         default: 'auto'
         type: choice
         options: ['auto', 'tick', 'digest', 'steward', 'steward_guardian', 'followup']
-  # schedule disabled — token conservation (manual workflow_dispatch only)
-  # schedule:
-  #   - cron: '15 * * * *'
+  # schedule re-enabled — Cursor 自律運用（docs/cursor-full-ops-delegation.md）
+  schedule:
+    - cron: '15 * * * *'
 
 jobs:
   tick:
@@ -60,6 +60,9 @@ jobs:
               exit 1
             }
           }
+
+          # 自律90%バンドル（Cursor 運用委譲 — 創業者が毎回 Ops を触らない）
+          post prefs_autonomy_90 ',\"updatedBy\":\"github-cron\"' || true
 
           run_tick() { post tick ""; }
           run_digest() { post digest ""; }

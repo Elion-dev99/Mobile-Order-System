@@ -3,6 +3,8 @@
 創業者の意図: **運営・保守・不具合修正の約9割を Cursor（Cardinal）に任せる。**  
 **マージも自動化**する。ただしデプロイ後に表示エラーや不具合が出たら **即時でマージ前の SHA に戻す**。
 
+**創業者ゼータッチ運用の一覧:** `docs/cursor-full-ops-delegation.md`
+
 ## 役割分担（目標）
 
 | 割合 | 担当 | 内容 |
@@ -108,6 +110,7 @@ Cardinal タブの **自律 90%** パネル。API `action: status` の `autonomy
 ## 関連
 
 - `docs/cardinal-automation-pause.md` — **自動マージ・Deploy 起動の一時停止**（通信障害時）
+- `docs/cursor-full-ops-delegation.md` — **創業者ほぼゼータッチ・Cursor 運用委譲**
 - `docs/cursor-founder-division-of-labor.md` — **Cursor と創業者の役割分担書（一覧）**
 - `docs/cardinal.md`
 - `docs/cardinal-product-gate.md`
