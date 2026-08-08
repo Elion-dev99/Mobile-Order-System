@@ -35,6 +35,9 @@ import { startOfflineSync } from './offline-sync.js';
 import { applyLangToDocument, ensureA11yBasics, normalizeLang, t as tUi } from './i18n-ui.js';
 import { captureGrowthAttribution, mountGrowthWatermark } from './growth.js';
 import { startSystemWatchdog } from './system-watchdog.js';
+import {
+  guestCategoryTabs, normalizeCategories, ALL_CATEGORY_ID,
+} from './menu-structure.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -115,6 +118,7 @@ const App = {
     this.loadCart();
     this.applyLocaleChrome();
     applyLangToDocument(this.locale);
+    this.renderCategoryTabs();
     this.ensureMenuDelegation();
     this.mountGuestExtras();
     this.mountReserveBar();
@@ -496,9 +500,28 @@ const App = {
   },
 
   catLabel(id) {
+    const cat = getMenu().categories?.find((c) => c.id === id);
+    if (cat?.label) {
+      const row = CAT_I18N[id];
+      if (this.locale === 'en' && row?.en) return row.en;
+      return cat.label;
+    }
     const row = CAT_I18N[id];
     if (!row) return id;
     return this.locale === 'en' ? row.en : row.ja;
+  },
+
+  renderCategoryTabs() {
+    const inner = document.getElementById('categoryTabs');
+    if (!inner) return;
+    const MENU_DATA = getMenu();
+    const tabs = guestCategoryTabs(MENU_DATA);
+    const active = this.selectedCategory || ALL_CATEGORY_ID;
+    inner.innerHTML = tabs.map((c) => {
+      const icon = c.icon && c.id !== ALL_CATEGORY_ID ? `${c.icon} ` : '';
+      const label = this.catLabel(c.id);
+      return `<button type="button" class="tab-btn${active === c.id ? ' active' : ''}" data-cat="${c.id}">${icon}${label}</button>`;
+    }).join('');
   },
 
   setupLangToggle() {
@@ -540,9 +563,7 @@ const App = {
     const allergenSummary = document.querySelector('.guest-allergen summary');
     if (allergenSummary) allergenSummary.textContent = this.t('allergen');
 
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.textContent = this.catLabel(btn.dataset.cat);
-    });
+    this.renderCategoryTabs();
     document.querySelectorAll('.allergen-chip').forEach(chip => {
       chip.textContent = this.allergenLabel(chip.dataset.allergen);
     });
@@ -866,7 +887,7 @@ const App = {
       return;
     }
 
-    const cats = MENU_DATA.categories.filter(c => c.id !== 'all');
+    const cats = MENU_DATA.categories.filter((c) => c.id !== 'all' && !c.hidden);
     const byCat = cats.map(cat => ({
       ...cat,
       items: items.filter(i => i.category === cat.id),
@@ -1208,13 +1229,17 @@ const App = {
   },
 
   bindEvents() {
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const tabsNav = document.querySelector('.category-tabs');
+    if (tabsNav && !tabsNav.dataset.bound) {
+      tabsNav.dataset.bound = '1';
+      tabsNav.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab-btn');
+        if (!btn) return;
+        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         this.scrollToCategory(btn.dataset.cat);
       });
-    });
+    }
     document.querySelectorAll('.allergen-chip').forEach(chip => {
       chip.addEventListener('click', e => {
         e.preventDefault();

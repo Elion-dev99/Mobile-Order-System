@@ -78,6 +78,14 @@
       <button class="admin-action-btn start" id="addMenuItemBtn">＋ 追加</button>
     </div>
     <p class="admin-muted" style="margin:0 0 12px;">各商品の「カスタム項目」で、辛さ・大盛り・トッピングなどを編集できます。客席の注文モーダルに反映されます。</p>
+    <div class="menu-structure-block" id="menuCategoryEditor" aria-labelledby="menuStructureHeading">
+      <div class="menu-structure-head">
+        <h3 id="menuStructureHeading">メニュー構造（カテゴリ）</h3>
+        <button type="button" class="admin-action-btn start" id="addMenuCategoryBtn">＋ カテゴリ</button>
+      </div>
+      <p class="admin-muted menu-structure-hint">並び順・表示名・アイコンを自由に変更できます。非表示にしたカテゴリは客席タブに出ません。</p>
+      <div id="menuCategoryList" class="menu-category-list"></div>
+    </div>
     <div id="menuEditorList"></div>
     <button class="admin-save-btn" id="saveMenuBtn">メニューを保存</button>
   </div>
