@@ -1,24 +1,21 @@
 :root {
-  --ops-bg: #0f1c19;
-  --ops-panel: #162823;
-  --ops-line: #2a433c;
-  --ops-text: #e7f2ee;
-  --ops-muted: #8eaaa2;
-  --ops-accent: #3dcf9a;
-  --ops-warn: #f0b429;
-  --ops-danger: #ff6b6b;
-  --ops-font: "IBM Plex Sans JP", "Hiragino Sans", sans-serif;
-  --ops-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --ops-bg: #141414;
+  --ops-panel: #1f1f1f;
+  --ops-line: #3d3d3d;
+  --ops-text: #f3f3f3;
+  --ops-muted: #9a9a9a;
+  --ops-accent: #3b82f6;
+  --ops-warn: #f59e0b;
+  --ops-danger: #ef4444;
+  --ops-font: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --ops-mono: ui-monospace, "Cascadia Mono", monospace;
 }
 
 * { box-sizing: border-box; }
 body.ops-body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(ellipse 80% 50% at 10% -10%, #1d4d3e 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 0%, #243b55 0%, transparent 50%),
-    var(--ops-bg);
+  background: var(--ops-bg);
   color: var(--ops-text);
   font-family: var(--ops-font);
 }

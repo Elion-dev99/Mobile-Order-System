@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0D5C4D">
+  <meta name="theme-color" content="#f5f3f0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="manifest.webmanifest">
   <title>メニュー</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=harden1">
-  <link rel="stylesheet" href="css/guest.css?v=harden1">
+  <link rel="stylesheet" href="css/tokens.css?v=ui26">
+  <link rel="stylesheet" href="css/style.css?v=ui26">
+  <link rel="stylesheet" href="css/guest.css?v=guestscroll1">
+  <link rel="stylesheet" href="css/responsive.css?v=guestscroll1">
+  <link rel="stylesheet" href="css/ui-overhaul.css?v=ui26">
 </head>
 <body class="guest">
 
@@ -33,22 +33,17 @@
       </div>
     </div>
   </div>
+</header>
 
+<div class="guest-chrome">
   <div class="guest-search">
     <input type="search" class="search-input" id="searchInput" placeholder="メニューを検索" enterkeyhint="search">
   </div>
 
   <nav class="category-tabs" aria-label="カテゴリ">
-    <div class="tabs-inner">
-      <button class="tab-btn active" data-cat="all">すべて</button>
-      <button class="tab-btn" data-cat="rice">ご飯もの</button>
-      <button class="tab-btn" data-cat="noodle">めん類</button>
-      <button class="tab-btn" data-cat="side">サイド</button>
-      <button class="tab-btn" data-cat="drink">ドリンク</button>
-      <button class="tab-btn" data-cat="dessert">デザート</button>
-    </div>
+    <div class="tabs-inner" id="categoryTabs"></div>
   </nav>
-</header>
+</div>
 
 <details class="guest-allergen">
   <summary>アレルギーで絞り込む</summary>
@@ -191,7 +186,7 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-    <script type="module" src="js/app.js?v=harden1"></script>
+    <script type="module" src="js/app.js?v=guestscroll1"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

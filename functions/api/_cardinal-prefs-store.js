@@ -89,6 +89,7 @@ export function capabilityForKind(kind) {
   const map = {
     incident: 'dispatchOnOutage',
     followup: 'dispatchOnOutage',
+    system_incident: 'dispatchOnOutage',
     watchdog: 'watchdog',
     steward: 'proactiveSteward',
     ci: 'ciDispatch',
@@ -115,6 +116,29 @@ export function allowCursorDispatch(prefs, kind, { force = false } = {}) {
 
 export function allCapabilitiesOff() {
   return Object.fromEntries(CARDINAL_CAPABILITY_DEFS.map((c) => [c.id, false]));
+}
+
+/** 創業者に日常運用を任せない標準バンドル（docs/autonomy.md） */
+export function autonomy90Capabilities() {
+  return {
+    masterCursorDispatch: true,
+    masterServerCron: true,
+    opsClientCardinal: true,
+    autoMaintenance: true,
+    dispatchOnOutage: true,
+    watchdog: true,
+    anomalyScan: true,
+    dailyDigest: true,
+    proactiveSteward: true,
+    ciDispatch: true,
+    prGuardian: true,
+    productGate: true,
+    tickHealthyDiscord: false,
+    quietHours: false,
+    timeline: true,
+    marketScout: false,
+    dualFeatureReview: false,
+  };
 }
 
 /** GitHub scheduled cron (cardinal-cron.yml) — not manual Ops buttons. */

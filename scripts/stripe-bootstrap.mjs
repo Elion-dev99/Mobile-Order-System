@@ -151,13 +151,11 @@ async function createPaymentLink({ planId, cycle, setupPriceId, subPriceId, coup
   p.set('after_completion[type]', 'redirect');
   p.set('after_completion[redirect][url]', successUrl);
   p.set('billing_address_collection', 'required');
-  p.set('customer_creation', 'always');
-  p.set('invoice_creation[enabled]', 'true');
   p.set('metadata[planId]', planId);
   p.set('metadata[cycle]', cycle);
   p.set('subscription_data[metadata][planId]', planId);
   p.set('subscription_data[metadata][cycle]', cycle);
-  // Payment Links API does not accept discounts on the link — intro coupons are created for Dashboard / Checkout Session phase.
+  // Payment Links API does not accept discounts on the link — intro coupons: allow_promotion_codes on monthly links.
   if (couponId && cycle === 'monthly') {
     p.set('allow_promotion_codes', 'true');
   }

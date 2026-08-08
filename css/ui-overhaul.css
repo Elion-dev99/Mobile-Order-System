@@ -1,0 +1,331 @@
+/**
+ * UI overhaul — remove “template / AI” polish; clarity and touch targets first.
+ * Loads after guest/store/style/ops/lp CSS.
+ */
+
+/* No decorative grain or entrance theatrics */
+body.guest::before {
+  display: none !important;
+}
+
+body.guest .guest-brand,
+body.guest .menu-section-title,
+body.guest .menu-card-name,
+body.guest .modal-title,
+body.guest .cart-sheet-title,
+body.guest .tonight-rail-head h2,
+.qo-growth-mark strong {
+  font-family: var(--qo-font) !important;
+  letter-spacing: 0 !important;
+}
+
+body.guest .guest-brand {
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  animation: none !important;
+}
+
+body.guest .guest-table {
+  animation: none !important;
+}
+
+body.guest .guest-table .table-number {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--qo-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+body.guest .guest-search {
+  animation: none !important;
+}
+
+/* Flat header — no glass blur */
+body.guest .guest-header {
+  background: var(--qo-paper-elevated);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid var(--qo-line);
+}
+
+/* Search: obvious field */
+body.guest .search-input {
+  border-radius: var(--qo-radius);
+  border: 1px solid var(--qo-line-strong);
+  background: var(--qo-paper-elevated);
+  min-height: var(--qo-touch);
+  font-family: var(--qo-font);
+}
+body.guest .search-input:focus {
+  border-color: var(--qo-accent);
+  box-shadow: 0 0 0 3px var(--qo-accent-soft);
+}
+
+/* Category tabs — segmented control */
+body.guest .tab-btn {
+  border-radius: var(--qo-radius);
+  border: 1px solid var(--qo-line);
+  min-height: 36px;
+  font-family: var(--qo-font);
+}
+body.guest .tab-btn.active {
+  background: var(--qo-ink);
+  color: var(--qo-paper-elevated);
+  border-color: var(--qo-ink);
+}
+
+body.guest .lang-toggle {
+  display: flex;
+  border: 1px solid var(--qo-line);
+  border-radius: var(--qo-radius);
+  overflow: hidden;
+  background: var(--qo-paper);
+}
+body.guest .lang-toggle button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: none;
+  border-right: 1px solid var(--qo-line);
+}
+body.guest .lang-toggle button:last-child {
+  border-right: none;
+}
+body.guest .lang-toggle button.active {
+  background: var(--qo-accent);
+  color: var(--qo-on-accent);
+}
+
+body.guest .nav-action,
+body.guest .pin-action {
+  background: var(--qo-paper);
+  color: var(--qo-accent);
+  border: 1px solid var(--qo-line);
+  border-radius: var(--qo-radius);
+  min-height: var(--qo-touch);
+}
+
+/* Menu cards — list row, not floating tiles */
+body.guest .menu-card {
+  border-radius: var(--qo-radius-lg);
+  background: var(--qo-paper-elevated);
+  border: 1px solid var(--qo-line);
+  box-shadow: none;
+}
+body.guest .menu-card.in-cart {
+  border-color: var(--qo-accent);
+  background: var(--qo-accent-soft);
+}
+
+body.guest .menu-card-name {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+body.guest .menu-card-price {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+body.guest .qty-btn,
+body.guest .menu-add-btn {
+  min-width: var(--qo-touch);
+  min-height: var(--qo-touch);
+  border-radius: var(--qo-radius);
+  border: 1px solid var(--qo-line-strong);
+  background: var(--qo-paper-elevated);
+  font-weight: 700;
+}
+
+body.guest .menu-add-btn {
+  background: var(--qo-ink);
+  color: var(--qo-on-accent);
+  border-color: var(--qo-ink);
+}
+
+/* Allergen block */
+body.guest .guest-allergen {
+  border-radius: var(--qo-radius-lg);
+  background: var(--qo-paper-elevated);
+  border: 1px solid var(--qo-line);
+}
+body.guest .allergen-chip.active {
+  background: var(--qo-warn-soft);
+  color: var(--qo-warn);
+  border: 1px solid rgba(180, 83, 9, 0.35);
+}
+
+/* Cart bar */
+body.guest .cart-bar {
+  background: var(--qo-paper-elevated);
+  border-top: 1px solid var(--qo-line);
+  box-shadow: var(--qo-shadow-bar);
+  backdrop-filter: none;
+}
+body.guest .cart-bar-btn {
+  border-radius: var(--qo-radius-lg);
+  background: var(--qo-ink);
+  color: var(--qo-on-accent);
+  font-family: var(--qo-font);
+  font-weight: 700;
+  min-height: var(--qo-touch);
+}
+
+/* Demo banner — readable, not neon */
+.demo-banner {
+  background: #2a2a2a;
+  color: #f5f5f5;
+  border-bottom: 1px solid var(--qo-line-strong);
+}
+.demo-banner strong {
+  background: #e8e8e8;
+  color: #1a1a1a;
+}
+.demo-banner a {
+  color: #93c5fd;
+}
+
+/* Tonight rail — horizontal scroll on small, grid on large (see responsive.css) */
+.tonight-rail {
+  border: 1px solid var(--qo-line);
+  border-radius: var(--qo-radius-lg);
+  background: var(--qo-paper-elevated);
+  padding: var(--qo-space-3);
+}
+.tonight-card {
+  border-radius: var(--qo-radius);
+  border: 1px solid var(--qo-line);
+  background: var(--qo-paper);
+}
+.tonight-badge {
+  background: var(--qo-ink);
+  color: var(--qo-on-accent);
+}
+
+.qo-growth-mark {
+  background: var(--qo-ink) !important;
+  border-radius: var(--qo-radius) !important;
+  backdrop-filter: none !important;
+  box-shadow: var(--qo-shadow-sm) !important;
+  font-family: var(--qo-font) !important;
+}
+
+/* ----- Store ----- */
+body.store-page {
+  background: var(--qo-paper);
+  font-family: var(--qo-font);
+}
+
+.store-header h1,
+.store-card h2 {
+  font-family: var(--qo-font) !important;
+  letter-spacing: 0 !important;
+}
+
+.store-kicker {
+  color: var(--qo-ink-muted);
+  letter-spacing: 0.04em;
+}
+
+.store-card {
+  border-radius: var(--qo-radius-lg);
+  background: var(--qo-paper-elevated);
+  border: 1px solid var(--qo-line);
+  box-shadow: none;
+}
+
+.store-open-toggle,
+.store-quick a {
+  border-radius: var(--qo-radius);
+  min-height: 40px;
+}
+
+.store-open-toggle {
+  background: var(--qo-success-soft);
+  color: var(--qo-success);
+  border: 1px solid rgba(22, 101, 52, 0.35);
+}
+.store-open-toggle.is-closed {
+  background: var(--qo-warn-soft);
+  color: var(--qo-warn);
+  border-color: rgba(180, 83, 9, 0.35);
+}
+
+.store-revenue-banner {
+  background: var(--qo-accent-soft);
+  border: 1px solid rgba(29, 78, 216, 0.25);
+  border-radius: var(--qo-radius);
+}
+.store-revenue-banner a {
+  color: var(--qo-accent);
+}
+
+/* ----- Admin kitchen — flat dark, high contrast ----- */
+body.admin-page {
+  font-family: var(--qo-font);
+  background: #1c1c1e;
+}
+
+body.admin-page .admin-header {
+  background: #1c1c1e;
+  border-bottom: 1px solid #3a3a3c;
+}
+
+body.admin-page .admin-tab.active {
+  background: #f5f5f5;
+  color: #1a1a1a;
+}
+
+body.admin-page .admin-order-card {
+  border-radius: var(--qo-radius-lg);
+  border: 1px solid #3a3a3c;
+  background: #2c2c2e;
+}
+
+body.admin-page .admin-action-btn {
+  min-height: var(--qo-touch);
+  border-radius: var(--qo-radius);
+  font-weight: 700;
+}
+
+body.admin-page .admin-link-btn {
+  min-height: 36px;
+  border-radius: var(--qo-radius);
+}
+
+/* ----- Ops — flat console ----- */
+body.ops-body {
+  background: var(--ops-bg) !important;
+  font-family: var(--qo-font);
+}
+
+/* LP overrides live in lp.css (light theme). */
+
+/* ----- Status display ----- */
+body.guest.status-page .status-header h1 {
+  font-family: var(--qo-font);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+body.guest.status-page .order-id-badge {
+  font-family: var(--qo-mono);
+  font-size: 0.85rem;
+}
+
+@media (min-width: 640px) {
+  body.guest .modal-sheet {
+    max-width: 480px;
+    margin: 0 auto;
+    border-radius: var(--qo-radius-lg) var(--qo-radius-lg) 0 0;
+  }
+}
+
+@media (min-width: 900px) {
+  body.guest .modal-overlay.align-center .modal-sheet {
+    border-radius: var(--qo-radius-lg);
+    max-height: 90vh;
+  }
+}

@@ -1,6 +1,7 @@
 import { db } from './firebase.js';
 import { MENU_DATA as DEFAULT_MENU } from './data.js';
 import { DEFAULT_SHOP, PRODUCT } from './config.js';
+import { reconcileMenuCategories } from './menu-structure.js';
 import { resolveShopId, seedShopMeta, listSeedShops, DEFAULT_SHOP_ID, scopedKey } from './tenant.js';
 import {
   doc, getDoc, setDoc, collection, getDocs, deleteDoc
@@ -14,7 +15,7 @@ let menuCache = null;
 let shopIdCache = null;
 
 function cloneMenu() {
-  return JSON.parse(JSON.stringify(DEFAULT_MENU));
+  return reconcileMenuCategories(JSON.parse(JSON.stringify(DEFAULT_MENU)));
 }
 
 function settingsRef(shopId = resolveShopId()) {
@@ -173,14 +174,18 @@ function readLocalMenu(shopId) {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!Array.isArray(data?.items) || !data.items.length) return null;
-    return {
+    return normalizeLoadedMenu({
       categories: data.categories?.length ? data.categories : DEFAULT_MENU.categories,
       allergens: data.allergens?.length ? data.allergens : DEFAULT_MENU.allergens,
       items: data.items,
-    };
+    });
   } catch (_) {
     return null;
   }
+}
+
+function normalizeLoadedMenu(menu) {
+  return reconcileMenuCategories(menu);
 }
 
 function writeLocalMenu(menu, shopId) {
@@ -200,11 +205,11 @@ export async function loadMenu(shopId = resolveShopId()) {
     const snap = await getDoc(menuRef(shopId));
     if (snap.exists() && Array.isArray(snap.data()?.items) && snap.data().items.length) {
       const data = snap.data();
-      menuCache = {
+      menuCache = normalizeLoadedMenu({
         categories: data.categories?.length ? data.categories : DEFAULT_MENU.categories,
         allergens: data.allergens?.length ? data.allergens : DEFAULT_MENU.allergens,
         items: data.items,
-      };
+      });
       writeLocalMenu(menuCache, shopId);
       return menuCache;
     }
@@ -212,11 +217,11 @@ export async function loadMenu(shopId = resolveShopId()) {
       const legacy = await getDoc(legacyMenuRef());
       if (legacy.exists() && Array.isArray(legacy.data()?.items) && legacy.data().items.length) {
         const data = legacy.data();
-        menuCache = {
+        menuCache = normalizeLoadedMenu({
           categories: data.categories?.length ? data.categories : DEFAULT_MENU.categories,
           allergens: data.allergens?.length ? data.allergens : DEFAULT_MENU.allergens,
           items: data.items,
-        };
+        });
         writeLocalMenu(menuCache, shopId);
         try { await saveMenu(menuCache, shopId); } catch (_) {}
         return menuCache;
@@ -235,7 +240,7 @@ export async function loadMenu(shopId = resolveShopId()) {
 }
 
 export async function saveMenu(menu, shopId = getShopId()) {
-  menuCache = menu;
+  menuCache = normalizeLoadedMenu(menu);
   writeLocalMenu(menu, shopId);
   try {
     await setDoc(menuRef(shopId), {

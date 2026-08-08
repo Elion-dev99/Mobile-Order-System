@@ -69,6 +69,7 @@ Agent は可能ならワークフロー dispatch、または VM 上で `stripe-b
 
 ## 関連
 
+- [`billing-debug.md`](./billing-debug.md) — デバッグ・自己テスト
 - [`stripe-pricing-model.md`](./stripe-pricing-model.md) — 金額設計
 - [`stripe-setup.md`](./stripe-setup.md) — 手動フォールバック
 - [`cursor-founder-division-of-labor.md`](./cursor-founder-division-of-labor.md) — 役割分担

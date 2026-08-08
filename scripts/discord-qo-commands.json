@@ -1,7 +1,7 @@
 [
   {
     "name": "qo",
-    "description": "QuickOrder 運用（メンテ・停止・復旧）",
+    "description": "QuickOrder 運用（メンテ・停止・復旧・デバッグ）",
     "options": [
       {
         "name": "maint",
@@ -55,6 +55,43 @@
             "name": "recover",
             "description": "復旧（メンテ OFF）",
             "type": 1
+          }
+        ]
+      },
+      {
+        "name": "debug",
+        "description": "システムエラー監視・デバッグ依頼",
+        "type": 2,
+        "options": [
+          {
+            "name": "status",
+            "description": "オープンインシデント一覧",
+            "type": 1
+          },
+          {
+            "name": "request",
+            "description": "デバッグ依頼（Discord通知 + Cursor Agent）",
+            "type": 1,
+            "options": [
+              { "name": "feature", "description": "機能名", "type": 3, "required": true },
+              { "name": "cause", "description": "原因または依頼内容", "type": 3, "required": true }
+            ]
+          },
+          {
+            "name": "fix",
+            "description": "既存インシデントを Agent に修正依頼",
+            "type": 1,
+            "options": [
+              { "name": "incident_id", "description": "インシデント ID", "type": 3, "required": true }
+            ]
+          },
+          {
+            "name": "dismiss",
+            "description": "インシデントを解消済みにする",
+            "type": 1,
+            "options": [
+              { "name": "incident_id", "description": "インシデント ID", "type": 3, "required": true }
+            ]
           }
         ]
       }

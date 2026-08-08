@@ -11,3 +11,5 @@
 node_modules/
 package.json
 package-lock.json
+!functions/package.json
+!functions/package-lock.json
