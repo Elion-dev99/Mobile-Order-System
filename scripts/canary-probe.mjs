@@ -24,6 +24,9 @@ const PATHS = [
   { path: '/api/cardinal', type: 'json' },
   { path: '/api/maintenance', type: 'json' },
   { path: '/api/notify', type: 'json' },
+  { path: '/api/stripe', type: 'json', mustJsonOk: true },
+  { path: '/api/system-report', type: 'json', mustJsonOk: true },
+  { path: '/api/aws', type: 'json', mustJsonOk: true },
 ];
 
 const ERROR_SNIPPETS = [
@@ -113,6 +116,10 @@ async function main() {
           // status endpoint should be ok:true
           row.ok = false;
           failures.push(`${item.path}: json ok=false`);
+        }
+        if (item.mustJsonOk && j?.ok !== true) {
+          row.ok = false;
+          failures.push(`${item.path}: expected ok:true`);
         }
         row.jsonOk = j?.ok !== false;
       } catch {

@@ -1,19 +1,19 @@
-/* ===== Guest ordering UI — hospitality polish ===== */
+/* ===== Guest ordering UI — utilitarian hospitality ===== */
 :root {
-  --g-ink: #17201C;
-  --g-muted: rgba(23, 32, 28, 0.58);
-  --g-faint: rgba(23, 32, 28, 0.38);
-  --g-line: rgba(23, 32, 28, 0.1);
-  --g-surface: rgba(255, 255, 255, 0.78);
-  --g-accent: #0D5C4D;
-  --g-accent-2: #147A66;
-  --g-warm: #C45E2A;
-  --g-bg0: #E9F0ED;
-  --g-bg1: #F4F7F6;
-  --g-display: "Fraunces", "Hiragino Mincho ProN", serif;
-  --g-sans: "Zen Kaku Gothic New", "Hiragino Sans", sans-serif;
-  --g-radius: 18px;
-  --g-ease: 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  --g-ink: var(--qo-ink, #1a1a1a);
+  --g-muted: var(--qo-ink-muted, #5a5a5a);
+  --g-faint: var(--qo-ink-faint, #8c8c8c);
+  --g-line: var(--qo-line, #d6d3cc);
+  --g-surface: var(--qo-paper-elevated, #ffffff);
+  --g-accent: var(--qo-accent, #1d4ed8);
+  --g-accent-2: var(--qo-accent-hover, #1e40af);
+  --g-warm: var(--qo-warn, #b45309);
+  --g-bg0: var(--qo-paper, #f5f3f0);
+  --g-bg1: var(--qo-paper, #f5f3f0);
+  --g-display: var(--qo-font, system-ui, sans-serif);
+  --g-sans: var(--qo-font, system-ui, sans-serif);
+  --g-radius: var(--qo-radius-lg, 12px);
+  --g-ease: 0.2s ease;
 }
 
 body.demo-mode {
@@ -66,37 +66,33 @@ body.demo-mode .guest-header {
 
 
 body.guest::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  z-index: 0;
+  display: none;
 }
 
 /* Keep content above the grain ::before — but NEVER force position on
    fixed overlays (modal / cart bar / toast / bill lock). That override
    made #itemModal position:relative, so customize "+" opened a sheet
    thousands of px below the fold and looked like dead buttons. */
-body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bill-lock-overlay):not(.party-size-overlay):not(.guest-service-bar):not(.guest-reserve-bar):not(.qo-growth-mark):not(#platformMaintenanceBanner) {
+body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bill-lock-overlay):not(.party-size-overlay):not(.guest-service-bar):not(.guest-reserve-bar):not(.qo-growth-mark):not(#platformMaintenanceBanner):not(.guest-chrome) {
   position: relative;
   z-index: 1;
 }
 
-/* Document (html) is the only vertical scrollport. Body overflow-y:auto made
-   window.scrollY stick at 0 while content moved — upward swipe → browser reload. */
-html {
-  overflow-x: hidden;
-  overflow-y: auto;
-  height: auto;
-  overscroll-behavior-y: none;
-}
-body.guest {
-  overscroll-behavior-y: none;
+/* Scrollport rules live in responsive.css (html:has(body.guest:not(.store-page))).
+   Keep body-only fallbacks here for pages that load guest.css without responsive. */
+body.guest:not(.store-page) {
+  overscroll-behavior-y: auto;
   overflow-x: hidden;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
+  background: var(--g-bg1);
+  color: var(--g-ink);
+  font-family: var(--g-sans);
+  touch-action: pan-y;
+}
+html.scroll-locked,
+body.guest.scroll-locked {
+  overflow: hidden !important;
 }
 body.guest.scroll-locked {
   overflow: hidden !important;
@@ -113,16 +109,34 @@ body.guest.scroll-locked {
   }
 }
 
-/* Header — keep compact; action bars live BELOW sticky header */
+/* Header — compact sticky; search/tabs live in .guest-chrome (avoids pan-x trap) */
 .guest-header {
   position: sticky;
   top: 0;
   z-index: 100;
-  padding: 14px 16px 10px;
-  background: rgba(244, 247, 246, 0.92);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  padding: 12px 16px 10px;
+  background: rgba(244, 247, 246, 0.98);
   border-bottom: 1px solid var(--g-line);
+}
+
+.guest-chrome {
+  position: relative;
+  z-index: 90;
+  padding: 10px 16px 0;
+  background: var(--g-bg1);
+  border-bottom: 1px solid var(--g-line);
+}
+
+.guest-chrome .guest-search {
+  margin: 0;
+  animation: guestRise 0.6s var(--g-ease) 0.08s both;
+}
+
+.guest-chrome .category-tabs {
+  margin: 0 -16px;
+  padding: 0 0 10px;
+  background: transparent;
+  border: none;
 }
 
 .guest-header-top {
@@ -200,8 +214,9 @@ body.guest .search-input:focus {
 }
 
 body.guest .category-tabs {
-  overscroll-behavior: contain;
-  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  /* pan-x blocks vertical page scroll while sticky tabs cover the top band */
+  touch-action: manipulation;
   background: transparent;
   border: none;
   margin: 0 -16px;
@@ -579,6 +594,7 @@ body.guest .status-action-bar {
   }
   body.guest .menu-main,
   body.guest .guest-header,
+  body.guest .guest-chrome,
   body.guest .guest-allergen {
     max-width: 920px;
     margin-left: auto;
@@ -723,7 +739,7 @@ body.guest .status-action-bar {
   font-weight: 600;
 }
 .bill-lock-seat strong {
-  font-family: Fraunces, "Zen Kaku Gothic New", serif;
+  font-family: var(--g-sans);
   font-size: clamp(3.2rem, 14vw, 4.6rem);
   line-height: 1;
   letter-spacing: -0.03em;
@@ -935,8 +951,8 @@ body.spa-cart-open .cart-bar { display: none !important; }
   gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
-  overscroll-behavior: contain;
-  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  touch-action: manipulation;
   padding: 10px 16px 4px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -1009,7 +1025,7 @@ body.spa-cart-open .cart-bar { display: none !important; }
 }
 .party-size-card h2 {
   margin: 0 0 8px;
-  font-family: var(--g-display, Fraunces, Georgia, serif);
+  font-family: var(--g-sans);
   font-size: 1.45rem;
 }
 .party-size-card p { margin: 0 0 16px; color: var(--g-muted, #5b6b64); font-size: 0.92rem; }
@@ -1252,6 +1268,8 @@ body.spa-cart-open .cart-bar { display: none !important; }
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  touch-action: manipulation;
 }
 .tonight-rail-track::-webkit-scrollbar { display: none; }
 .tonight-card {

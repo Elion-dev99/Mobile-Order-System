@@ -3,7 +3,7 @@ import {
   setItemSoldOut, isItemSoldOut, ensureTrialStarted, getShopAccess,
   shopCanUse, getItemStock, setItemStock,
 } from './shop.js';
-import { getPlan, yen, paymentCta } from './plans.js';
+import { getPlan, yen, paymentCta, PRODUCT } from './plans.js';
 import { db } from './firebase.js';
 import {
   collection, onSnapshot, query, where, orderBy, doc, updateDoc,
@@ -21,16 +21,21 @@ import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from '.
 import {
   shareKitText, growthLpUrl, growthDemoUrl, recordReferralShare, getReferralCredits,
 } from './growth.js';
+import { mountShopBillingDashboard } from './shop-billing-dashboard.js';
+import { startSystemWatchdog } from './system-watchdog.js';
 
 const StorePage = {
   orders: [],
   requests: [],
   _knownReqIds: new Set(),
   couponDraft: [],
+  _billingDash: null,
 
   async init() {
+    startSystemWatchdog({ feature: 'store-floor' });
     resolveShopId();
     await Promise.all([loadShop(), loadMenu(), loadMaintenance().catch(() => {})]);
+    startSystemWatchdog({ feature: 'store-floor', shopId: getShopId() });
     await ensureTrialStarted().catch(() => {});
     subscribeMaintenance();
     mountMaintenanceBanner({ compact: true });
@@ -49,9 +54,16 @@ const StorePage = {
     this.subscribeRequests();
     this.subscribeFoh();
     this.mountGrowthKit();
+    this.renderBillingDashboard();
     // Second-precision clock is pure paint thrash on floor tablets
     this._clockTimer = setInterval(() => this.tickClock(), 30000);
     this.tickClock();
+  },
+
+  renderBillingDashboard() {
+    const mount = document.getElementById('storeBillingMount');
+    if (!mount) return;
+    this._billingDash = mountShopBillingDashboard(mount, { showPlanPicker: true });
   },
 
   mountGrowthKit() {
@@ -117,6 +129,7 @@ const StorePage = {
     set('#navAdmin', `admin.html?shop=${encodeURIComponent(id)}`);
     set('#navMenu', `admin.html?shop=${encodeURIComponent(id)}&view=menu`);
     set('#navAnalytics', `admin.html?shop=${encodeURIComponent(id)}&view=analytics`);
+    set('#navBilling', `admin.html?shop=${encodeURIComponent(id)}&view=billing`);
     set('#navGuest', guestEntryUrl(id, 1));
   },
 
@@ -234,7 +247,12 @@ const StorePage = {
     if (access.subscribed) {
       banner.hidden = true;
     } else {
-      const pay = paymentCta();
+      const pay = paymentCta({
+        shopId: getShopId(),
+        planId: shop.planId,
+        email: shop.ownerEmail,
+        billingCycle: shop.billingCycle || PRODUCT.defaultBillingCycle || 'annual',
+      });
       banner.hidden = false;
       banner.innerHTML = access.trialExpired
         ? `<strong>トライアル終了</strong> — 分析など有料機能はロック中。<a href="${pay.href}">${pay.label}</a>`

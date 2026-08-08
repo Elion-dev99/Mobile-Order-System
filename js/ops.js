@@ -1,7 +1,7 @@
 import {
   isOpsAuthed, verifyOpsPassword, setOpsRole, clearOpsAuth, getOpsRole, setCustomOpsPassword
 } from './ops-auth.js';
-import { getOpsApiSecret, setOpsApiSecret, clearOpsApiSecret } from './ops-secret.js';
+import { getOpsApiSecret, setOpsApiSecret, clearOpsApiSecret, opsAuthHeaders } from './ops-secret.js';
 import {
   ensureStaffFirebase, ensureStaffAuthStyles, isStaffSignedIn, signOutStaff, getStaffUser,
 } from './staff-firebase-auth.js';
@@ -73,6 +73,7 @@ import {
   WEEKDAYS,
   pushMaintenanceApi,
 } from './maintenance.js';
+import { startSystemWatchdog } from './system-watchdog.js';
 
 const OpsPage = {
   shops: [],
@@ -97,6 +98,7 @@ const OpsPage = {
   },
 
   async enterApp() {
+    startSystemWatchdog({ feature: 'ops' });
     this.showApp();
     this.renderRole();
     this.bind();
@@ -148,6 +150,7 @@ const OpsPage = {
       const status = await getSetupStatus().catch(() => null);
       if (status?.needsSetup) this.switchTab('notify');
     }
+    this.refreshStripePrep().catch(() => {});
     window.scrollTo(0, 0);
   },
 
@@ -785,6 +788,7 @@ const OpsPage = {
         status.textContent = '作成に失敗: ' + (err.message || err);
       }
     });
+    document.getElementById('opsStripeRefresh')?.addEventListener('click', () => this.refreshStripePrep());
     document.getElementById('opsPwForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const role = document.getElementById('opsPwRole').value;
@@ -1461,6 +1465,7 @@ const OpsPage = {
       this.setToolsStatus('キューを空にしました');
     });
     document.getElementById('toolsRefreshPending')?.addEventListener('click', () => this.renderTools());
+    document.getElementById('toolsIncidentsRefresh')?.addEventListener('click', () => this.renderSystemIncidents());
     document.getElementById('toolsHqMenuSync')?.addEventListener('click', async () => {
       const log = document.getElementById('toolsHqSyncLog');
       if (log) { log.hidden = false; log.textContent = '同期スタブ実行中...'; }
@@ -1601,6 +1606,84 @@ const OpsPage = {
     if (id === 'tools') this.renderTools();
     if (id === 'notify') this.refreshNotifySetup();
     if (id === 'cardinal') this.refreshCardinal();
+    if (id === 'security') this.refreshStripePrep().catch(() => {});
+  },
+
+  async refreshStripePrep() {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    const st = document.getElementById('opsStripeStatus');
+    let pub = null;
+    try {
+      pub = await fetch('/api/stripe').then((r) => r.json());
+    } catch (e) {
+      if (st) { st.hidden = false; st.textContent = 'Stripe API に到達できません'; }
+      return;
+    }
+    if (pub?.configured) {
+      set('opsStripeWebhook', pub.configured.webhookSecret ? '設定済' : '未設定');
+      set('opsStripeApiKey', pub.configured.apiKey ? '設定済' : '未設定');
+      set('opsStripePending', String(pub.pendingCount ?? 0));
+    }
+    let pending = pub?.recentPending || [];
+    if (getOpsApiSecret()) {
+      try {
+        const res = await fetch('/api/stripe', {
+          method: 'POST',
+          headers: opsAuthHeaders(),
+          body: JSON.stringify({ action: 'list_pending' }),
+        }).then((r) => r.json());
+        if (res.ok) pending = res.pending || pending;
+      } catch (_) {}
+    } else if (st) {
+      st.hidden = false;
+      st.textContent = '待機キューの詳細には Ops 鍵が必要です';
+    }
+    const list = document.getElementById('opsStripePendingList');
+    if (!list) return;
+    if (!pending.length) {
+      list.innerHTML = '<p class="ops-muted">支払い待機キューは空です。Webhook 受信後にここに表示されます。</p>';
+      return;
+    }
+    list.innerHTML = pending.map((row) => `
+      <article class="ops-lead-card">
+        <strong>店舗: ${escapeHtml(row.shopId || '（client_reference_id 未設定）')}</strong>
+        <p class="ops-muted">プラン ${escapeHtml(row.planId || '—')} · ${escapeHtml(row.email || '')}
+          ${row.amount != null ? ` · ${row.amount} ${escapeHtml(row.currency || '')}` : ''}
+          ${row.livemode ? ' · 本番' : ' · テスト'}</p>
+        <p class="ops-muted"><code>${escapeHtml(row.sessionId || '')}</code></p>
+        <div class="ops-shop-actions">
+          <button type="button" data-stripe-goto-shop="${escapeHtml(row.shopId || '')}">店舗を編集</button>
+          <button type="button" data-stripe-dismiss="${escapeHtml(row.id)}">キューから削除</button>
+        </div>
+      </article>`).join('');
+    list.querySelectorAll('[data-stripe-goto-shop]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sid = btn.dataset.stripeGotoShop;
+        if (!sid) return;
+        this.switchTab('shops');
+        const filter = document.getElementById('shopsFilter');
+        if (filter) filter.value = sid;
+        this.renderShops();
+      });
+    });
+    list.querySelectorAll('[data-stripe-dismiss]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!getOpsApiSecret()) {
+          alert('鍵タブで OPS_API_SECRET を保存してください');
+          return;
+        }
+        try {
+          await fetch('/api/stripe', {
+            method: 'POST',
+            headers: opsAuthHeaders(),
+            body: JSON.stringify({ action: 'dismiss', id: btn.dataset.stripeDismiss }),
+          });
+          this.refreshStripePrep();
+        } catch (e) {
+          alert('削除失敗: ' + (e?.message || e));
+        }
+      });
+    });
   },
 
   async refreshShops() {
@@ -2211,6 +2294,64 @@ const OpsPage = {
         ? pending.map((o) => `${o.id} shop=${o.shopId} total=${o.total} queuedAt=${o.queuedAt || o.timestamp || ''}`).join('\n')
         : '（空）';
     }
+    this.renderSystemIncidents();
+  },
+
+  async fetchSystemIncidents() {
+    const res = await fetch('/api/system-report', { headers: opsAuthHeaders() });
+    if (!res.ok) return { events: [], error: res.status };
+    return res.json();
+  },
+
+  async renderSystemIncidents() {
+    const wrap = document.getElementById('toolsIncidentsList');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="ops-muted">読み込み中…</p>';
+    const data = await this.fetchSystemIncidents().catch(() => ({ events: [] }));
+    const events = data.events || [];
+    if (!events.length) {
+      wrap.innerHTML = '<p class="ops-muted">オープンなインシデントはありません。</p>';
+      return;
+    }
+    const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    wrap.innerHTML = `<table><thead><tr><th>ID</th><th>機能</th><th>原因</th><th>回数</th><th></th></tr></thead><tbody>
+      ${events.map((e) => `<tr>
+        <td><code>${esc(e.id)}</code></td>
+        <td>${esc(e.feature)}</td>
+        <td>${esc(String(e.cause).slice(0, 120))}</td>
+        <td>${e.count || 1}</td>
+        <td>
+          <button type="button" class="ops-btn-secondary" data-incident-fix="${esc(e.id)}">Agent修正</button>
+          <button type="button" class="ops-btn-secondary" data-incident-dismiss="${esc(e.id)}">dismiss</button>
+        </td>
+      </tr>`).join('')}
+    </tbody></table>`;
+    wrap.querySelectorAll('[data-incident-fix]').forEach((btn) => {
+      btn.addEventListener('click', () => this.dispatchIncidentFix(btn.getAttribute('data-incident-fix')));
+    });
+    wrap.querySelectorAll('[data-incident-dismiss]').forEach((btn) => {
+      btn.addEventListener('click', () => this.dismissIncident(btn.getAttribute('data-incident-dismiss')));
+    });
+  },
+
+  async dispatchIncidentFix(id) {
+    const res = await fetch('/api/system-report', {
+      method: 'POST',
+      headers: { ...opsAuthHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'dispatch_fix', id }),
+    });
+    const j = await res.json().catch(() => ({}));
+    this.setToolsStatus(j.launched ? `Agent 起動: ${id}` : `起動失敗: ${j.error || res.status}`);
+    await this.renderSystemIncidents();
+  },
+
+  async dismissIncident(id) {
+    await fetch('/api/system-report', {
+      method: 'POST',
+      headers: { ...opsAuthHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'dismiss', id }),
+    });
+    await this.renderSystemIncidents();
   },
 
   async flushPendingQueue() {

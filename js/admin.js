@@ -26,6 +26,10 @@ import {
 } from './plans.js';
 import { resolveShopId, scopedKey, withShop, guestEntryUrl } from './tenant.js';
 import {
+  normalizeCategories, reconcileMenuCategories, slugCategoryId, ALL_CATEGORY_ID,
+  defaultCategoryId,
+} from './menu-structure.js';
+import {
   collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy, where
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { subscribeServiceRequests, resolveServiceRequest } from './guest-features.js';
@@ -38,11 +42,24 @@ import {
 import { maybeNotifySystemLoad } from './load-monitor.js';
 import { ordersToCsv, downloadCsv, applyBrandTheme, filterOrdersByDateRange } from './guest-extras.js';
 import { notifyOrderStatus } from './notify-orders.js';
+import { startSystemWatchdog } from './system-watchdog.js';
 import { listCoupons, normalizeCoupon, saveCoupons, createCouponDraft } from './coupons.js';
 import {
   getStaffRole, setStaffRole, verifyStaffPin, staffCan, staffRoleLabel,
 } from './staff-auth.js';
 import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
+import { mountShopBillingDashboard } from './shop-billing-dashboard.js';
+import { handleBillingSuccessReturn } from './billing-return.js';
+
+function adminPaymentCta() {
+  const shop = getShop();
+  return paymentCta({
+    shopId: getShopId(),
+    planId: shop?.planId,
+    email: shop?.ownerEmail,
+    billingCycle: shop?.billingCycle || PRODUCT.defaultBillingCycle || 'annual',
+  });
+}
 
 const AdminPage = {
   filter: 'received',
@@ -59,18 +76,22 @@ const AdminPage = {
   couponDraft: [],
 
   async init() {
+    startSystemWatchdog({ feature: 'admin' });
     resolveShopId();
     this.updateClock();
     setInterval(() => this.updateClock(), 1000);
 
     const params = new URLSearchParams(location.search);
-    if (params.get('billing') === 'success') {
-      await markSubscribed();
-      history.replaceState({}, '', withShop('admin.html'));
-      alert('課金が有効になりました。ありがとうございます。');
+    resolveShopId();
+
+    const billingReturn = await handleBillingSuccessReturn(params);
+    if (billingReturn.handled) {
+      if (billingReturn.ok) alert(billingReturn.message);
+      else alert(billingReturn.message);
     }
 
     await loadShop();
+    startSystemWatchdog({ feature: 'admin', shopId: getShopId() });
     await loadMaintenance().catch(() => {});
     subscribeMaintenance();
     mountMaintenanceBanner({ compact: true });
@@ -118,7 +139,7 @@ const AdminPage = {
     const access = getShopAccess();
     const plan = getPlan(shop.planId);
     const next = nextPlanId(shop.planId);
-    const pay = paymentCta();
+    const pay = adminPaymentCta();
 
     if (access.subscribed) {
       el.hidden = true;
@@ -294,6 +315,7 @@ const AdminPage = {
     document.getElementById('clearOrdersBtn')?.addEventListener('click', () => this.clearAll());
     document.getElementById('saveMenuBtn')?.addEventListener('click', () => this.persistMenu());
     document.getElementById('addMenuItemBtn')?.addEventListener('click', () => this.addMenuItem());
+    document.getElementById('addMenuCategoryBtn')?.addEventListener('click', () => this.addMenuCategory());
     document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.persistSettings());
     document.getElementById('activateSubBtn')?.addEventListener('click', () => this.activateSubscription());
     document.getElementById('billingUpgradeBtn')?.addEventListener('click', () => this.upgradeToGrowthAnnual());
@@ -510,17 +532,19 @@ const AdminPage = {
         if (!groups[t]) groups[t] = [];
         groups[t].push(o);
       });
-      container.innerHTML = Object.keys(groups).sort((a, b) => Number(a) - Number(b)).map((t) => `
+      container.innerHTML = `<div class="admin-orders-stack">${Object.keys(groups).sort((a, b) => Number(a) - Number(b)).map((t) => `
         <section class="kds-group">
           <h3 class="kds-group-title">テーブル ${t}</h3>
-          ${groups[t].map((o) => this.renderOrderCard(o)).join('')}
+          <div class="admin-orders-grid">
+            ${groups[t].map((o) => this.renderOrderCard(o)).join('')}
+          </div>
         </section>
-      `).join('');
+      `).join('')}</div>`;
       this.bindOrderActions(container);
       return;
     }
 
-    container.innerHTML = filtered.map((order) => this.renderOrderCard(order)).join('');
+    container.innerHTML = `<div class="admin-orders-grid">${filtered.map((order) => this.renderOrderCard(order)).join('')}</div>`;
     this.bindOrderActions(container);
   },
 
@@ -658,7 +682,7 @@ const AdminPage = {
 
   exportRangeCsv() {
     if (!shopCanUse('exportCsv')) {
-      const pay = paymentCta();
+      const pay = adminPaymentCta();
       const access = getShopAccess();
       const reason = !featureEnabled(getShop(), 'exportCsv')
         ? 'CSV出力は Growth 以上のプラン機能です。'
@@ -680,7 +704,7 @@ const AdminPage = {
 
   printKitchenTickets() {
     if (!shopCanUse('kitchenTickets')) {
-      const pay = paymentCta();
+      const pay = adminPaymentCta();
       if (confirm(`厨房伝票印刷は Growth 以上です。\n\n${pay.label}へ進みますか？`)) {
         location.href = pay.href;
       }
@@ -771,7 +795,110 @@ const AdminPage = {
     if (failed) alert(`${failed}件の削除に失敗しました（権限または通信を確認）`);
   },
 
+  renderCategoryStructure() {
+    const wrap = document.getElementById('menuCategoryList');
+    if (!wrap || !this.menuDraft) return;
+    this.menuDraft.categories = normalizeCategories(this.menuDraft.categories);
+    const cats = this.menuDraft.categories.filter((c) => c.id !== ALL_CATEGORY_ID);
+    wrap.innerHTML = cats.map((cat, idx) => `
+      <div class="menu-cat-row" data-cat-idx="${idx}">
+        <div class="menu-cat-order">
+          <button type="button" class="me-cat-up" data-cat-up="${idx}" aria-label="上へ" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="me-cat-down" data-cat-down="${idx}" aria-label="下へ" ${idx === cats.length - 1 ? 'disabled' : ''}>↓</button>
+        </div>
+        <input class="me-cat-icon" maxlength="4" value="${this.escapeAttr(cat.icon || '🍽️')}" aria-label="アイコン" title="絵文字">
+        <input class="me-cat-label" value="${this.escapeAttr(cat.label || '')}" placeholder="カテゴリ名" aria-label="カテゴリ名">
+        <code class="me-cat-id">${cat.id}</code>
+        <label class="me-check me-cat-hide"><input type="checkbox" class="me-cat-hidden" ${cat.hidden ? 'checked' : ''}><span>非表示</span></label>
+        <button type="button" class="me-cat-del" data-cat-del="${idx}">削除</button>
+      </div>
+    `).join('') || '<p class="admin-muted">カテゴリがありません。「＋ カテゴリ」で追加してください。</p>';
+
+    wrap.querySelectorAll('[data-cat-up]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.syncCategoriesFromDom();
+        const i = Number(btn.dataset.catUp);
+        const list = this.menuDraft.categories.filter((c) => c.id !== ALL_CATEGORY_ID);
+        if (i <= 0) return;
+        const tmp = list[i - 1];
+        list[i - 1] = list[i];
+        list[i] = tmp;
+        this.menuDraft.categories = normalizeCategories([{ id: ALL_CATEGORY_ID, label: 'すべて', icon: '🍽️' }, ...list]);
+        this.renderCategoryStructure();
+        this.renderMenuEditor();
+      });
+    });
+    wrap.querySelectorAll('[data-cat-down]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.syncCategoriesFromDom();
+        const i = Number(btn.dataset.catDown);
+        const list = this.menuDraft.categories.filter((c) => c.id !== ALL_CATEGORY_ID);
+        if (i >= list.length - 1) return;
+        const tmp = list[i + 1];
+        list[i + 1] = list[i];
+        list[i] = tmp;
+        this.menuDraft.categories = normalizeCategories([{ id: ALL_CATEGORY_ID, label: 'すべて', icon: '🍽️' }, ...list]);
+        this.renderCategoryStructure();
+        this.renderMenuEditor();
+      });
+    });
+    wrap.querySelectorAll('[data-cat-del]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.syncCategoriesFromDom();
+        const i = Number(btn.dataset.catDel);
+        const list = this.menuDraft.categories.filter((c) => c.id !== ALL_CATEGORY_ID);
+        const target = list[i];
+        if (!target) return;
+        const count = (this.menuDraft.items || []).filter((it) => it.category === target.id).length;
+        if (count && !confirm(`「${target.label}」に ${count} 件の商品があります。削除すると別カテゴリへ移動します。`)) return;
+        const fallback = list.find((c, j) => j !== i)?.id || 'side';
+        this.menuDraft.items = (this.menuDraft.items || []).map((it) =>
+          it.category === target.id ? { ...it, category: fallback } : it
+        );
+        list.splice(i, 1);
+        this.menuDraft.categories = normalizeCategories([{ id: ALL_CATEGORY_ID, label: 'すべて', icon: '🍽️' }, ...list]);
+        this.renderCategoryStructure();
+        this.renderMenuEditor();
+      });
+    });
+  },
+
+  syncCategoriesFromDom() {
+    const wrap = document.getElementById('menuCategoryList');
+    if (!wrap || !this.menuDraft) return;
+    const rows = wrap.querySelectorAll('.menu-cat-row');
+    const parsed = [];
+    rows.forEach((row, order) => {
+      const id = row.querySelector('.me-cat-id')?.textContent?.trim();
+      if (!id || id === ALL_CATEGORY_ID) return;
+      parsed.push({
+        id,
+        label: (row.querySelector('.me-cat-label')?.value || '').trim() || id,
+        icon: (row.querySelector('.me-cat-icon')?.value || '').trim() || '🍽️',
+        hidden: !!row.querySelector('.me-cat-hidden')?.checked,
+        order,
+      });
+    });
+    this.menuDraft.categories = normalizeCategories(parsed);
+  },
+
+  addMenuCategory() {
+    this.syncMenuDraftFromDom();
+    this.syncCategoriesFromDom();
+    const existing = new Set(
+      (this.menuDraft.categories || []).map((c) => c.id).filter(Boolean)
+    );
+    const label = '新しいカテゴリ';
+    const id = slugCategoryId(label, existing);
+    const list = this.menuDraft.categories.filter((c) => c.id !== ALL_CATEGORY_ID);
+    list.push({ id, label, icon: '🍽️', hidden: false, order: list.length });
+    this.menuDraft.categories = normalizeCategories([{ id: ALL_CATEGORY_ID, label: 'すべて', icon: '🍽️' }, ...list]);
+    this.renderCategoryStructure();
+    this.renderMenuEditor();
+  },
+
   renderMenuEditor() {
+    this.renderCategoryStructure();
     const list = document.getElementById('menuEditorList');
     if (!list || !this.menuDraft) return;
     const allergenIds = (this.menuDraft.allergens || []).map((a) => a.id);
@@ -1014,9 +1141,11 @@ const AdminPage = {
 
   addMenuItem() {
     this.syncMenuDraftFromDom();
+    this.syncCategoriesFromDom();
+    const cat = defaultCategoryId(this.menuDraft);
     this.menuDraft.items.push({
       id: 'item_' + Date.now(),
-      category: 'side',
+      category: cat,
       name: '新しいメニュー',
       description: '',
       price: 500,
@@ -1038,6 +1167,8 @@ const AdminPage = {
       return;
     }
     this.syncMenuDraftFromDom();
+    this.syncCategoriesFromDom();
+    this.menuDraft = reconcileMenuCategories(this.menuDraft);
     const before = Array.isArray(this._menuSnapshot) ? this._menuSnapshot : [];
     const after = Array.isArray(this.menuDraft?.items) ? this.menuDraft.items : [];
     const beforeIds = new Set(before.map(i => i.id));
@@ -1126,7 +1257,7 @@ const AdminPage = {
       }
     }
     if (!unlocked) {
-      const pay = paymentCta();
+      const pay = adminPaymentCta();
       document.getElementById('anTodayGmv').textContent = '—';
       document.getElementById('anTodayOrders').textContent = '—';
       document.getElementById('anAov').textContent = '—';
@@ -1289,6 +1420,10 @@ const AdminPage = {
   },
 
   renderBilling() {
+    const dashRoot = document.getElementById('shopBillingDashboard');
+    if (dashRoot) {
+      mountShopBillingDashboard(dashRoot, { showPlanPicker: true });
+    }
     const shop = getShop();
     const plan = getPlan(shop.planId);
     const cycle = shop.billingCycle || PRODUCT.defaultBillingCycle || 'annual';
@@ -1303,7 +1438,7 @@ const AdminPage = {
       .reduce((s, l) => s + (l.estimatedMrr || getPlan(l.planId || 'growth').priceMonthly), 0);
     const pipelineMrr = selfMrr + wonMrr;
     const access = getShopAccess();
-    const pay = paymentCta();
+    const pay = adminPaymentCta();
 
     const planName = document.getElementById('billingPlanName');
     const priceEl = document.getElementById('billingPrice');
@@ -1397,7 +1532,7 @@ const AdminPage = {
     this.renderSettingsForm();
     const growth = getPlan('growth');
     const ap = planPrice(growth, 'annual');
-    alert(`Growth・年払いに切り替えました（実質 ¥${yen(ap.perMonthEffective)}/月）。契約手続きは「${paymentCta().label}」へ。`);
+    alert(`Growth・年払いに切り替えました（実質 ¥${yen(ap.perMonthEffective)}/月）。契約手続きは「${adminPaymentCta().label}」へ。`);
   },
 
   async activateSubscription() {

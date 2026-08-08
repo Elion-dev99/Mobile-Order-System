@@ -1,0 +1,123 @@
+# One-click Stripe prep: products, links, webhook, Cloudflare secrets, generated config.
+# Founder: add repo secret STRIPE_TEST_SECRET_KEY once, then Run workflow (or ask Cursor to dispatch).
+
+name: Stripe full setup (one-click)
+
+on:
+  workflow_dispatch:
+    inputs:
+      register_webhook:
+        description: Register Pages webhook on Stripe (checkout.session.completed)
+        type: boolean
+        default: true
+      upload_cloudflare_secrets:
+        description: Upload STRIPE_* secrets to Cloudflare Pages
+        type: boolean
+        default: true
+      commit_generated_links:
+        description: Commit js/stripe-links.generated.js to main
+        type: boolean
+        default: true
+      plan:
+        description: Limit to one plan (lite|growth|business|chain) or all
+        type: choice
+        default: all
+        options: ['all', 'lite', 'growth', 'business', 'chain']
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/.stripe-one-click-run'
+
+permissions:
+  contents: write
+
+jobs:
+  stripe-full-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate Stripe test key
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+        run: |
+          if [ -z "$STRIPE_SECRET_KEY" ]; then
+            echo "::error::Add GitHub Actions secret STRIPE_TEST_SECRET_KEY (sk_test_...). See docs/stripe-founder-one-click.md"
+            exit 1
+          fi
+          case "$STRIPE_SECRET_KEY" in sk_test_*) ;; *)
+            echo "::error::STRIPE_TEST_SECRET_KEY must be sk_test_... for this workflow"
+            exit 1
+          esac
+
+      - name: Bootstrap Stripe (links + optional webhook)
+        id: bootstrap
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          INPUT_REGISTER_WEBHOOK: ${{ inputs.register_webhook }}
+          INPUT_PLAN: ${{ inputs.plan }}
+        run: |
+          ARGS="--write-generated"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] || [ "$INPUT_REGISTER_WEBHOOK" = "true" ]; then
+            ARGS="$ARGS --register-webhook"
+          fi
+          PLAN="${INPUT_PLAN:-all}"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then PLAN="all"; fi
+          if [ "$PLAN" != "all" ]; then ARGS="$ARGS --plan $PLAN"; fi
+          node scripts/stripe-bootstrap.mjs $ARGS
+          if [ -f .stripe-webhook-secret ]; then
+            echo "webhook_secret=$(cat .stripe-webhook-secret)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Cloudflare Pages Stripe secrets
+        if: github.event_name == 'push' || inputs.upload_cloudflare_secrets == true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STRIPE_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+          WEBHOOK_SECRET: ${{ steps.bootstrap.outputs.webhook_secret }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID missing — skip Pages secret upload"
+            exit 0
+          fi
+          printf '%s' "$STRIPE_KEY" | npx --yes wrangler@4 pages secret put STRIPE_SECRET_KEY --project-name=mobile-order-system
+          printf '%s' "test" | npx --yes wrangler@4 pages secret put STRIPE_MODE --project-name=mobile-order-system
+          if [ -n "$WEBHOOK_SECRET" ]; then
+            echo "::add-mask::$WEBHOOK_SECRET"
+            printf '%s' "$WEBHOOK_SECRET" | npx --yes wrangler@4 pages secret put STRIPE_WEBHOOK_SECRET --project-name=mobile-order-system
+            echo "Uploaded STRIPE_WEBHOOK_SECRET"
+          else
+            echo "::warning::No new webhook secret (endpoint may already exist). Set STRIPE_WEBHOOK_SECRET manually via Configure Stripe secrets workflow if needed."
+          fi
+
+      - name: Commit generated payment links
+        if: github.event_name == 'push' || inputs.commit_generated_links == true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="main"
+          git checkout "$BRANCH"
+          git pull origin "$BRANCH"
+          git add js/stripe-links.generated.js
+          if git diff --staged --quiet; then
+            echo "No link changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(stripe): regenerate payment links (one-click workflow)"
+          git push origin "$BRANCH"
+
+      - name: Summary
+        run: |
+          echo "## Stripe one-click finished" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Links: js/stripe-links.generated.js on main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Docs: docs/stripe-founder-one-click.md" >> "$GITHUB_STEP_SUMMARY"

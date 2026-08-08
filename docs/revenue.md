@@ -1,6 +1,6 @@
 # 収益最大化（実装済み）
 
-詳細な収益・費用のシナリオ P/L は [`pl.md`](./pl.md)（Cloudflare / Firebase / Cursor。AWS は未使用）。  
+- [`pl.md`](./pl.md) — 現行は AWS 行 ¥0。**連携**は [`aws-integration.md`](./aws-integration.md)  
 スマレジ規模（契約5万店）の必要費用・対比は [`pl-50k-smaregi.md`](./pl-50k-smaregi.md)。  
 **広告費ゼロの獲得**は [`growth-zero-cash.md`](./growth-zero-cash.md)。
 
@@ -19,7 +19,8 @@
 | Chain | ¥49,800 | ¥41,500 | ¥198,000 + 注文0.8% |
 
 ## Stripe
-`js/config.js` の `PRODUCT.stripePaymentLink` に Payment Link を入れると、LP/Admin のCTAが「カードで契約」に切替わります。空の間は見積もりフォームへ誘導します。
+`js/config.js` の `stripePaymentLinksByCycle` / `stripePaymentLinks` に Payment Link を入れると、LP/Admin のCTAがプラン・月/年に応じて「カードで契約」に切替わります（Admin は店舗ID付き URL）。  
+設計・一括作成: [`stripe-pricing-model.md`](./stripe-pricing-model.md) · Webhook: [`stripe-setup.md`](./stripe-setup.md)
 
 ## 運用
 - `PRODUCT.introSlotsRemaining` を月次で更新

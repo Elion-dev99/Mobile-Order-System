@@ -50,7 +50,14 @@ import {
   isServerCapabilityOn,
   CARDINAL_CAPABILITY_DEFS,
   allCapabilitiesOff,
+  autonomy90Capabilities,
 } from './_cardinal-prefs-store.js';
+import {
+  isAwsConfigured,
+  awsStsPing,
+  awsTargets,
+} from './_aws-bridge.js';
+import { recordProbeFailures } from './_system-incidents.js';
 
 const DEFAULT_REPO = 'https://github.com/Elion-dev99/Mobile-Order-System';
 const FIRESTORE_PROBE =
@@ -722,15 +729,22 @@ export async function onRequestPost(context) {
       maintenance = { error: String(e?.message || e) };
     }
     const failed = Object.entries(probes).filter(([, p]) => !p.ok).map(([k]) => k);
+    let aws = { configured: isAwsConfigured(env) };
+    if (isAwsConfigured(env)) {
+      aws.sts = await awsStsPing(env);
+      aws.targets = awsTargets(env);
+    }
     const report = {
       ok: failed.length === 0,
       failed,
       probes,
       maintenance,
+      aws,
       configured: {
         discord: !!(env?.DISCORD_WEBHOOK_URL),
         apiKey: !!(env?.CURSOR_API_KEY),
         opsSecret: !!getOpsSecret(env),
+        aws: isAwsConfigured(env),
       },
       at: Date.now(),
     };
@@ -827,6 +841,15 @@ export async function onRequestPost(context) {
       };
     }
     const { siteDown, apiDown, firestoreDown, shouldMaintain, unhealthy } = probeVerdict(probes, simulateUnhealthy);
+
+    let systemIncidents = null;
+    if (unhealthy) {
+      try {
+        systemIncidents = await recordProbeFailures(context.caches, env, probes, 'cardinal_tick');
+      } catch (e) {
+        systemIncidents = { ok: false, error: String(e?.message || e) };
+      }
+    }
 
     let maintenance = null;
     let scheduleApply = null;
@@ -974,6 +997,7 @@ export async function onRequestPost(context) {
       simulateUnhealthy,
       probes,
       maintenance,
+      systemIncidents,
       dispatched: !!(dispatch?.launched || followup?.launched),
       dispatch,
       followup,
@@ -1288,6 +1312,22 @@ export async function onRequestPost(context) {
     });
   }
 
+  if (action === 'prefs_autonomy_90') {
+    const saved = await writeCardinalPrefs(
+      context.caches,
+      { capabilities: autonomy90Capabilities(), shutdownEpoch: 2 },
+      body.updatedBy || 'prefs_autonomy_90',
+    );
+    return j({
+      ok: true,
+      action: 'prefs_autonomy_90',
+      prefs: saved,
+      persisted: saved.persisted !== false,
+      persistError: saved.persistError || null,
+      hint: 'Cardinal 自律90%バンドル ON（Cursor 運用委譲）',
+    });
+  }
+
   if (action === 'prefs_shutdown_all') {
     const saved = await writeCardinalPrefs(
       context.caches,
@@ -1359,7 +1399,7 @@ export async function onRequestGet(context) {
     ok: true,
     service: 'quickorder-cardinal',
     roles: ['guardian', 'executor'],
-    actions: ['status', 'prefs_get', 'prefs_set', 'prefs_shutdown_all', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
+    actions: ['status', 'prefs_get', 'prefs_set', 'prefs_autonomy_90', 'prefs_shutdown_all', 'heartbeat', 'dispatch', 'diagnose', 'digest', 'tick', 'steward', 'followup', 'product_status', 'product_propose', 'product_review', 'product_cycle', 'product_implemented'],
     autonomy: { targetPct: 90, policy: 'docs/autonomy.md' },
     hint: 'Privileged POST requires X-Ops-Secret. Public: GET or POST { action: "status" }. See docs/autonomy.md.',
   }, 200, context.request);

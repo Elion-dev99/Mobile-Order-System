@@ -1,4 +1,5 @@
 import { PLANS, PRODUCT, ADDONS } from './config.js';
+import { buildStripePaymentUrl, isStripeConfigured, stripeIntroFirstMonth } from './stripe-billing.js';
 
 export function getPlan(planId) {
   return PLANS.find(p => p.id === planId) || PLANS.find(p => p.id === 'growth');
@@ -121,10 +122,18 @@ export function canUseFeature(shop, featureKey, { subscribed = false } = {}) {
   return access.premiumUnlocked;
 }
 
-export function paymentCta() {
-  const link = (PRODUCT.stripePaymentLink || '').trim();
-  if (link) {
-    return { mode: 'stripe', href: link, label: 'カードで契約する' };
+export function paymentCta({ shopId, planId, email, billingCycle } = {}) {
+  const pid = planId || 'growth';
+  const cycle = billingCycle || PRODUCT.defaultBillingCycle || 'annual';
+  const href = buildStripePaymentUrl(shopId, pid, { email, billingCycle: cycle });
+  if (href) {
+    const plan = getPlan(pid);
+    const intro = stripeIntroFirstMonth(pid);
+    const cycleLabel = cycle === 'annual' ? '年払い' : '月払い';
+    const label = intro > 0 && cycle === 'monthly'
+      ? `${plan.name} ${cycleLabel}で契約（初月お得）`
+      : `${plan.name} ${cycleLabel}で契約する`;
+    return { mode: 'stripe', href, label };
   }
   return { mode: 'lead', href: 'lp.html#contact', label: '見積もり・導入相談' };
 }
