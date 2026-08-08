@@ -1,3 +1,7 @@
 # Touch this file and merge to main to run Stripe full setup (one-click) via GitHub Actions.
 # Updated by Cursor Cloud Agent after STRIPE_TEST_SECRET_KEY was configured.
+<<<<<<< HEAD
+run_id=2026-08-08T06:15Z-cursor-agent-retry3
+=======
 run_id=2026-08-08T06:20Z-cursor-agent-retry6
+>>>>>>> origin/main
