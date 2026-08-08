@@ -91,6 +91,9 @@ jobs:
       - name: Wait for edge
         run: sleep 45
 
+      - name: Billing selfcheck
+        run: node scripts/billing-selfcheck.mjs
+
       - name: Canary probe (display / API)
         id: canary
         continue-on-error: true

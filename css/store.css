@@ -596,3 +596,25 @@ body.guest.store-page > * {
   border: 1px solid rgba(13, 92, 77, 0.18);
   background: rgba(13, 92, 77, 0.04);
 }
+.shop-bill-debug {
+  margin-top: 14px;
+  font-size: 0.8rem;
+  border: 1px dashed rgba(13, 92, 77, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+}
+.shop-bill-debug summary { font-weight: 800; color: #8b4513; cursor: pointer; }
+.shop-bill-debug-item { margin: 4px 0; }
+.shop-bill-debug--error { color: #b42318; }
+.shop-bill-debug--warn { color: #9a5b00; }
+.shop-bill-debug-pre {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f6f8f7;
+  border-radius: 8px;
+  overflow: auto;
+  max-height: 220px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}

@@ -19,6 +19,20 @@ import {
 
 const SITE = 'https://mobile-order-system.pages.dev';
 
+const ZERO_DECIMAL = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
+
+function stripeAmountToMajor(amount, currency = 'JPY') {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return null;
+  const cur = String(currency || 'JPY').toUpperCase();
+  if (ZERO_DECIMAL.has(cur)) return Math.round(n);
+  return Math.round(n / 100);
+}
+
+function sortEventsByRecency(events) {
+  return [...events].sort((a, b) => Number(b.at || 0) - Number(a.at || 0));
+}
+
 function json(data, status = 200, request = null) {
   return new Response(JSON.stringify(data), {
     status,
@@ -179,7 +193,7 @@ export async function onRequestGet(context) {
 
   let shopBilling = null;
   if (shopFilter) {
-    const forShop = q.events.filter((e) => String(e.shopId || '') === shopFilter);
+    const forShop = sortEventsByRecency(q.events.filter((e) => String(e.shopId || '') === shopFilter));
     const pendingForShop = forShop.filter((e) => e.status === 'pending');
     const paid = forShop.filter((e) => e.paymentStatus === 'paid' || e.amount != null);
     const last = paid[0];
@@ -190,14 +204,32 @@ export async function onRequestGet(context) {
       lastPayment: last
         ? {
           amount: last.amount,
+          amountMajor: stripeAmountToMajor(last.amount, last.currency),
           currency: last.currency,
           at: last.at,
           planId: last.planId,
+          billingCycle: last.billingCycle,
           sessionId: last.sessionId,
+          status: last.status,
         }
         : null,
+      recentForShop: forShop.slice(0, 5).map((e) => ({
+        at: e.at,
+        status: e.status,
+        amountMajor: stripeAmountToMajor(e.amount, e.currency),
+        planId: e.planId,
+        sessionId: e.sessionId,
+      })),
     };
   }
+
+  const debug = url.searchParams.get('debug') === '1';
+  const diagnostics = debug ? {
+    queuePersisted: q.events.length,
+    pendingTotal: pending.length,
+    shopFilter: shopFilter || null,
+    ledgerUpdatedAt: q.updatedAt || null,
+  } : undefined;
 
   return json({
     ok: true,
@@ -214,6 +246,7 @@ export async function onRequestGet(context) {
     pendingCount: pending.length,
     recentPending: pending.slice(0, 8),
     shop: shopBilling,
+    diagnostics,
     docs: 'docs/stripe-setup.md',
   }, 200, context.request);
 }
@@ -271,10 +304,33 @@ export async function onRequestPost(context) {
       return j({ ok: false, action, ...fetched }, fetched.status === 0 ? 502 : 400);
     }
     const row = sessionRow(fetched.session, `verify_${sessionId}`);
+    if (row.amount != null) {
+      row.amountMajor = stripeAmountToMajor(row.amount, row.currency);
+    }
     return j({ ok: true, action, row, session: fetched.session });
   }
 
-  return j({ ok: false, error: 'unknown_action', actions: ['list_pending', 'dismiss', 'mark_applied', 'verify_session'] }, 400);
+  if (action === 'billing_health') {
+    const q = await readStripeQueue(caches);
+    const pending = q.events.filter((e) => e.status === 'pending');
+    const missingShop = pending.filter((e) => !String(e.shopId || '').trim());
+    return j({
+      ok: true,
+      action,
+      configured: {
+        webhookSecret: !!(env?.STRIPE_WEBHOOK_SECRET),
+        apiKey: !!(env?.STRIPE_SECRET_KEY),
+      },
+      queue: {
+        total: q.events.length,
+        pending: pending.length,
+        pendingMissingShopId: missingShop.length,
+        updatedAt: q.updatedAt || null,
+      },
+    });
+  }
+
+  return j({ ok: false, error: 'unknown_action', actions: ['list_pending', 'dismiss', 'mark_applied', 'verify_session', 'billing_health'] }, 400);
 }
 
 export async function onRequestOptions(context) {

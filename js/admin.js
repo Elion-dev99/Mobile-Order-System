@@ -44,6 +44,7 @@ import {
 } from './staff-auth.js';
 import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
 import { mountShopBillingDashboard } from './shop-billing-dashboard.js';
+import { handleBillingSuccessReturn } from './billing-return.js';
 
 function adminPaymentCta() {
   const shop = getShop();
@@ -75,10 +76,12 @@ const AdminPage = {
     setInterval(() => this.updateClock(), 1000);
 
     const params = new URLSearchParams(location.search);
-    if (params.get('billing') === 'success') {
-      await markSubscribed();
-      history.replaceState({}, '', withShop('admin.html'));
-      alert('課金が有効になりました。ありがとうございます。');
+    resolveShopId();
+
+    const billingReturn = await handleBillingSuccessReturn(params);
+    if (billingReturn.handled) {
+      if (billingReturn.ok) alert(billingReturn.message);
+      else alert(billingReturn.message);
     }
 
     await loadShop();
