@@ -1,0 +1,488 @@
+/**
+ * Smaregi-inspired back-office console (light, left nav, orange accent).
+ * Apply with body.qo-smaregi on admin / store surfaces.
+ */
+:root {
+  --sm-bg: #eef1f6;
+  --sm-surface: #ffffff;
+  --sm-side: #ffffff;
+  --sm-line: #d8dde6;
+  --sm-line-soft: #e8ecf2;
+  --sm-text: #1a1d26;
+  --sm-muted: #5c6573;
+  --sm-faint: #8b95a5;
+  --sm-orange: #e85b2b;
+  --sm-orange-hover: #d14a1c;
+  --sm-orange-soft: rgba(232, 91, 43, 0.12);
+  --sm-blue: #2563eb;
+  --sm-side-width: 220px;
+  --sm-top-height: 56px;
+  --sm-font: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+
+body.qo-smaregi.admin-page,
+body.qo-smaregi.store-page {
+  font-family: var(--sm-font);
+  background: var(--sm-bg) !important;
+  color: var(--sm-text) !important;
+}
+
+/* ----- Shell ----- */
+body.qo-smaregi .qo-console {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+body.qo-smaregi .qo-side {
+  width: var(--sm-side-width);
+  flex-shrink: 0;
+  background: var(--sm-side);
+  border-right: 1px solid var(--sm-line);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 120;
+}
+
+body.qo-smaregi .qo-side-brand {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--sm-orange);
+  padding: 8px 10px 16px;
+  letter-spacing: -0.02em;
+}
+
+body.qo-smaregi .qo-side-brand small {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sm-muted);
+  margin-top: 2px;
+}
+
+body.qo-smaregi #adminViewTabs.qo-side-nav,
+body.qo-smaregi .store-page .store-quick.qo-side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+  mask-image: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+body.qo-smaregi #adminViewTabs .admin-tab,
+body.qo-smaregi .store-quick.qo-side-nav a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--sm-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+body.qo-smaregi #adminViewTabs .admin-tab:hover,
+body.qo-smaregi .store-quick.qo-side-nav a:hover {
+  background: var(--sm-bg);
+  color: var(--sm-text);
+}
+
+body.qo-smaregi #adminViewTabs .admin-tab.active {
+  background: var(--sm-orange-soft);
+  color: var(--sm-orange);
+  box-shadow: inset 3px 0 0 var(--sm-orange);
+}
+
+body.qo-smaregi .qo-side-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--sm-line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+body.qo-smaregi .qo-side-foot a {
+  color: var(--sm-muted);
+  text-decoration: none;
+  padding: 6px 10px;
+}
+
+body.qo-smaregi .qo-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body.qo-smaregi .admin-header.qo-main-top {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--sm-top-height);
+  min-height: var(--sm-top-height);
+  padding: 0 20px;
+  background: var(--sm-surface);
+  border-bottom: 1px solid var(--sm-line);
+  backdrop-filter: none;
+  color: var(--sm-text);
+}
+
+body.qo-smaregi .admin-header h1 {
+  color: var(--sm-text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+body.qo-smaregi .admin-clock {
+  color: var(--sm-faint);
+}
+
+body.qo-smaregi .admin-badge {
+  background: var(--sm-orange);
+  color: #fff;
+}
+
+body.qo-smaregi .admin-link-btn {
+  background: var(--sm-bg);
+  color: var(--sm-text);
+  border: 1px solid var(--sm-line);
+}
+
+body.qo-smaregi .qo-main-body {
+  flex: 1;
+  padding: 16px 20px 32px;
+}
+
+/* Hide old horizontal main tabs (moved to side) */
+body.qo-smaregi.admin-page > .admin-tabs#adminViewTabs {
+  display: none;
+}
+
+body.qo-smaregi.admin-page .qo-console #adminViewTabs {
+  display: flex;
+}
+
+/* Order sub-filters */
+body.qo-smaregi #orderFilterTabs {
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-line);
+  border-radius: 10px;
+  padding: 6px;
+  margin-bottom: 12px;
+  mask-image: none;
+}
+
+body.qo-smaregi #orderFilterTabs .admin-tab {
+  color: var(--sm-muted);
+  background: transparent;
+}
+
+body.qo-smaregi #orderFilterTabs .admin-tab.active {
+  background: var(--sm-orange);
+  color: #fff;
+}
+
+body.qo-smaregi .qo-subtoolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 0 0 12px;
+}
+
+body.qo-smaregi .kds-mode-bar {
+  background: var(--sm-bg);
+  border: 1px solid var(--sm-line);
+}
+
+body.qo-smaregi .kds-mode.active {
+  background: var(--sm-orange);
+  color: #fff;
+}
+
+body.qo-smaregi .kds-mode {
+  color: var(--sm-muted);
+}
+
+body.qo-smaregi .admin-date-range {
+  color: var(--sm-muted);
+  font-size: 13px;
+}
+
+body.qo-smaregi .admin-date-range input {
+  border: 1px solid var(--sm-line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--sm-surface);
+  color: var(--sm-text);
+}
+
+/* Content panels */
+body.qo-smaregi .admin-content,
+body.qo-smaregi .admin-panel {
+  background: transparent;
+}
+
+body.qo-smaregi .admin-panel-inner {
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-line);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+body.qo-smaregi .admin-order-card {
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-line);
+  border-left: 4px solid var(--sm-orange);
+  color: var(--sm-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+body.qo-smaregi .admin-order-card.cooking {
+  border-left-color: #f59e0b;
+}
+
+body.qo-smaregi .admin-order-card.done {
+  border-left-color: var(--sm-line);
+  opacity: 0.85;
+}
+
+body.qo-smaregi .admin-order-time,
+body.qo-smaregi .admin-muted,
+body.qo-smaregi .admin-item-custom {
+  color: var(--sm-muted) !important;
+}
+
+body.qo-smaregi .admin-action-btn.start {
+  background: var(--sm-orange-soft);
+  color: var(--sm-orange);
+}
+
+body.qo-smaregi .admin-action-btn.complete {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+body.qo-smaregi .admin-save-btn {
+  background: var(--sm-orange);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  padding: 12px 20px;
+}
+
+body.qo-smaregi .admin-save-btn:hover {
+  background: var(--sm-orange-hover);
+}
+
+body.qo-smaregi .admin-secondary-btn {
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-line);
+  color: var(--sm-text);
+  border-radius: 8px;
+}
+
+body.qo-smaregi .billing-card {
+  background: var(--sm-bg);
+  border: 1px solid var(--sm-line);
+  color: var(--sm-text);
+}
+
+body.qo-smaregi .billing-label {
+  color: var(--sm-muted);
+}
+
+body.qo-smaregi .admin-field input,
+body.qo-smaregi .admin-field select,
+body.qo-smaregi .admin-gate-card input {
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-line);
+  color: var(--sm-text);
+}
+
+body.qo-smaregi .menu-edit-card,
+body.qo-smaregi .menu-structure-block,
+body.qo-smaregi .menu-cat-row {
+  background: var(--sm-bg) !important;
+  border: 1px solid var(--sm-line) !important;
+  color: var(--sm-text);
+}
+
+body.qo-smaregi .menu-edit-card input,
+body.qo-smaregi .menu-edit-card select {
+  background: var(--sm-surface);
+  border-color: var(--sm-line);
+  color: var(--sm-text);
+}
+
+body.qo-smaregi .me-cat-id {
+  background: var(--sm-surface);
+  color: var(--sm-muted);
+}
+
+body.qo-smaregi .admin-revenue-banner {
+  background: var(--sm-orange-soft);
+  border: 1px solid rgba(232, 91, 43, 0.35);
+  color: var(--sm-text);
+  margin: 0 0 12px;
+}
+
+body.qo-smaregi .lead-card {
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-line);
+  color: var(--sm-text);
+}
+
+body.qo-smaregi .lead-meta {
+  color: var(--sm-muted);
+}
+
+body.qo-smaregi.store-page .store-header.qo-main-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.qo-smaregi.store-page .store-header.qo-main-top .store-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sm-muted);
+  margin: 0 0 2px;
+}
+
+body.qo-smaregi.store-page .store-header.qo-main-top h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--sm-text);
+}
+
+body.qo-smaregi.store-page .store-header.qo-main-top .store-sub {
+  font-size: 12px;
+  color: var(--sm-faint);
+  margin: 2px 0 0;
+}
+
+body.qo-smaregi.store-page .store-quick.qo-side-nav a[aria-current="page"] {
+  background: var(--sm-orange-soft);
+  color: var(--sm-orange);
+  box-shadow: inset 3px 0 0 var(--sm-orange);
+}
+
+body.qo-smaregi.store-page .store-main {
+  padding: 0;
+  max-width: none;
+}
+
+body.qo-smaregi .store-mini-btn,
+body.qo-smaregi .store-save {
+  border-radius: 8px;
+}
+
+/* Store page */
+body.qo-smaregi.store-page .store-header:not(.qo-main-top) {
+  display: none;
+}
+
+body.qo-smaregi.store-page .store-quick:not(.qo-side-nav) {
+  display: none;
+}
+
+body.qo-smaregi.store-page .qo-console .store-quick.qo-side-nav {
+  display: flex;
+}
+
+body.qo-smaregi .store-card {
+  background: var(--sm-surface);
+  border: 1px solid var(--sm-line);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+body.qo-smaregi .store-open-toggle {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+body.qo-smaregi .store-open-toggle.is-closed {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fcd34d;
+}
+
+body.qo-smaregi #clearOrdersBtn {
+  color: #dc2626 !important;
+}
+
+/* Mobile: bottom nav */
+@media (max-width: 900px) {
+  body.qo-smaregi .qo-console {
+    flex-direction: column;
+  }
+
+  body.qo-smaregi .qo-side {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    height: auto;
+    width: 100%;
+    flex-direction: row;
+    padding: 8px 10px;
+    border-right: none;
+    border-top: 1px solid var(--sm-line);
+    z-index: 200;
+  }
+
+  body.qo-smaregi .qo-side-brand,
+  body.qo-smaregi .qo-side-foot {
+    display: none;
+  }
+
+  body.qo-smaregi #adminViewTabs.qo-side-nav,
+  body.qo-smaregi .store-quick.qo-side-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    flex: 1;
+    gap: 6px;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+
+  body.qo-smaregi #adminViewTabs .admin-tab,
+  body.qo-smaregi .store-quick.qo-side-nav a {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 12px;
+    box-shadow: none;
+  }
+
+  body.qo-smaregi #adminViewTabs .admin-tab.active {
+    box-shadow: none;
+  }
+
+  body.qo-smaregi .qo-main-body {
+    padding-bottom: 72px;
+  }
+}
