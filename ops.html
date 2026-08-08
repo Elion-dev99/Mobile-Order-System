@@ -8,7 +8,7 @@
   <title>Ops | QuickOrder</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/tokens.css?v=ui26">
-  <link rel="stylesheet" href="css/ops.css?v=ui26">
+  <link rel="stylesheet" href="css/ops.css?v=opsui1">
   <link rel="stylesheet" href="css/responsive.css?v=ui26">
   <link rel="stylesheet" href="css/ui-overhaul.css?v=ui26">
 </head>
@@ -37,10 +37,20 @@
       <h1>総合管理</h1>
     </div>
     <div class="ops-top-actions">
+      <div class="ops-readiness" id="opsReadiness" aria-label="接続状態"></div>
       <span class="ops-role" id="opsRoleBadge">—</span>
       <button type="button" id="opsLogout">ログアウト</button>
     </div>
   </header>
+
+  <div id="opsReadBanner" class="ops-read-banner" hidden>
+    <p><strong>Firebase 未ログイン</strong> — 閲覧のみ可能です。店舗作成・削除・メニュー保存などの書き込みにはログインが必要です。</p>
+    <div class="ops-read-banner-actions">
+      <button type="button" id="opsReadBannerLogin" class="ops-btn">Firebase ログイン</button>
+      <button type="button" id="opsReadBannerDismiss" class="ops-btn-secondary">閲覧のみで続行</button>
+      <button type="button" class="ops-linkish" data-ops-goto="security">鍵タブ</button>
+    </div>
+  </div>
 
   <nav class="ops-tabs">
     <button type="button" data-ops-tab="hq" class="active">HQ</button>
@@ -603,12 +613,12 @@
       <div id="opsStripePendingList" class="ops-lead-list" style="margin-top:10px;"></div>
       <p id="opsStripeStatus" class="ops-status" hidden></p>
 
-      <p class="ops-muted" style="margin-top:20px">Discord 通知の設定は <button type="button" class="ops-linkish" data-ops-tab="notify">通知タブ</button> で行います。詳細は <code>docs/security.md</code>。</p>
+      <p class="ops-muted" style="margin-top:20px">Discord 通知の設定は <button type="button" class="ops-linkish" data-ops-goto="notify">通知タブ</button> で行います。詳細は <code>docs/security.md</code>。</p>
     </section>
   </main>
 </div>
 
-<script type="module" src="js/ops.js?v=harden2"></script>
+<script type="module" src="js/ops.js?v=opsui1"></script>
 <script>
   // モジュール読み込み失敗時のフォールバック表示
   setTimeout(() => {
