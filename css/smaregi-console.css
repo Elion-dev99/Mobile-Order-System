@@ -126,10 +126,15 @@ body.qo-smaregi .qo-side-foot a {
 body.qo-smaregi .qo-main {
   flex: 1;
   min-width: 0;
+<<<<<<< HEAD
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: visible;
+=======
+  display: flex;
+  flex-direction: column;
+>>>>>>> origin/main
 }
 
 body.qo-smaregi .admin-header.qo-main-top {
