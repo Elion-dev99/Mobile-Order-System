@@ -7,7 +7,7 @@
 | 文書種別 | システム全体仕様（プロダクト / 画面 / モジュール / データ / 運用） |
 | 読者 | PM・オーナー・導入支援・Cursor エージェント |
 | 本番 URL | `https://mobile-order-system.pages.dev` |
-| 関連文書 | [`revenue.md`](./revenue.md) / [`pl.md`](./pl.md) / [`growth-zero-cash.md`](./growth-zero-cash.md) / [`hardening.md`](./hardening.md) / [`security.md`](./security.md) / [`cardinal.md`](./cardinal.md) / [`autonomy.md`](./autonomy.md) / [`enterprise-parity.md`](./enterprise-parity.md) |
+| 関連文書 | [`revenue.md`](./revenue.md) / [`pl.md`](./pl.md) / [`aws-migration-target.md`](./aws-migration-target.md) / [`growth-zero-cash.md`](./growth-zero-cash.md) / [`hardening.md`](./hardening.md) / [`security.md`](./security.md) / [`cardinal.md`](./cardinal.md) / [`autonomy.md`](./autonomy.md) / [`enterprise-parity.md`](./enterprise-parity.md) |
 | 版 | **2.0**（2026-07-30 · 現行 `main` 実装ベース） |
 
 ---
