@@ -1,6 +1,7 @@
 # AWS 連携（ハイブリッド運用）
 
-QuickOrder の **本番は Cloudflare Pages + Firebase** のまま。AWS は **必要に応じて横に繋ぐ**（全面移行は前提にしない）。
+QuickOrder の **本番は Cloudflare Pages + Firebase** のまま。**全面 AWS 移行**のサービス選定と段階プランは [`aws-migration-target.md`](./aws-migration-target.md)。  
+本ファイルは **ハイブリッド連携**（EventBridge 等）用。
 
 ## なぜハイブリッドか
 
