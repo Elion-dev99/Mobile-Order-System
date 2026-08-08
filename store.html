@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css?v=harden1">
   <link rel="stylesheet" href="css/guest.css?v=harden1">
-  <link rel="stylesheet" href="css/store.css?v=harden1">
+  <link rel="stylesheet" href="css/store.css?v=bill1">
 </head>
 <body class="guest store-page">
 
@@ -28,11 +28,16 @@
   <a href="admin.html" id="navAdmin">厨房</a>
   <a href="admin.html?view=menu" id="navMenu">メニュー</a>
   <a href="admin.html?view=analytics" id="navAnalytics">分析</a>
+  <a href="admin.html?view=billing" id="navBilling">課金</a>
   <a href="index.html?table=1" id="navGuest">客席</a>
   <a href="lp.html">販売LP</a>
 </nav>
 
 <main class="store-main">
+  <section class="store-card store-billing-card" id="storeBillingDashboard" aria-labelledby="storeBillingHeading">
+    <div id="storeBillingMount"></div>
+  </section>
+
   <section class="store-card" id="storeRequests">
     <div class="store-card-head">
       <h2>呼出・会計</h2>
@@ -169,6 +174,6 @@
   </section>
 </main>
 
-<script type="module" src="js/store.js?v=harden1"></script>
+<script type="module" src="js/store.js?v=bill1"></script>
 </body>
 </html>

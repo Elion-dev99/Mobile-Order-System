@@ -171,9 +171,34 @@ async function handleWebhook(rawBody, request, env, cachesObj) {
 }
 
 export async function onRequestGet(context) {
-  const { env, caches } = context;
+  const { env, caches, request } = context;
   const q = await readStripeQueue(caches);
   const pending = q.events.filter((e) => e.status === 'pending');
+  const url = new URL(request.url);
+  const shopFilter = String(url.searchParams.get('shop') || url.searchParams.get('shopId') || '').trim().slice(0, 64);
+
+  let shopBilling = null;
+  if (shopFilter) {
+    const forShop = q.events.filter((e) => String(e.shopId || '') === shopFilter);
+    const pendingForShop = forShop.filter((e) => e.status === 'pending');
+    const paid = forShop.filter((e) => e.paymentStatus === 'paid' || e.amount != null);
+    const last = paid[0];
+    shopBilling = {
+      shopId: shopFilter,
+      pendingPayment: pendingForShop.length > 0,
+      pendingCount: pendingForShop.length,
+      lastPayment: last
+        ? {
+          amount: last.amount,
+          currency: last.currency,
+          at: last.at,
+          planId: last.planId,
+          sessionId: last.sessionId,
+        }
+        : null,
+    };
+  }
+
   return json({
     ok: true,
     service: 'quickorder-stripe-prep',
@@ -188,6 +213,7 @@ export async function onRequestGet(context) {
     mode: String(env?.STRIPE_MODE || 'test'),
     pendingCount: pending.length,
     recentPending: pending.slice(0, 8),
+    shop: shopBilling,
     docs: 'docs/stripe-setup.md',
   }, 200, context.request);
 }
