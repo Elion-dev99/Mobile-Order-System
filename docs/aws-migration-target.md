@@ -4,7 +4,7 @@
 |------|------|
 | 目的 | **Firestore + Cloudflare を AWS に置き換える**とき、どのサービスを採用するか迷わないための指針 |
 | 方針 | **全面移行**だが **一気に切らない**（デュアルラン → 切替）。Cursor / Cardinal が canary とロールバックで守る |
-| 関連 | [`aws-integration.md`](./aws-integration.md)（既存ブリッジ） / [`pl.md`](./pl.md) / [`pl-50k-smaregi.md`](./pl-50k-smaregi.md) / [`specification.md`](./specification.md) |
+| 関連 | [`aws-integration.md`](./aws-integration.md)（既存ブリッジ） / [`pl.md`](./pl.md) / [`pl-50k-smaregi.md`](./pl-50k-smaregi.md) / [`specification.md`](./specification.md) / [**フェーズ別費用表**](./aws-migration-phase-costs.md) |
 
 ---
 
