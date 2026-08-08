@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#f5f3f0">
+  <meta name="theme-color" content="#fbfbfd">
   <title>QuickOrder — 飲食店向けモバイルオーダー</title>
   <meta name="description" content="席QRモバイルオーダー。Lite ¥6,980〜。Growth年払いで実質お得。14日トライアル。デモ即体験。">
   <meta property="og:title" content="QuickOrder — 飲食店向けモバイルオーダー">
@@ -28,68 +28,93 @@
   }
   </script>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/tokens.css?v=ui26">
-  <link rel="stylesheet" href="css/lp.css?v=ui27">
-  <link rel="stylesheet" href="css/responsive.css?v=ui26">
-  <link rel="stylesheet" href="css/ui-overhaul.css?v=ui26">
+  <link rel="stylesheet" href="css/tokens.css?v=apple1">
+  <link rel="stylesheet" href="css/lp.css?v=apple1">
 </head>
 <body class="lp-body">
-  <header class="lp-top">
-    <a class="lp-brand" href="lp.html">QuickOrder</a>
-    <nav class="lp-nav">
-      <a href="#uptime">安心運用</a>
-      <a href="#plans">料金プラン</a>
-      <a href="#compare">比較</a>
-      <a href="index.html?shop=default&table=1&demo=1" class="lp-nav-ghost">デモ</a>
-      <a href="#contact" class="lp-nav-cta">導入相談</a>
-    </nav>
+  <header class="lp-top" id="lpTop">
+    <div class="lp-wrap lp-top-inner">
+      <a class="lp-brand" href="lp.html">QuickOrder</a>
+      <nav class="lp-nav" aria-label="メイン">
+        <a href="#why">特長</a>
+        <a href="#uptime">安心運用</a>
+        <a href="#plans">料金</a>
+        <a href="#compare">比較</a>
+        <a href="index.html?shop=default&table=1&demo=1" class="lp-nav-ghost">デモ</a>
+        <a href="#contact" class="lp-nav-cta">導入相談</a>
+      </nav>
+    </div>
   </header>
 
-  <main>
-    <section class="lp-hero">
-      <div class="lp-hero-bg" aria-hidden="true"></div>
-      <div class="lp-hero-copy">
-        <p class="lp-kicker">飲食店オペレーションOS</p>
-        <h1 class="lp-brand-hero">QuickOrder</h1>
-        <p class="lp-lead">席のQRから厨房着信・売上分析まで。<br>大手と同等の体験を、店舗規模に合う料金で。</p>
-        <p class="lp-scarcity" id="lpScarcity" hidden></p>
-        <p class="lp-referral-banner" id="lpReferralBanner" hidden></p>
-        <div class="lp-cta-row">
-          <a href="#contact" class="lp-btn-primary" id="heroAnnualCta">Growth・年払いで相談</a>
-          <a href="index.html?shop=default&table=1&demo=1" class="lp-btn-secondary" id="lpHeroDemo">客席デモ</a>
+  <main class="lp-main">
+    <section class="lp-hero lp-band" aria-labelledby="lpHeroTitle">
+      <div class="lp-wrap lp-hero-grid">
+        <div class="lp-hero-copy lp-reveal">
+          <p class="lp-eyebrow">飲食店オペレーションOS</p>
+          <h1 class="lp-hero-title" id="lpHeroTitle">席のQRから、厨房まで。<br class="lp-br-sm">ひとつながりのオーダー。</h1>
+          <p class="lp-hero-lead">客席・厨房・ステータスをリアルタイム同期。大手並みの体験を、店舗規模に合う料金で。</p>
+          <p class="lp-scarcity" id="lpScarcity" hidden></p>
+          <p class="lp-referral-banner" id="lpReferralBanner" hidden></p>
+          <div class="lp-hero-cta">
+            <a href="#contact" class="lp-btn lp-btn--fill" id="heroAnnualCta">Growth・年払いで相談</a>
+            <a href="index.html?shop=default&table=1&demo=1" class="lp-btn lp-btn--ghost" id="lpHeroDemo">客席デモを見る</a>
+          </div>
+          <p class="lp-hero-note">税別 · 14日トライアル · デモは即日</p>
+        </div>
+        <div class="lp-hero-showcase lp-reveal lp-reveal-delay" aria-hidden="true">
+          <div class="lp-device lp-device--guest">
+            <div class="lp-device-bar"><span>テーブル 12</span></div>
+            <div class="lp-device-line lp-device-line--wide"></div>
+            <div class="lp-device-line"></div>
+            <div class="lp-device-cards">
+              <div class="lp-device-card"></div>
+              <div class="lp-device-card"></div>
+              <div class="lp-device-card"></div>
+            </div>
+            <div class="lp-device-cta">カートを見る</div>
+          </div>
+          <div class="lp-device lp-device--kitchen">
+            <div class="lp-device-bar"><span>厨房 · 2件</span></div>
+            <div class="lp-kitchen-ticket">
+              <strong>#1042</strong>
+              <span>焼き鳥盛り · ビール</span>
+            </div>
+            <div class="lp-kitchen-ticket lp-kitchen-ticket--new">
+              <strong>#1043</strong>
+              <span>唐揚げ · お茶</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="lp-section" id="why">
-      <h2>なぜQuickOrderか</h2>
-      <p class="lp-section-lead">初期費用と月額の二重課金で固定費が膨らむ大手プランに対し、必要な機能だけ段階導入できます。</p>
-      <div class="lp-grid-3">
-        <article>
+    <section class="lp-band lp-band--alt" id="why">
+      <div class="lp-wrap lp-section-head lp-reveal">
+        <h2>なぜ QuickOrder か</h2>
+        <p class="lp-section-lead">初期費用と月額の二重課金で固定費が膨らむ大手プランに対し、必要な機能だけ段階導入できます。</p>
+      </div>
+      <div class="lp-wrap lp-grid-3 lp-reveal">
+        <article class="lp-tile">
           <h3>注文〜配膳の一本化</h3>
           <p>客席・厨房・ステータスがリアルタイム同期。KDS表示切替と厨房伝票印刷でピークでも迷わない。</p>
         </article>
-        <article>
+        <article class="lp-tile">
           <h3>単価と回転を伸ばす</h3>
-          <p>クーポン・在庫自動売切・サービス料/チップ・期間CSV・売上分析までGrowthに標準搭載。</p>
+          <p>クーポン・在庫自動売切・サービス料/チップ・期間CSV・売上分析まで Growth に標準搭載。</p>
         </article>
-        <article>
+        <article class="lp-tile">
           <h3>権限と多店舗へ</h3>
-          <p>Businessは厨房/ホール/店長PINとSLA。Chainは店舗無制限と本部横断ダッシュボード。</p>
+          <p>Business は厨房/ホール/店長 PIN と SLA。Chain は店舗無制限と本部横断ダッシュボード。</p>
         </article>
       </div>
     </section>
 
-    <section class="lp-section" id="uptime">
-      <h2>障害のときも、席を混乱させない</h2>
-      <p class="lp-section-lead">注文経路の異常を検知すると、客席を自動でレジ案内に切り替え。復旧を確認したら再開します。店舗の「準備中」とは別の、プラットフォーム側の安全装置です。</p>
-      <div class="lp-uptime">
-        <div class="lp-uptime-visual" aria-hidden="true">
-          <span class="lp-uptime-ring"></span>
-          <span class="lp-uptime-ring lp-uptime-ring-delay"></span>
-          <span class="lp-uptime-core"></span>
-          <p class="lp-uptime-visual-label">常時ウォッチ</p>
-        </div>
+    <section class="lp-band" id="uptime">
+      <div class="lp-wrap lp-section-head lp-reveal">
+        <h2>障害のときも、席を混乱させない</h2>
+        <p class="lp-section-lead">注文経路の異常を検知すると、客席を自動でレジ案内に切り替え。復旧を確認したら再開します。</p>
+      </div>
+      <div class="lp-wrap lp-steps lp-reveal">
         <ol class="lp-uptime-flow">
           <li>
             <strong>検知</strong>
@@ -111,25 +136,29 @@
       </div>
     </section>
 
-    <section class="lp-section" id="plans">
-      <div class="lp-plans-head">
-        <div>
-          <h2>店舗向け契約プラン</h2>
-          <p class="lp-section-lead">税別。年払いは実質2ヶ月無料（×10）。</p>
+    <section class="lp-band lp-band--alt" id="plans">
+      <div class="lp-wrap">
+        <div class="lp-plans-head lp-reveal">
+          <div class="lp-section-head lp-section-head--inline">
+            <h2>店舗向け契約プラン</h2>
+            <p class="lp-section-lead">税別。年払いは実質2ヶ月無料（×10）。</p>
+          </div>
+          <div class="lp-cycle-toggle" role="group" aria-label="支払いサイクル">
+            <button type="button" class="lp-cycle" data-cycle="monthly">月払い</button>
+            <button type="button" class="lp-cycle active" data-cycle="annual">年払い <span>2ヶ月分お得</span></button>
+          </div>
         </div>
-        <div class="lp-cycle-toggle" role="group" aria-label="支払いサイクル">
-          <button type="button" class="lp-cycle" data-cycle="monthly">月払い</button>
-          <button type="button" class="lp-cycle active" data-cycle="annual">年払い <span>2ヶ月分お得</span></button>
-        </div>
+        <div class="lp-plan-grid lp-reveal" id="planGrid"></div>
+        <p class="lp-price-foot lp-reveal" id="planFootnote"></p>
       </div>
-      <div class="lp-plan-grid" id="planGrid"></div>
-      <p class="lp-price-foot" id="planFootnote"></p>
     </section>
 
-    <section class="lp-section" id="roi">
-      <h2>導入シミュレーション</h2>
-      <p class="lp-section-lead">席数・回転・客単価から、月間の追加売上目安とプラン費用を比較します。</p>
-      <div class="lp-roi">
+    <section class="lp-band" id="roi">
+      <div class="lp-wrap lp-section-head lp-reveal">
+        <h2>導入シミュレーション</h2>
+        <p class="lp-section-lead">席数・回転・客単価から、月間の追加売上目安とプラン費用を比較します。</p>
+      </div>
+      <div class="lp-wrap lp-roi lp-reveal">
         <div class="lp-roi-controls">
           <label>テーブル数（席）
             <input type="range" id="roiTables" min="1" max="300" step="1" value="24">
@@ -170,64 +199,74 @@
       </div>
     </section>
 
-    <section class="lp-section" id="compare">
-      <h2>プラン比較</h2>
-      <div class="lp-compare-wrap">
-        <table class="lp-compare" id="compareTable">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
+    <section class="lp-band lp-band--alt" id="compare">
+      <div class="lp-wrap lp-section-head lp-reveal">
+        <h2>プラン比較</h2>
+      </div>
+      <div class="lp-wrap lp-reveal">
+        <div class="lp-compare-wrap">
+          <table class="lp-compare" id="compareTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
-    <section class="lp-section" id="addons">
-      <h2>オプション</h2>
-      <p class="lp-section-lead">導入速度と完成度を上げる有償メニューです。</p>
-      <div class="lp-addon-grid" id="addonGrid"></div>
+    <section class="lp-band" id="addons">
+      <div class="lp-wrap lp-section-head lp-reveal">
+        <h2>オプション</h2>
+        <p class="lp-section-lead">導入速度と完成度を上げる有償メニューです。</p>
+      </div>
+      <div class="lp-wrap lp-addon-grid lp-reveal" id="addonGrid"></div>
     </section>
 
-    <section class="lp-section" id="contact">
-      <h2>導入相談</h2>
-      <p class="lp-section-lead">希望プランを選んで送信。担当が48時間以内に見積もりを返します。年払いならキャッシュを先に回収できます。</p>
-      <p class="lp-quote-preview" id="leadQuotePreview"></p>
-      <div class="lp-cta-row" style="margin-bottom:16px">
-        <a class="lp-btn-primary" id="lpPayCta" href="#contact" hidden>カードで契約する</a>
+    <section class="lp-band lp-band--alt" id="contact">
+      <div class="lp-wrap lp-contact-grid lp-reveal">
+        <div class="lp-contact-intro">
+          <h2>導入相談</h2>
+          <p class="lp-section-lead">希望プランを選んで送信。担当が48時間以内に見積もりを返します。</p>
+          <p class="lp-quote-preview" id="leadQuotePreview"></p>
+          <a class="lp-btn lp-btn--fill" id="lpPayCta" href="#contact" hidden>カードで契約する</a>
+        </div>
+        <form class="lp-form" id="leadForm">
+          <label>店舗名<input name="shopName" required placeholder="例: 炭火焼鳥 まる"></label>
+          <label>担当者メール<input name="email" type="email" required placeholder="you@example.com"></label>
+          <label>電話（任意）<input name="phone" type="tel" placeholder="090-0000-0000"></label>
+          <label>希望プラン
+            <select name="planId" id="leadPlan"></select>
+          </label>
+          <label>支払い
+            <select name="billingCycle" id="leadCycle">
+              <option value="monthly">月払い</option>
+              <option value="annual" selected>年払い（おすすめ）</option>
+            </select>
+          </label>
+          <label>席数の目安
+            <select name="tables">
+              <option value="1-10">1〜10席</option>
+              <option value="11-30" selected>11〜30席</option>
+              <option value="31-50">31〜50席</option>
+              <option value="51+">51席以上</option>
+            </select>
+          </label>
+          <label>店舗数<input name="stores" type="number" min="1" max="200" value="1"></label>
+          <label>ひとこと<textarea name="message" rows="3" placeholder="既存レジ、導入時期、競合比較など"></textarea></label>
+          <button type="submit" class="lp-btn lp-btn--fill lp-btn--block" id="leadSubmit">見積もりを依頼</button>
+          <p class="lp-form-status" id="leadStatus" hidden></p>
+        </form>
       </div>
-      <form class="lp-form" id="leadForm">
-        <label>店舗名<input name="shopName" required placeholder="例: 炭火焼鳥 まる"></label>
-        <label>担当者メール<input name="email" type="email" required placeholder="you@example.com"></label>
-        <label>電話（任意）<input name="phone" type="tel" placeholder="090-0000-0000"></label>
-        <label>希望プラン
-          <select name="planId" id="leadPlan"></select>
-        </label>
-        <label>支払い
-          <select name="billingCycle" id="leadCycle">
-            <option value="monthly">月払い</option>
-            <option value="annual" selected>年払い（おすすめ）</option>
-          </select>
-        </label>
-        <label>席数の目安
-          <select name="tables">
-            <option value="1-10">1〜10席</option>
-            <option value="11-30" selected>11〜30席</option>
-            <option value="31-50">31〜50席</option>
-            <option value="51+">51席以上</option>
-          </select>
-        </label>
-        <label>店舗数<input name="stores" type="number" min="1" max="200" value="1"></label>
-        <label>ひとこと<textarea name="message" rows="3" placeholder="既存レジ、導入時期、競合比較など"></textarea></label>
-        <button type="submit" class="lp-btn-primary lp-btn-block" id="leadSubmit">見積もりを依頼</button>
-        <p class="lp-form-status" id="leadStatus" hidden></p>
-      </form>
     </section>
   </main>
 
   <footer class="lp-footer">
-    <div>QuickOrder</div>
-    <div class="lp-footer-links">
-      <a href="store.html">店舗管理</a>
-      <a href="admin.html">厨房</a>
-      <a href="index.html?shop=default&table=1&demo=1">客席デモ</a>
+    <div class="lp-wrap lp-footer-inner">
+      <p class="lp-footer-copy">Copyright © QuickOrder</p>
+      <div class="lp-footer-links">
+        <a href="store.html">店舗管理</a>
+        <a href="admin.html">厨房</a>
+        <a href="index.html?shop=default&table=1&demo=1">客席デモ</a>
+      </div>
     </div>
   </footer>
 

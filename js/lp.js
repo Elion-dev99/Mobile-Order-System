@@ -114,7 +114,7 @@ function renderPlans() {
           · 初期 ¥${setup}
         </div>
         <ul>${plan.highlights.map(h => `<li>${h}</li>`).join('')}</ul>
-        <a href="#contact" class="lp-btn-primary lp-btn-block plan-pick" data-plan="${plan.id}">${plan.cta}</a>
+        <a href="#contact" class="lp-btn lp-btn--fill lp-btn--block plan-pick" data-plan="${plan.id}">${plan.cta}</a>
       </article>`;
   }).join('');
 
