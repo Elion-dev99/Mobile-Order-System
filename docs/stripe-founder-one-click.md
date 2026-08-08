@@ -20,6 +20,9 @@ Cursor / GitHub Actions が **Stripe 商品・Payment Link・Webhook・Cloudflar
 
 ### B. ワークフローを1回実行
 
+**注意:** GitHub は `workflow_dispatch` を **default ブランチ（main）にワークフローがあるとき**だけ Actions 一覧に出します。  
+PR [#64](https://github.com/Elion-dev99/Mobile-Order-System/pull/64) を **main にマージ**してから:
+
 [Actions → **Stripe full setup (one-click)**](https://github.com/Elion-dev99/Mobile-Order-System/actions/workflows/stripe-full-setup.yml) → **Run workflow**
 
 - `register_webhook`: ON（推奨）
@@ -28,13 +31,17 @@ Cursor / GitHub Actions が **Stripe 商品・Payment Link・Webhook・Cloudflar
 
 完了後: **PR が自動作成**されるか、同ブランチにコミットされます。Cardinal 自動マージが止まっている場合は **手動マージ** → Deploy。
 
-### C. Cursor に任せる場合
+### C. Cursor Cloud Agent に全部任せる（推奨）
 
-チャットで次だけ送る:
+1. GitHub に `STRIPE_TEST_SECRET_KEY` を入れる（上記 A）
+2. （任意）Cursor の **Cloud Agent 環境シークレット**にも `STRIPE_SECRET_KEY` を同じ `sk_test_...` で入れると、マージ前でも Agent が直接 bootstrap を実行できる
+3. チャットで一言:
 
-> `STRIPE_TEST_SECRET_KEY` を GitHub に入れた。Stripe 全自動セットアップを実行して。
+> `STRIPE_TEST_SECRET_KEY` を入れた。Stripe 全自動を実行して。
 
-Cloud Agent はワークフローを dispatch し、PR まで進めます（シークレットが入っていれば）。
+Agent は可能ならワークフロー dispatch、または VM 上で `stripe-bootstrap.mjs` を実行してコミットまで行います。
+
+### D. 自分で Run する場合
 
 ## ワークフローがやること
 
