@@ -1044,6 +1044,7 @@ const App = {
     this.renderModal(item);
     document.getElementById('itemModal').classList.add('open');
     document.body.classList.add('scroll-locked');
+    document.documentElement.classList.add('scroll-locked');
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
   },
@@ -1273,6 +1274,15 @@ const App = {
     document.getElementById('cartBarBtn')?.addEventListener('click', () => {
       this.showView('cart');
     });
+    if (!this.scrollRecoveryBound) {
+      this.scrollRecoveryBound = true;
+      window.addEventListener('pageshow', () => this.unlockPageScroll());
+      window.addEventListener('popstate', () => this.unlockPageScroll());
+      document.addEventListener('visibilitychange', () => {
+        const modalOpen = document.getElementById('itemModal')?.classList.contains('open');
+        if (document.visibilityState === 'visible' && !modalOpen) this.unlockPageScroll();
+      });
+    }
   },
 
   bindSpaCart() {
@@ -1509,6 +1519,7 @@ const App = {
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
     document.body.classList.remove('scroll-locked');
+    document.documentElement.classList.remove('scroll-locked');
   },
 
   mountReserveBar() {

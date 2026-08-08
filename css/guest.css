@@ -73,27 +73,26 @@ body.guest::before {
    fixed overlays (modal / cart bar / toast / bill lock). That override
    made #itemModal position:relative, so customize "+" opened a sheet
    thousands of px below the fold and looked like dead buttons. */
-body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bill-lock-overlay):not(.party-size-overlay):not(.guest-service-bar):not(.guest-reserve-bar):not(.qo-growth-mark):not(#platformMaintenanceBanner) {
+body.guest > *:not(.modal-overlay):not(.cart-bar):not(.toast-container):not(.bill-lock-overlay):not(.party-size-overlay):not(.guest-service-bar):not(.guest-reserve-bar):not(.qo-growth-mark):not(#platformMaintenanceBanner):not(.guest-chrome) {
   position: relative;
   z-index: 1;
 }
 
-/* Document (html) is the only vertical scrollport. Body overflow-y:auto made
-   window.scrollY stick at 0 while content moved — upward swipe → browser reload. */
-html {
-  overflow-x: hidden;
-  overflow-y: auto;
-  height: auto;
-  overscroll-behavior-y: none;
-}
-body.guest {
-  overscroll-behavior-y: none;
+/* Scrollport rules live in responsive.css (html:has(body.guest:not(.store-page))).
+   Keep body-only fallbacks here for pages that load guest.css without responsive. */
+body.guest:not(.store-page) {
+  overscroll-behavior-y: auto;
   overflow-x: hidden;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
   background: var(--g-bg1);
   color: var(--g-ink);
   font-family: var(--g-sans);
+  touch-action: pan-y;
+}
+html.scroll-locked,
+body.guest.scroll-locked {
+  overflow: hidden !important;
 }
 body.guest.scroll-locked {
   overflow: hidden !important;
@@ -110,16 +109,34 @@ body.guest.scroll-locked {
   }
 }
 
-/* Header — keep compact; action bars live BELOW sticky header */
+/* Header — compact sticky; search/tabs live in .guest-chrome (avoids pan-x trap) */
 .guest-header {
   position: sticky;
   top: 0;
   z-index: 100;
-  padding: 14px 16px 10px;
-  background: rgba(244, 247, 246, 0.92);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  padding: 12px 16px 10px;
+  background: rgba(244, 247, 246, 0.98);
   border-bottom: 1px solid var(--g-line);
+}
+
+.guest-chrome {
+  position: relative;
+  z-index: 90;
+  padding: 10px 16px 0;
+  background: var(--g-bg1);
+  border-bottom: 1px solid var(--g-line);
+}
+
+.guest-chrome .guest-search {
+  margin: 0;
+  animation: guestRise 0.6s var(--g-ease) 0.08s both;
+}
+
+.guest-chrome .category-tabs {
+  margin: 0 -16px;
+  padding: 0 0 10px;
+  background: transparent;
+  border: none;
 }
 
 .guest-header-top {
@@ -197,8 +214,9 @@ body.guest .search-input:focus {
 }
 
 body.guest .category-tabs {
-  overscroll-behavior: contain;
-  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  /* pan-x blocks vertical page scroll while sticky tabs cover the top band */
+  touch-action: manipulation;
   background: transparent;
   border: none;
   margin: 0 -16px;
@@ -576,6 +594,7 @@ body.guest .status-action-bar {
   }
   body.guest .menu-main,
   body.guest .guest-header,
+  body.guest .guest-chrome,
   body.guest .guest-allergen {
     max-width: 920px;
     margin-left: auto;
@@ -932,8 +951,8 @@ body.spa-cart-open .cart-bar { display: none !important; }
   gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
-  overscroll-behavior: contain;
-  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  touch-action: manipulation;
   padding: 10px 16px 4px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -1249,6 +1268,8 @@ body.spa-cart-open .cart-bar { display: none !important; }
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  touch-action: manipulation;
 }
 .tonight-rail-track::-webkit-scrollbar { display: none; }
 .tonight-card {
