@@ -78,7 +78,18 @@ function sessionRow(session, eventId) {
     || session.metadata?.shop_id
     || '',
   ).slice(0, 64);
-  const planId = String(session.metadata?.planId || session.metadata?.plan_id || '').slice(0, 32);
+  const planId = String(
+    session.metadata?.planId
+    || session.metadata?.plan_id
+    || session.metadata?.plan
+    || '',
+  ).slice(0, 32);
+  const billingCycle = String(
+    session.metadata?.cycle
+    || session.metadata?.billingCycle
+    || session.metadata?.billing_cycle
+    || '',
+  ).slice(0, 16);
   const amount = session.amount_total != null ? Number(session.amount_total) : null;
   return {
     id: eventId || session.id,
@@ -86,6 +97,7 @@ function sessionRow(session, eventId) {
     sessionId: session.id,
     shopId,
     planId,
+    billingCycle,
     email: String(session.customer_details?.email || session.customer_email || '').slice(0, 200),
     amount,
     currency: String(session.currency || 'jpy').toUpperCase(),

@@ -17,9 +17,36 @@ export const PRODUCT = {
   /** Stripe Payment Link（空なら見積もりCTAのみ） — 後方互換: growth にも使われる */
   stripePaymentLink: '',
   /**
-   * プラン別 Payment Link（Stripe Dashboard で作成・テストモード推奨）
-   * 例: growth: 'https://buy.stripe.com/test_xxxx'
+   * Stripe 課金設計（双方に有利）— `scripts/stripe-bootstrap.mjs` と同期
+   * - 初期費用は一回払い（導入コスト回収）
+   * - 月払い: 初回サブスク請求のみ値引き（アプリ14日トライアル後の契約想定・Stripe側トライアルは付けない）
+   * - 年払い: 月額×10（2ヶ月無料）— 初月値引きクーポンは付けない
    */
+  stripeCommerce: {
+    successUrl:
+      'https://mobile-order-system.pages.dev/admin.html?billing=success&shop={CHECKOUT_SESSION_CLIENT_REFERENCE_ID}',
+    introFirstMonthOff: { lite: 4000, growth: 5000, business: 10000, chain: 15000 },
+    couponIds: {
+      lite: 'QO_LITE_INTRO',
+      growth: 'QO_GROWTH_INTRO',
+      business: 'QO_BUSINESS_INTRO',
+      chain: 'QO_CHAIN_INTRO',
+    },
+  },
+  /**
+   * プラン×課金周期別 Payment Link（`stripe-bootstrap.mjs` 出力を貼る）
+   * 未設定時は stripePaymentLinks の単一 URL にフォールバック
+   */
+  stripePaymentLinksByCycle: {
+    lite: {
+      monthly: 'https://buy.stripe.com/test_14A8wOfU9bzL0NEeubdfG00',
+      annual: '',
+    },
+    growth: { monthly: '', annual: '' },
+    business: { monthly: '', annual: '' },
+    chain: { monthly: '', annual: '' },
+  },
+  /** 後方互換（周期なし・主に growth フォールバック） */
   stripePaymentLinks: {
     lite: 'https://buy.stripe.com/test_14A8wOfU9bzL0NEeubdfG00',
     growth: '',

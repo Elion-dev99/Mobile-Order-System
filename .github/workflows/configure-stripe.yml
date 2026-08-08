@@ -53,4 +53,4 @@ jobs:
           fi
           printf '%s' "$STRIPE_MODE" | npx --yes wrangler@4 pages secret put STRIPE_MODE --project-name=mobile-order-system
           echo "Uploaded STRIPE_MODE=$STRIPE_MODE"
-          echo "Next: set Payment Links in js/config.js and Stripe Dashboard webhook → /api/stripe (docs/stripe-setup.md)"
+          echo "Next: run node scripts/stripe-bootstrap.mjs with sk_test (docs/stripe-pricing-model.md), paste links into js/config.js, webhook → /api/stripe"

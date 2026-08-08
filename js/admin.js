@@ -50,6 +50,7 @@ function adminPaymentCta() {
     shopId: getShopId(),
     planId: shop?.planId,
     email: shop?.ownerEmail,
+    billingCycle: shop?.billingCycle || PRODUCT.defaultBillingCycle || 'annual',
   });
 }
 

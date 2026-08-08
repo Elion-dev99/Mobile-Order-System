@@ -3,7 +3,7 @@ import {
   setItemSoldOut, isItemSoldOut, ensureTrialStarted, getShopAccess,
   shopCanUse, getItemStock, setItemStock,
 } from './shop.js';
-import { getPlan, yen, paymentCta } from './plans.js';
+import { getPlan, yen, paymentCta, PRODUCT } from './plans.js';
 import { db } from './firebase.js';
 import {
   collection, onSnapshot, query, where, orderBy, doc, updateDoc,
@@ -234,7 +234,12 @@ const StorePage = {
     if (access.subscribed) {
       banner.hidden = true;
     } else {
-      const pay = paymentCta();
+      const pay = paymentCta({
+        shopId: getShopId(),
+        planId: shop.planId,
+        email: shop.ownerEmail,
+        billingCycle: shop.billingCycle || PRODUCT.defaultBillingCycle || 'annual',
+      });
       banner.hidden = false;
       banner.innerHTML = access.trialExpired
         ? `<strong>トライアル終了</strong> — 分析など有料機能はロック中。<a href="${pay.href}">${pay.label}</a>`

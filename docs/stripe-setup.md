@@ -3,6 +3,9 @@
 本番の自動課金反映の**前**に、テストモードで Payment Link・Webhook・Ops キューを通します。  
 **現状**: Webhook で支払いを記録 → Discord 通知 → Ops で店舗「課金中」ON（または Admin `?billing=success`）。
 
+**課金の中身（初期＋サブスク・初月値引き・年払い）**: [`stripe-pricing-model.md`](./stripe-pricing-model.md)  
+**一括作成**: `STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-bootstrap.mjs`
+
 ## 1. Stripe Dashboard（テストモード）
 
 1. [Stripe Dashboard](https://dashboard.stripe.com/test/dashboard) で **テストモード** を ON
@@ -17,16 +20,17 @@
 
 ## 2. リポジトリ `js/config.js`
 
+`stripeCommerce`（成功 URL・初月値引き・クーポン ID）と `stripePaymentLinksByCycle`（プラン×月/年）を設定します。
+
 ```javascript
 stripeMode: 'test',
-stripePaymentLinks: {
-  lite: 'https://buy.stripe.com/test_xxxx',
-  growth: 'https://buy.stripe.com/test_xxxx',
-  business: '',
-  chain: '',
+stripeCommerce: { /* docs/stripe-pricing-model.md */ },
+stripePaymentLinksByCycle: {
+  lite: { monthly: 'https://buy.stripe.com/test_xxxx', annual: '...' },
+  growth: { monthly: '', annual: '' },
+  ...
 },
-// 後方互換（growth フォールバック）
-stripePaymentLink: '',
+stripePaymentLinks: { lite: '...', growth: '', ... }, // 後方互換
 ```
 
 LP は汎用リンク、**Admin / Store** は `client_reference_id=店舗ID` 付き URL を自動生成します。
