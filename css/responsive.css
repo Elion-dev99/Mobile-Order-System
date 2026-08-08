@@ -7,6 +7,31 @@ body.guest {
   color: var(--qo-ink);
 }
 
+/* Single document scrollport (same pattern as admin / store) */
+html:has(body.guest:not(.store-page)) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: auto;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.guest:not(.store-page) {
+  overflow-x: hidden;
+  overflow-y: visible;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
+body.guest .guest-chrome {
+  width: 100%;
+  max-width: var(--qo-content);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: max(var(--qo-space-4), var(--qo-safe-l));
+  padding-right: max(var(--qo-space-4), var(--qo-safe-r));
+}
+
 body.guest .guest-shell,
 body.guest .menu-main,
 body.guest .guest-allergen,
@@ -114,6 +139,12 @@ html:has(body.admin-page) {
   height: auto;
   overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+html:has(body.admin-page.qo-smaregi) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: auto;
 }
 
 body.admin-page {

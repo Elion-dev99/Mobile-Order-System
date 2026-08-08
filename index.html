@@ -11,8 +11,8 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/tokens.css?v=ui26">
   <link rel="stylesheet" href="css/style.css?v=ui26">
-  <link rel="stylesheet" href="css/guest.css?v=ui26">
-  <link rel="stylesheet" href="css/responsive.css?v=ui26">
+  <link rel="stylesheet" href="css/guest.css?v=guestscroll1">
+  <link rel="stylesheet" href="css/responsive.css?v=guestscroll1">
   <link rel="stylesheet" href="css/ui-overhaul.css?v=ui26">
 </head>
 <body class="guest">
@@ -33,7 +33,9 @@
       </div>
     </div>
   </div>
+</header>
 
+<div class="guest-chrome">
   <div class="guest-search">
     <input type="search" class="search-input" id="searchInput" placeholder="メニューを検索" enterkeyhint="search">
   </div>
@@ -41,7 +43,7 @@
   <nav class="category-tabs" aria-label="カテゴリ">
     <div class="tabs-inner" id="categoryTabs"></div>
   </nav>
-</header>
+</div>
 
 <details class="guest-allergen">
   <summary>アレルギーで絞り込む</summary>
@@ -184,7 +186,7 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-    <script type="module" src="js/app.js?v=harden1"></script>
+    <script type="module" src="js/app.js?v=guestscroll1"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
