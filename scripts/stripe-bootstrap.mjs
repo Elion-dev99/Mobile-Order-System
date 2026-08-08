@@ -157,8 +157,9 @@ async function createPaymentLink({ planId, cycle, setupPriceId, subPriceId, coup
   p.set('metadata[cycle]', cycle);
   p.set('subscription_data[metadata][planId]', planId);
   p.set('subscription_data[metadata][cycle]', cycle);
+  // Payment Links API does not accept discounts on the link — intro coupons: allow_promotion_codes on monthly links.
   if (couponId && cycle === 'monthly') {
-    p.set('subscription_data[discounts][0][coupon]', couponId);
+    p.set('allow_promotion_codes', 'true');
   }
   return stripe('payment_links', p);
 }
