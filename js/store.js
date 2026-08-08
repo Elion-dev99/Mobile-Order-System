@@ -298,7 +298,9 @@ const StorePage = {
 
   renderTables() {
     const shop = getShop();
-    const count = Math.min(Math.max(Number(shop.tableCount) || 12, 1), 80);
+    const plan = getPlan(shop.planId);
+    const planMax = plan.maxTables == null ? 80 : Number(plan.maxTables);
+    const count = Math.min(Math.max(Number(shop.tableCount) || 12, 1), planMax, 80);
     const list = document.getElementById('tableList');
     list.innerHTML = Array.from({ length: count }, (_, i) => {
       const n = i + 1;

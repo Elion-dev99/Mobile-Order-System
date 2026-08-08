@@ -70,7 +70,15 @@
         <div class="ops-card"><span>新規リード</span><strong id="hqLeads">0</strong></div>
         <div class="ops-card"><span>未対応呼出</span><strong id="hqRequests">0</strong></div>
         <div class="ops-card"><span>平均満足度</span><strong id="hqNps">—</strong></div>
+        <div class="ops-card"><span>課金中店舗</span><strong id="hqSubscribed">0</strong></div>
+        <div class="ops-card"><span>トライアル7日以内</span><strong id="hqTrialEnding">0</strong></div>
+        <div class="ops-card"><span>トライアル終了</span><strong id="hqTrialExpired">0</strong></div>
         <div class="ops-card"><span>サーバー</span><strong id="hqHealth">確認中</strong></div>
+      </div>
+      <div class="ops-health-playbook" id="opsRevenueGoLive">
+        <h2>収益化・実用稼働</h2>
+        <p class="ops-muted">成約リード → 店舗作成（14日トライアル自動付与）→ 厨房で運用 → Ops で「課金中」ON または Stripe 成功。詳細は <code>docs/revenue-go-live.md</code></p>
+        <ul class="ops-checklist" id="opsRevenueChecklist"></ul>
       </div>
       <div id="opsHealthPlaybook" class="ops-health-playbook" hidden>
         <h2>障害時の対処</h2>
@@ -139,7 +147,8 @@
             <option value="chain">Chain</option>
           </select>
         </label>
-        <button type="submit">店舗を作成</button>
+        <label>オーナーメール<input id="newShopOwnerEmail" type="email" placeholder="契約・案内用"></label>
+        <button type="submit">店舗を作成（14日トライアル付与）</button>
       </form>
       <p id="createShopStatus" class="ops-status" hidden></p>
 

@@ -25,3 +25,4 @@
 - `PRODUCT.introSlotsRemaining` を月次で更新
 - Ops HQ の未請求手数料を月末に請求
 - リードの `billingCycle=annual` / `chargeNow` を優先クローズ
+- 実用稼働チェックリスト: [`revenue-go-live.md`](./revenue-go-live.md)
