@@ -158,7 +158,7 @@ async function createPaymentLink({ planId, cycle, setupPriceId, subPriceId, coup
   p.set('subscription_data[metadata][planId]', planId);
   p.set('subscription_data[metadata][cycle]', cycle);
   if (couponId && cycle === 'monthly') {
-    p.set('discounts[0][coupon]', couponId);
+    p.set('subscription_data[discounts][0][coupon]', couponId);
   }
   return stripe('payment_links', p);
 }
