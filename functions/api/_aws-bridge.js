@@ -1,9 +1,9 @@
 /**
- * AWS bridge for Cloudflare Pages Functions (aws4fetch via functions/package.json).
+ * AWS bridge for Cloudflare Pages Functions (vendored aws4fetch).
  * Optional: STS ping, EventBridge, SQS, SNS. Credentials from Pages secrets only.
  */
 
-import { AwsClient } from 'aws4fetch';
+import { AwsClient } from './_vendor/aws4fetch.mjs';
 
 export function awsRegion(env) {
   return String(env?.AWS_REGION || 'ap-northeast-1').trim();
