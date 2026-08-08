@@ -39,7 +39,7 @@ async function auditDiscordOps(env, interaction, resultText) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      username: 'QuickOrder Discord Ops',
+      username: 'QuickOrder Ops',
       embeds: [{
         title: 'Discord 運用コマンド',
         color: 0x5865f2,

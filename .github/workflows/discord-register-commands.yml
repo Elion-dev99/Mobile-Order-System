@@ -1,0 +1,21 @@
+# Register /qo slash commands (including debug) on Discord.
+# Run manually: Actions → Register Discord slash commands → Run workflow
+# Needs repo secrets: DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN
+# Optional: DISCORD_GUILD_ID for instant guild-scoped commands
+
+name: Register Discord slash commands
+
+on:
+  workflow_dispatch:
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Register commands
+        env:
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+        run: node scripts/register-discord-commands.mjs
