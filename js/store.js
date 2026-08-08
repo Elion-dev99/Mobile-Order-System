@@ -21,12 +21,14 @@ import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from '.
 import {
   shareKitText, growthLpUrl, growthDemoUrl, recordReferralShare, getReferralCredits,
 } from './growth.js';
+import { mountShopBillingDashboard } from './shop-billing-dashboard.js';
 
 const StorePage = {
   orders: [],
   requests: [],
   _knownReqIds: new Set(),
   couponDraft: [],
+  _billingDash: null,
 
   async init() {
     resolveShopId();
@@ -49,9 +51,16 @@ const StorePage = {
     this.subscribeRequests();
     this.subscribeFoh();
     this.mountGrowthKit();
+    this.renderBillingDashboard();
     // Second-precision clock is pure paint thrash on floor tablets
     this._clockTimer = setInterval(() => this.tickClock(), 30000);
     this.tickClock();
+  },
+
+  renderBillingDashboard() {
+    const mount = document.getElementById('storeBillingMount');
+    if (!mount) return;
+    this._billingDash = mountShopBillingDashboard(mount, { showPlanPicker: true });
   },
 
   mountGrowthKit() {
@@ -117,6 +126,7 @@ const StorePage = {
     set('#navAdmin', `admin.html?shop=${encodeURIComponent(id)}`);
     set('#navMenu', `admin.html?shop=${encodeURIComponent(id)}&view=menu`);
     set('#navAnalytics', `admin.html?shop=${encodeURIComponent(id)}&view=analytics`);
+    set('#navBilling', `admin.html?shop=${encodeURIComponent(id)}&view=billing`);
     set('#navGuest', guestEntryUrl(id, 1));
   },
 

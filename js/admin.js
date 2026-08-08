@@ -43,6 +43,7 @@ import {
   getStaffRole, setStaffRole, verifyStaffPin, staffCan, staffRoleLabel,
 } from './staff-auth.js';
 import { loadMaintenance, subscribeMaintenance, mountMaintenanceBanner } from './maintenance.js';
+import { mountShopBillingDashboard } from './shop-billing-dashboard.js';
 
 function adminPaymentCta() {
   const shop = getShop();
@@ -1299,6 +1300,10 @@ const AdminPage = {
   },
 
   renderBilling() {
+    const dashRoot = document.getElementById('shopBillingDashboard');
+    if (dashRoot) {
+      mountShopBillingDashboard(dashRoot, { showPlanPicker: true });
+    }
     const shop = getShop();
     const plan = getPlan(shop.planId);
     const cycle = shop.billingCycle || PRODUCT.defaultBillingCycle || 'annual';
