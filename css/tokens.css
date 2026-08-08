@@ -1,0 +1,52 @@
+/**
+ * QuickOrder UI tokens — flat, readable, system-font first.
+ * Loaded before app CSS; guest/store map --g-* from these where possible.
+ */
+:root {
+  --qo-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
+    "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  --qo-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+
+  --qo-paper: #f5f3f0;
+  --qo-paper-elevated: #ffffff;
+  --qo-ink: #1a1a1a;
+  --qo-ink-muted: #5a5a5a;
+  --qo-ink-faint: #8c8c8c;
+  --qo-line: #d6d3cc;
+  --qo-line-strong: #b8b4ab;
+
+  --qo-accent: #1d4ed8;
+  --qo-accent-hover: #1e40af;
+  --qo-accent-soft: rgba(29, 78, 216, 0.1);
+  --qo-on-accent: #ffffff;
+
+  --qo-warn: #b45309;
+  --qo-warn-soft: rgba(180, 83, 9, 0.12);
+  --qo-danger: #b91c1c;
+  --qo-success: #166534;
+  --qo-success-soft: rgba(22, 101, 52, 0.12);
+
+  --qo-radius: 8px;
+  --qo-radius-lg: 12px;
+  --qo-radius-pill: 999px;
+
+  --qo-space-1: 4px;
+  --qo-space-2: 8px;
+  --qo-space-3: 12px;
+  --qo-space-4: 16px;
+  --qo-space-5: 20px;
+  --qo-space-6: 24px;
+  --qo-space-8: 32px;
+
+  --qo-touch: 44px;
+  --qo-content: 1120px;
+  --qo-content-narrow: 720px;
+  --qo-content-store: 880px;
+
+  --qo-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --qo-shadow-bar: 0 -4px 20px rgba(0, 0, 0, 0.08);
+
+  --qo-safe-l: env(safe-area-inset-left, 0px);
+  --qo-safe-r: env(safe-area-inset-right, 0px);
+  --qo-safe-b: env(safe-area-inset-bottom, 0px);
+}

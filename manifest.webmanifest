@@ -4,8 +4,8 @@
   "description": "席のQRから厨房まで。飲食店モバイルオーダー",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#F4F7F6",
-  "theme_color": "#0D5C4D",
+  "background_color": "#f5f3f0",
+  "theme_color": "#f5f3f0",
   "lang": "ja",
   "icons": [
     {
