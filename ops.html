@@ -421,6 +421,13 @@
       <pre id="toolsStorageLog" class="ops-code" hidden></pre>
       <p id="toolsStatus" class="ops-status" hidden></p>
 
+      <h3>システムインシデント（Discord 監視）</h3>
+      <p class="ops-muted">クライアントエラー・API 5xx・Cardinal プローブ失敗。Discord に機能+原因を通知。修正は Discord <code>/qo debug fix</code> または下のボタン。</p>
+      <div class="ops-toolbar">
+        <button type="button" id="toolsIncidentsRefresh" class="ops-btn-secondary">一覧更新</button>
+      </div>
+      <div id="toolsIncidentsList" class="ops-table-wrap"></div>
+
       <h3>本部メニュー同期（形）</h3>
       <p class="ops-muted">Chain 向け。全店舗へメニュー強制同期のスタブ。実POS/実配信は後日。</p>
       <div class="ops-toolbar">

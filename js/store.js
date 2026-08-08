@@ -22,6 +22,7 @@ import {
   shareKitText, growthLpUrl, growthDemoUrl, recordReferralShare, getReferralCredits,
 } from './growth.js';
 import { mountShopBillingDashboard } from './shop-billing-dashboard.js';
+import { startSystemWatchdog } from './system-watchdog.js';
 
 const StorePage = {
   orders: [],
@@ -31,8 +32,10 @@ const StorePage = {
   _billingDash: null,
 
   async init() {
+    startSystemWatchdog({ feature: 'store-floor' });
     resolveShopId();
     await Promise.all([loadShop(), loadMenu(), loadMaintenance().catch(() => {})]);
+    startSystemWatchdog({ feature: 'store-floor', shopId: getShopId() });
     await ensureTrialStarted().catch(() => {});
     subscribeMaintenance();
     mountMaintenanceBanner({ compact: true });

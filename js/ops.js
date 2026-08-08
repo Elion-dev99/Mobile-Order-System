@@ -73,6 +73,7 @@ import {
   WEEKDAYS,
   pushMaintenanceApi,
 } from './maintenance.js';
+import { startSystemWatchdog } from './system-watchdog.js';
 
 const OpsPage = {
   shops: [],
@@ -97,6 +98,7 @@ const OpsPage = {
   },
 
   async enterApp() {
+    startSystemWatchdog({ feature: 'ops' });
     this.showApp();
     this.renderRole();
     this.bind();
@@ -1463,6 +1465,7 @@ const OpsPage = {
       this.setToolsStatus('キューを空にしました');
     });
     document.getElementById('toolsRefreshPending')?.addEventListener('click', () => this.renderTools());
+    document.getElementById('toolsIncidentsRefresh')?.addEventListener('click', () => this.renderSystemIncidents());
     document.getElementById('toolsHqMenuSync')?.addEventListener('click', async () => {
       const log = document.getElementById('toolsHqSyncLog');
       if (log) { log.hidden = false; log.textContent = '同期スタブ実行中...'; }
@@ -2291,6 +2294,64 @@ const OpsPage = {
         ? pending.map((o) => `${o.id} shop=${o.shopId} total=${o.total} queuedAt=${o.queuedAt || o.timestamp || ''}`).join('\n')
         : '（空）';
     }
+    this.renderSystemIncidents();
+  },
+
+  async fetchSystemIncidents() {
+    const res = await fetch('/api/system-report', { headers: opsAuthHeaders() });
+    if (!res.ok) return { events: [], error: res.status };
+    return res.json();
+  },
+
+  async renderSystemIncidents() {
+    const wrap = document.getElementById('toolsIncidentsList');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="ops-muted">読み込み中…</p>';
+    const data = await this.fetchSystemIncidents().catch(() => ({ events: [] }));
+    const events = data.events || [];
+    if (!events.length) {
+      wrap.innerHTML = '<p class="ops-muted">オープンなインシデントはありません。</p>';
+      return;
+    }
+    const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    wrap.innerHTML = `<table><thead><tr><th>ID</th><th>機能</th><th>原因</th><th>回数</th><th></th></tr></thead><tbody>
+      ${events.map((e) => `<tr>
+        <td><code>${esc(e.id)}</code></td>
+        <td>${esc(e.feature)}</td>
+        <td>${esc(String(e.cause).slice(0, 120))}</td>
+        <td>${e.count || 1}</td>
+        <td>
+          <button type="button" class="ops-btn-secondary" data-incident-fix="${esc(e.id)}">Agent修正</button>
+          <button type="button" class="ops-btn-secondary" data-incident-dismiss="${esc(e.id)}">dismiss</button>
+        </td>
+      </tr>`).join('')}
+    </tbody></table>`;
+    wrap.querySelectorAll('[data-incident-fix]').forEach((btn) => {
+      btn.addEventListener('click', () => this.dispatchIncidentFix(btn.getAttribute('data-incident-fix')));
+    });
+    wrap.querySelectorAll('[data-incident-dismiss]').forEach((btn) => {
+      btn.addEventListener('click', () => this.dismissIncident(btn.getAttribute('data-incident-dismiss')));
+    });
+  },
+
+  async dispatchIncidentFix(id) {
+    const res = await fetch('/api/system-report', {
+      method: 'POST',
+      headers: { ...opsAuthHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'dispatch_fix', id }),
+    });
+    const j = await res.json().catch(() => ({}));
+    this.setToolsStatus(j.launched ? `Agent 起動: ${id}` : `起動失敗: ${j.error || res.status}`);
+    await this.renderSystemIncidents();
+  },
+
+  async dismissIncident(id) {
+    await fetch('/api/system-report', {
+      method: 'POST',
+      headers: { ...opsAuthHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'dismiss', id }),
+    });
+    await this.renderSystemIncidents();
   },
 
   async flushPendingQueue() {

@@ -34,6 +34,7 @@ import { createReservation, createWaitlistEntry, estimateWaitlistMinutes } from 
 import { startOfflineSync } from './offline-sync.js';
 import { applyLangToDocument, ensureA11yBasics, normalizeLang, t as tUi } from './i18n-ui.js';
 import { captureGrowthAttribution, mountGrowthWatermark } from './growth.js';
+import { startSystemWatchdog } from './system-watchdog.js';
 
 export function showToast(msg) {
   const container = document.getElementById('toastContainer');
@@ -75,6 +76,7 @@ const App = {
   cartStep: 1,
 
   async init() {
+    startSystemWatchdog({ feature: 'guest' });
     activateDemoFromUrl();
     resolveShopId();
     captureGrowthAttribution();
@@ -85,6 +87,7 @@ const App = {
     const urlChannel = new URLSearchParams(location.search).get('channel');
     this.channel = setSelectedChannel(urlChannel || getSelectedChannel());
     await Promise.all([loadShop(), loadMenu(), loadMaintenance().catch(() => {})]);
+    startSystemWatchdog({ feature: 'guest', shopId: getShopId() });
     subscribeMaintenance();
     mountMaintenanceBanner();
     const shop = getShop();

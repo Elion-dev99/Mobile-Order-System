@@ -64,7 +64,7 @@ export async function onRequestGet(context) {
       allowedUsers: parseAllowedDiscordUsers(env).length,
       webhookAudit: isDiscordWebhook(env?.DISCORD_WEBHOOK_URL || ''),
     },
-    commands: ['/qo maint start|stop|status', '/qo server stop|recover'],
+    commands: ['/qo maint start|stop|status', '/qo server stop|recover', '/qo debug status|request|fix|dismiss'],
     interactionsUrl: 'https://mobile-order-system.pages.dev/api/discord',
     docs: 'docs/discord-ops-commands.md',
     register: 'node scripts/register-discord-commands.mjs',
