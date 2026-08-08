@@ -302,52 +302,7 @@ body.ops-body {
   font-family: var(--qo-font);
 }
 
-/* ----- LP light document (overrides dark aurora when ui-overhaul linked) ----- */
-body.lp-body,
-body:has(.lp-aurora) {
-  background: var(--qo-paper) !important;
-  color: var(--qo-ink) !important;
-  font-family: var(--qo-font) !important;
-}
-
-.lp-aurora {
-  display: none !important;
-}
-
-.lp-top,
-.lp-hero,
-.lp-section,
-.lp-footer {
-  color: var(--qo-ink);
-}
-
-.lp-hero h1,
-.lp-section h2,
-.lp-logo {
-  font-family: var(--qo-font) !important;
-  letter-spacing: 0 !important;
-}
-
-.lp-cta,
-.lp-btn-primary {
-  background: var(--qo-ink) !important;
-  color: var(--qo-on-accent) !important;
-  border-radius: var(--qo-radius) !important;
-  box-shadow: none !important;
-}
-
-.lp-card,
-.lp-feature {
-  background: var(--qo-paper-elevated) !important;
-  border: 1px solid var(--qo-line) !important;
-  border-radius: var(--qo-radius-lg) !important;
-  box-shadow: none !important;
-}
-
-.lp-muted,
-.lp-hero p {
-  color: var(--qo-ink-muted) !important;
-}
+/* LP overrides live in lp.css (light theme). */
 
 /* ----- Status display ----- */
 body.guest.status-page .status-header h1 {
